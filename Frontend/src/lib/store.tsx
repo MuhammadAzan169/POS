@@ -130,6 +130,7 @@ interface StoreState {
   addProduct: (p: Omit<Product, "id">) => void;
   updateProduct: (p: Product) => void;
   addShop: (s: Omit<Shop, "id">) => void;
+  updateShop: (s: Shop) => void;
   addUser: (u: Omit<User, "id">) => void;
   updateSettings: (s: Partial<Settings>) => void;
 }
@@ -352,6 +353,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addProduct: (p) => setProducts((prev) => [...prev, { ...p, id: `p-${Date.now()}` }]),
       updateProduct: (p) => setProducts((prev) => prev.map((x) => (x.id === p.id ? p : x))),
       addShop: (s) => setShops((prev) => [...prev, { ...s, id: `s-${Date.now()}` }]),
+      updateShop: (s) => setShops((prev) => prev.map((x) => (x.id === s.id ? s : x))),
       addUser: (u) => setUsers((prev) => [...prev, { ...u, id: `u-${Date.now()}` }]),
       updateSettings: (s) => setSettings((prev) => ({ ...prev, ...s })),
     }),

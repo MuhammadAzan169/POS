@@ -7,12 +7,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { downloadJson } from "@/lib/export";
 
 export const Route = createFileRoute("/app/settings")({ component: SettingsPage });
 
 function SettingsPage() {
-  const { user, settings, updateSettings } = useStore();
+  const store = useStore();
+  const { user, settings, updateSettings } = store;
   if (user?.role !== "admin") return <div className="text-center py-20 text-muted-foreground">Admins only.</div>;
+
+  const exportBackup = () => {
+    const { shops, users, products, inventory, sales, purchases, expenses, returns } = store;
+    downloadJson(`apos-backup-${new Date().toISOString().slice(0, 10)}.json`, {
+      exportedAt: new Date().toISOString(),
+      settings, shops, users, products, inventory, sales, purchases, expenses, returns,
+    });
+    toast.success("Backup downloaded");
+  };
   return (
     <div>
       <PageHeader title="Settings" subtitle="Business, receipt and defaults." />
@@ -50,7 +61,7 @@ function SettingsPage() {
           </div>
         </Card>
         <div className="flex justify-end gap-2">
-          <Button variant="outline">Export backup</Button>
+          <Button variant="outline" onClick={exportBackup}>Export backup</Button>
           <Button onClick={() => toast.success("Settings saved")}>Save changes</Button>
         </div>
       </div>

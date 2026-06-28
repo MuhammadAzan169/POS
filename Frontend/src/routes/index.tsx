@@ -49,7 +49,7 @@ function Index() {
   const quick = (e: string) => { setEmail(e); setPassword("demo"); };
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2 bg-background">
+    <div className="min-h-dvh grid lg:grid-cols-2 bg-background">
       {/* Left brand panel */}
       <div className="hidden lg:flex flex-col justify-between p-12 bg-sidebar text-sidebar-foreground relative overflow-hidden">
         <div className="absolute inset-0 opacity-30 pointer-events-none"
@@ -107,7 +107,7 @@ function Index() {
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <Label htmlFor="password">Password</Label>
-                <button type="button" className="text-xs text-muted-foreground hover:text-foreground">Forgot password?</button>
+                <button type="button" onClick={() => toast.info("Demo mode — any password works. Just pick an account below.")} className="text-xs text-muted-foreground hover:text-foreground">Forgot password?</button>
               </div>
               <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </div>

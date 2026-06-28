@@ -132,7 +132,7 @@ function POS() {
         </div>
 
         {/* Right: checkout */}
-        <Card className="p-5 h-fit lg:sticky lg:top-20">
+        <Card className="p-5 h-fit lg:sticky lg:top-0">
           <h3 className="font-semibold mb-4">Checkout</h3>
           <div className="space-y-3">
             <div className="space-y-1.5">

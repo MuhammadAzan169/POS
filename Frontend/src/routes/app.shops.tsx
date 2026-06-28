@@ -1,19 +1,51 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useStore } from "@/lib/store";
+import { useState } from "react";
+import { useStore, type Shop } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { StatusPill } from "@/components/Stat";
 import { Plus, Store } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/shops")({ component: ShopsPage });
 
+const EMPTY = { name: "", address: "", phone: "" };
+
 function ShopsPage() {
-  const { user, shops, users } = useStore();
+  const { user, shops, users, addShop, updateShop } = useStore();
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Shop | null>(null);
+  const [form, setForm] = useState(EMPTY);
+
   if (user?.role !== "admin") return <div className="text-center py-20 text-muted-foreground">Admins only.</div>;
+
+  const openAdd = () => { setEditing(null); setForm(EMPTY); setOpen(true); };
+  const openEdit = (s: Shop) => { setEditing(s); setForm({ name: s.name, address: s.address, phone: s.phone }); setOpen(true); };
+
+  const save = () => {
+    if (!form.name.trim()) { toast.error("Shop name required"); return; }
+    if (editing) {
+      updateShop({ ...editing, ...form });
+      toast.success("Shop updated");
+    } else {
+      addShop({ ...form, active: true });
+      toast.success("Shop added");
+    }
+    setOpen(false);
+  };
+
+  const toggleActive = (s: Shop) => {
+    updateShop({ ...s, active: !s.active });
+    toast.success(s.active ? `${s.name} deactivated` : `${s.name} activated`);
+  };
+
   return (
     <div>
-      <PageHeader title="Shops" subtitle="Manage outlet locations." actions={<Button><Plus className="h-4 w-4 mr-1.5" />Add shop</Button>} />
+      <PageHeader title="Shops" subtitle="Manage outlet locations." actions={<Button onClick={openAdd}><Plus className="h-4 w-4 mr-1.5" />Add shop</Button>} />
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {shops.map((s) => {
           const linked = users.find((u) => u.shopId === s.id);
@@ -30,13 +62,28 @@ function ShopsPage() {
                 Linked login: <span className="text-foreground font-medium">{linked?.email ?? "—"}</span>
               </div>
               <div className="flex gap-2 mt-4">
-                <Button variant="outline" size="sm" className="flex-1">Edit</Button>
-                <Button variant="outline" size="sm" className="flex-1">Deactivate</Button>
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => openEdit(s)}>Edit</Button>
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => toggleActive(s)}>{s.active ? "Deactivate" : "Activate"}</Button>
               </div>
             </Card>
           );
         })}
       </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editing ? "Edit shop" : "Add shop"}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5"><Label>Shop name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Gulberg Outlet" /></div>
+            <div className="space-y-1.5"><Label>Address</Label><Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
+            <div className="space-y-1.5"><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button onClick={save}>{editing ? "Save changes" : "Add shop"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

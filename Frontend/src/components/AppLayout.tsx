@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type NavItem = { to: string; label: string; icon: ReactNode };
 
@@ -64,9 +65,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const shop = user.shopId ? shops.find((s) => s.id === user.shopId) : null;
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex h-dvh overflow-hidden bg-background">
       {/* Sidebar */}
-      <aside className="hidden md:flex w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
+      <aside className="hidden md:flex w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
         <div className="px-5 py-5 border-b border-sidebar-border">
           <div className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-lg bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bold">
@@ -111,7 +112,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="h-16 border-b bg-card flex items-center px-4 md:px-6 gap-4 sticky top-0 z-10">
+        <header className="h-16 shrink-0 border-b bg-card flex items-center px-4 md:px-6 gap-4 z-10">
           <div className="md:hidden">
             <div className="h-8 w-8 rounded-md bg-primary text-primary-foreground flex items-center justify-center font-bold">A</div>
           </div>
@@ -137,9 +138,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
             {online ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
             <span>{online ? "Online" : "Offline"}</span>
           </button>
-          <button className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+          <button
+            onClick={() =>
+              online
+                ? toast.success("All data is up to date")
+                : toast.warning("Offline — changes will sync when reconnected")
+            }
+            className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
             <RefreshCw className="h-3.5 w-3.5" />
-            <span>Synced</span>
+            <span>{online ? "Synced" : "Pending"}</span>
           </button>
           <div className="flex items-center gap-2 pl-3 border-l">
             <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
@@ -155,7 +163,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </header>
 
         {/* Mobile nav */}
-        <div className="md:hidden border-b bg-card overflow-x-auto">
+        <div className="md:hidden shrink-0 border-b bg-card overflow-x-auto">
           <div className="flex gap-1 p-2">
             {nav.map((item) => {
               const active = location.pathname === item.to;
@@ -176,7 +184,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-[1600px] w-full mx-auto">{children}</main>
+        <main className="flex-1 overflow-y-auto">
+          <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] w-full mx-auto">{children}</div>
+        </main>
       </div>
     </div>
   );

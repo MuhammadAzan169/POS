@@ -6,6 +6,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Download, Printer } from "lucide-react";
+import { downloadCsv } from "@/lib/export";
+import { toast } from "sonner";
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend } from "recharts";
 
 export const Route = createFileRoute("/app/reports")({ component: ReportsPage });
@@ -55,12 +57,28 @@ function ReportsPage() {
     return a + (p?.cost ?? 0) * r.qty;
   }, 0);
 
+  const exportReport = () => {
+    downloadCsv(
+      `report-pl-by-shop-${new Date().toISOString().slice(0, 10)}.csv`,
+      ["Shop", "Sales", "Sales profit", "Expenses", "Net profit"],
+      [
+        ...perShop.map((s) => [s.name, s.sales, s.profit, s.expenses, s.net]),
+        ["TOTAL",
+          perShop.reduce((a, s) => a + s.sales, 0),
+          perShop.reduce((a, s) => a + s.profit, 0),
+          perShop.reduce((a, s) => a + s.expenses, 0),
+          perShop.reduce((a, s) => a + s.net, 0)],
+      ],
+    );
+    toast.success("Report exported");
+  };
+
   return (
     <div>
       <PageHeader title="Reports" subtitle="Owner analytics with profit, expenses, and inventory value." actions={
         <>
-          <Button variant="outline"><Printer className="h-4 w-4 mr-1.5" />Print</Button>
-          <Button variant="outline"><Download className="h-4 w-4 mr-1.5" />Export</Button>
+          <Button variant="outline" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" />Print</Button>
+          <Button variant="outline" onClick={exportReport}><Download className="h-4 w-4 mr-1.5" />Export</Button>
         </>
       } />
 

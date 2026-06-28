@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useStore, formatRs } from "@/lib/store";
+import { useStore, formatRs, type Sale } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { StatusPill } from "@/components/Stat";
 import { Card } from "@/components/ui/card";
@@ -9,11 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Download, Printer, Undo2 } from "lucide-react";
+import { downloadCsv } from "@/lib/export";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/sales")({ component: SalesPage });
 
 function SalesPage() {
-  const { user, sales, shops } = useStore();
+  const { user, sales, shops, addReturn } = useStore();
+  const navigate = useNavigate();
   const isAdmin = user?.role === "admin";
   const [shopFilter, setShopFilter] = useState<string>("all");
   const [q, setQ] = useState("");
@@ -33,13 +36,47 @@ function SalesPage() {
 
   const selected = open ? sales.find((s) => s.id === open) : null;
 
+  const exportCsv = () => {
+    if (rows.length === 0) { toast.error("Nothing to export"); return; }
+    downloadCsv(
+      `sales-${new Date().toISOString().slice(0, 10)}.csv`,
+      ["Invoice", "Date", "Shop", "Customer", "Items", "Total", ...(isAdmin ? ["Profit"] : []), "Status", "Sync"],
+      rows.map((s) => [
+        s.invoice,
+        new Date(s.date).toLocaleDateString(),
+        shops.find((sh) => sh.id === s.shopId)?.name ?? "",
+        s.customer,
+        s.lines.reduce((a, l) => a + l.qty, 0),
+        s.total,
+        ...(isAdmin ? [s.profit] : []),
+        s.status,
+        s.synced ? "Synced" : "Pending",
+      ]),
+    );
+    toast.success(`Exported ${rows.length} invoices`);
+  };
+
+  const processReturn = (sale: Sale) => {
+    addReturn({
+      date: new Date().toISOString().slice(0, 10),
+      shopId: sale.shopId,
+      invoice: sale.invoice,
+      items: sale.lines.map((l) => ({ name: l.name, qty: l.qty })),
+      refund: sale.total,
+      reason: "Customer return",
+    });
+    toast.success(`Return created for ${sale.invoice}`);
+    setOpen(null);
+    navigate({ to: "/app/returns" });
+  };
+
   return (
     <div>
       <PageHeader
         title="Sales"
         subtitle={isAdmin ? "Every invoice across every shop." : "Your shop's invoices."}
         actions={
-          <Button variant="outline"><Download className="h-4 w-4 mr-1.5" />Export CSV</Button>
+          <Button variant="outline" onClick={exportCsv}><Download className="h-4 w-4 mr-1.5" />Export CSV</Button>
         }
       />
 
@@ -136,8 +173,16 @@ function SalesPage() {
                   {isAdmin && <div className="flex justify-between text-success"><span>Profit</span><span>{formatRs(selected.profit)}</span></div>}
                 </div>
                 <div className="flex gap-2 pt-2">
-                  <Button variant="outline" className="flex-1"><Printer className="h-4 w-4 mr-1.5" />Print</Button>
-                  <Button variant="outline" className="flex-1"><Undo2 className="h-4 w-4 mr-1.5" />Return</Button>
+                  <Button variant="outline" className="flex-1" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" />Print</Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    disabled={selected.status === "Returned"}
+                    onClick={() => processReturn(selected)}
+                  >
+                    <Undo2 className="h-4 w-4 mr-1.5" />
+                    {selected.status === "Returned" ? "Returned" : "Return"}
+                  </Button>
                 </div>
               </div>
             </>
