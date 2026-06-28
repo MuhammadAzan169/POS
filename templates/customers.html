@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Customers — A-POS{% endblock %}
+{% block body %}
+<h1>Customers</h1>
+
+<div class="grid2">
+  <section>
+    <h2>Add customer</h2>
+    <form class="form" method="post">
+      <label>Name <input name="name" required></label>
+      <label>Contact <input name="contact"></label>
+      <label>WhatsApp <input name="whatsapp"></label>
+      <div class="form-actions"><button class="btn">Save</button></div>
+      <p class="muted">ID is generated automatically (CUS-0001, …).</p>
+    </form>
+  </section>
+
+  <section>
+    <h2>All customers</h2>
+    <table>
+      <tr><th>ID</th><th>Name</th><th>Contact</th><th>WhatsApp</th></tr>
+      {% for c in customers %}
+      <tr><td>{{ c.id }}</td><td>{{ c.name }}</td><td>{{ c.contact }}</td><td>{{ c.whatsapp }}</td></tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No customers yet.</td></tr>
+      {% endfor %}
+    </table>
+  </section>
+</div>
+{% endblock %}

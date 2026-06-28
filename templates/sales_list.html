@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Sales — A-POS{% endblock %}
+{% block body %}
+<div class="page-head">
+  <h1>Sales</h1>
+  <a class="btn" href="{{ url_for('sale') }}">+ New sale</a>
+</div>
+
+<table>
+  <tr><th>Invoice</th><th>Date</th><th>Cashier</th><th>Customer</th><th>Net</th><th>Profit</th></tr>
+  {% for s in sales %}
+  <tr>
+    <td><a href="{{ url_for('sale_detail', invoice=s.invoice) }}">{{ s.invoice }}</a></td>
+    <td>{{ s.date }}</td><td>{{ s.cashier }}</td><td>{{ s.customer or '—' }}</td>
+    <td>{{ "%.0f"|format(s.total_net) }}</td>
+    <td>{{ "%.0f"|format(s.total_profit) }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="muted">No sales yet.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

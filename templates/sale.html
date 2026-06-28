@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}New Sale — A-POS{% endblock %}
+{% block body %}
+<h1>New Sale</h1>
+
+<div class="sale-top">
+  <label>Cashier <input id="cashier" placeholder="Your name"></label>
+  <label>Customer
+    <select id="customer">
+      <option value="">Walk-in</option>
+      {% for c in customers %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+    </select>
+  </label>
+</div>
+
+<div class="scan-box">
+  <input id="scan" placeholder="Scan barcode or type item code, then press Enter"
+         autocomplete="off" autofocus>
+  <span id="scan-msg" class="muted"></span>
+</div>
+
+<table id="cart">
+  <thead>
+    <tr><th>Code</th><th>Item</th><th>Price</th><th>Qty</th><th>Discount</th><th>Net</th><th></th></tr>
+  </thead>
+  <tbody></tbody>
+  <tfoot>
+    <tr><td colspan="5" class="right"><b>Total</b></td><td id="grand">0</td><td></td></tr>
+  </tfoot>
+</table>
+
+<div class="form-actions">
+  <button id="checkout" class="btn big">Complete Sale (F9)</button>
+  <span id="result"></span>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='sale.js') }}"></script>
+{% endblock %}

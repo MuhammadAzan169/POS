@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — A-POS{% endblock %}
+{% block body %}
+<h1>Dashboard</h1>
+
+<div class="cards">
+  <div class="card"><span class="num">{{ stats.products }}</span><span class="lbl">Products</span></div>
+  <div class="card"><span class="num">{{ stats.customers }}</span><span class="lbl">Customers</span></div>
+  <div class="card"><span class="num">{{ stats.suppliers }}</span><span class="lbl">Suppliers</span></div>
+  <div class="card good"><span class="num">{{ "%.0f"|format(stats.sales_today) }}</span><span class="lbl">Sales Today</span></div>
+  <div class="card good"><span class="num">{{ "%.0f"|format(stats.profit_today) }}</span><span class="lbl">Profit Today</span></div>
+</div>
+
+<div class="grid2">
+  <section>
+    <h2>Low stock <span class="muted">(needs reorder)</span></h2>
+    {% if low_stock %}
+    <table>
+      <tr><th>Code</th><th>Item</th><th>Stock</th><th>Alert</th></tr>
+      {% for p in low_stock %}
+      <tr class="warn-row">
+        <td>{{ p.barcode }}</td><td>{{ p.name }}</td>
+        <td>{{ p.stock }}</td><td>{{ p.low_alert }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}<p class="muted">All stock levels are healthy.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2>Recent sales</h2>
+    {% if recent %}
+    <table>
+      <tr><th>Invoice</th><th>Date</th><th>Customer</th><th>Net</th></tr>
+      {% for s in recent %}
+      <tr>
+        <td><a href="{{ url_for('sale_detail', invoice=s.invoice) }}">{{ s.invoice }}</a></td>
+        <td>{{ s.date }}</td><td>{{ s.customer or '—' }}</td>
+        <td>{{ "%.0f"|format(s.total_net) }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}<p class="muted">No sales yet.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

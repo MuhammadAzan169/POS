@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Suppliers — A-POS{% endblock %}
+{% block body %}
+<h1>Suppliers</h1>
+
+<div class="grid2">
+  <section>
+    <h2>Add supplier</h2>
+    <form class="form" method="post">
+      <label>Name <input name="name" required></label>
+      <label>Phone <input name="phone"></label>
+      <label>Address <input name="address"></label>
+      <div class="form-actions"><button class="btn">Save</button></div>
+      <p class="muted">ID is generated automatically (VEND-0001, …).</p>
+    </form>
+  </section>
+
+  <section>
+    <h2>All suppliers</h2>
+    <table>
+      <tr><th>ID</th><th>Name</th><th>Phone</th><th>Address</th></tr>
+      {% for s in suppliers %}
+      <tr><td>{{ s.id }}</td><td>{{ s.name }}</td><td>{{ s.phone }}</td><td>{{ s.address }}</td></tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No suppliers yet.</td></tr>
+      {% endfor %}
+    </table>
+  </section>
+</div>
+{% endblock %}
