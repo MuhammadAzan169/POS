@@ -187,6 +187,55 @@
     font-family: var(--font-display);
     letter-spacing: -0.02em;
   }
+
+  /*
+   * Scrollbars.
+   *
+   * Default OS scrollbars are light grey and look wrong against the dark theme.
+   * These use theme tokens, so they follow light/dark automatically. The colours
+   * are set on :root as well as * so Firefox (scrollbar-color) and Chromium
+   * (::-webkit-scrollbar) both pick them up.
+   */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--color-border);
+    border-radius: 999px;
+    /* Inset the thumb so it reads as a rounded bar rather than a full-width block. */
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-muted-foreground);
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* The sidebar has its own darker palette in both themes. */
+  aside ::-webkit-scrollbar-thumb {
+    background-color: var(--color-sidebar-border);
+    background-clip: content-box;
+  }
+
+  aside {
+    scrollbar-color: var(--color-sidebar-border) transparent;
+  }
 }
 
 /*

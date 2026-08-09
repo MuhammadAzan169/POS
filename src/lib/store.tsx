@@ -441,8 +441,28 @@ export function formatRs(n: number, currency = "Rs") {
   return `${currency} ${n.toLocaleString("en-PK", { maximumFractionDigits: 0 })}`;
 }
 
+/**
+ * Calendar dates are computed in LOCAL time, not UTC.
+ *
+ * toISOString() returns the UTC date, so for a shop at UTC+5 every sale made
+ * before 5am local — and "today" itself whenever the local clock is ahead of
+ * midnight UTC — landed on the wrong calendar day. "Today's sales" has to mean
+ * today in the shop's own timezone.
+ */
+function localDay(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return localDay(new Date());
+}
+
+/** Today's date shifted by `n` days, in local time. */
+export function daysAgoISO(n: number) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return localDay(d);
 }
 
 /**
@@ -461,9 +481,15 @@ export function discountAmountFor(productId: string, unitPrice: number, qty: num
   return Math.round((unitPrice * qty * discountPctFor(productId, d)) / 100);
 }
 
-/** YYYY-MM-DD for any stored date, whether it's an ISO timestamp or already a date. */
+/**
+ * YYYY-MM-DD for any stored date. Plain dates pass through; full timestamps are
+ * converted to the LOCAL calendar day so they line up with todayISO() and with
+ * the dates <input type="date"> produces.
+ */
 export function dayOf(date: string) {
-  return date.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  const d = new Date(date);
+  return Number.isNaN(d.getTime()) ? date.slice(0, 10) : localDay(d);
 }
 
 /**

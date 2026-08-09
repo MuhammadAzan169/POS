@@ -6,7 +6,7 @@
  * model to do arithmetic — which is exactly what language models get wrong.
  */
 // Helpers live in store.tsx; the plain types come from store-types.ts.
-import { dayOf, discountPctFor } from "./store";
+import { dayOf, daysAgoISO, discountPctFor } from "./store";
 import {
   type DiscountRules,
   type Expense,
@@ -33,11 +33,8 @@ export interface InsightInput {
   discounts: DiscountRules;
 }
 
-const daysAgo = (n: number) => {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
-};
+// Local-time dates, matching dayOf() — see the note in store.tsx.
+const daysAgo = (n: number) => daysAgoISO(n);
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
@@ -77,8 +74,12 @@ export function computeInsights(d: InsightInput) {
     }),
   );
   const ranked = [...perProduct.entries()].map(([id, v]) => ({ id, ...v }));
-  const bestSellers = [...ranked].sort((a, b) => b.qty - a.qty).slice(0, 6);
+  const byUnits = [...ranked].sort((a, b) => b.qty - a.qty);
+  const bestSellers = byUnits.slice(0, 6);
   const topRevenue = [...ranked].sort((a, b) => b.revenue - a.revenue).slice(0, 6);
+  // Without this the model answered "lowest selling" from the bottom of the
+  // best-sellers list, which is the 6th BEST seller — not the worst.
+  const slowestSellers = [...byUnits].reverse().slice(0, 6);
 
   // Products that sold nothing in 30 days but are sitting in stock.
   const stockOf = (productId: string) =>
@@ -174,27 +175,43 @@ export function computeInsights(d: InsightInput) {
   return {
     currency: d.settings.currency,
     generatedAt: new Date().toISOString(),
-    windows: { today: todayW, last7, prev7, last30 },
-    trend: {
+    todayDate: today,
+    // Every figure below states the period it covers. The model previously
+    // reported 30-day totals as "today" because the periods were unlabelled.
+    salesByPeriod: {
+      today: todayW,
+      last7Days: last7,
+      previous7Days: prev7,
+      last30Days: last30,
+    },
+    trendLast7VsPrevious7: {
       revenueChangePct: pct(last7.revenue, prev7.revenue),
       profitChangePct: pct(last7.profit, prev7.profit),
       invoiceChangePct: pct(last7.invoices, prev7.invoices),
     },
-    perShop,
-    bestSellers,
-    topRevenue,
-    deadStock,
-    lowStock,
-    margins: { worst: margins.slice(0, 5), best: margins.slice(-5).reverse() },
-    expenses: { last30: Math.round(sum(d.expenses.filter((e) => e.date >= daysAgo(29)).map((e) => e.amount))), byCategory: expensesByCategory },
+    perShopLast30Days: perShop,
+    productPerformance: {
+      period: "last 30 days",
+      bestSellersByUnits: bestSellers,
+      topByRevenue: topRevenue,
+      slowestSellersByUnits: slowestSellers,
+      note: "slowestSellersByUnits are the worst performers among products that sold at least once; products that sold nothing are in deadStockNotSoldInLast30Days.",
+    },
+    deadStockNotSoldInLast30Days: deadStock,
+    lowStockNeedingReorder: lowStock,
+    marginsPerProduct: { lowest: margins.slice(0, 5), highest: margins.slice(-5).reverse() },
+    expensesLast30Days: {
+      total: Math.round(sum(d.expenses.filter((e) => e.date >= daysAgo(29)).map((e) => e.amount))),
+      byCategory: expensesByCategory,
+    },
     inventoryValueAtCost: Math.round(
       sum(d.inventory.map((r) => r.qty * (d.products.find((p) => p.id === r.productId)?.cost ?? 0))),
     ),
-    returns: {
+    returnsAllTime: {
       customer: { count: customerReturns.length, refunded: Math.round(sum(customerReturns.map((r) => r.refund))) },
       supplier: { count: supplierReturns.length, credited: Math.round(sum(supplierReturns.map((r) => r.refund))) },
     },
-    suppliers: supplierSpend,
+    supplierSpendAllTime: supplierSpend,
     discountRules: {
       enabled: d.discounts.enabled,
       overallPct: d.discounts.overallPct,

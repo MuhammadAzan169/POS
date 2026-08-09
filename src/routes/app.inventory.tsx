@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useStore, todayISO, stockAsOf } from "@/lib/store";
+import { useStore, todayISO, daysAgoISO, stockAsOf } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { StatusPill } from "@/components/Stat";
 import { Card } from "@/components/ui/card";
@@ -22,12 +22,6 @@ const PRESETS = [
   { label: "1 week ago", days: 7 },
   { label: "1 month ago", days: 30 },
 ];
-
-function daysAgoISO(days: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
-}
 
 function InventoryPage() {
   const { user, inventory, products, shops, sales, purchases, returns, settings } = useStore();

@@ -136,11 +136,13 @@ function AIPage() {
     );
   }
 
-  const lowCount = insights.lowStock.length;
-  const trend = insights.trend.revenueChangePct;
+  const lowCount = insights.lowStockNeedingReorder.length;
+  const trend = insights.trendLast7VsPrevious7.revenueChangePct;
 
   return (
-    <div>
+    // flex-1 + min-h-0 makes the chat card grow to the bottom of the viewport
+    // and keeps the message list, not the page, the thing that scrolls.
+    <div className="flex flex-col flex-1 min-h-0">
       <PageHeader
         title="AI Assistant"
         subtitle="Answers come from your live figures — the numbers below are calculated, not guessed."
@@ -167,18 +169,18 @@ function AIPage() {
       )}
 
       {/* Locally computed snapshot: useful even if the AI is unavailable. */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-4">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-4 shrink-0">
         <Card className="p-4">
           <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Last 7 days</div>
-          <div className="text-2xl font-bold mt-1">{money(insights.windows.last7.revenue)}</div>
+          <div className="text-2xl font-bold mt-1">{money(insights.salesByPeriod.last7Days.revenue)}</div>
           <div className={`text-xs mt-1 ${trend >= 0 ? "text-success-strong" : "text-destructive"}`}>
             {trend >= 0 ? "▲" : "▼"} {Math.abs(trend)}% vs previous 7
           </div>
         </Card>
         <Card className="p-4">
           <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Profit (7d)</div>
-          <div className="text-2xl font-bold mt-1">{money(insights.windows.last7.profit)}</div>
-          <div className="text-xs text-muted-foreground mt-1">{insights.windows.last7.invoices} invoices</div>
+          <div className="text-2xl font-bold mt-1">{money(insights.salesByPeriod.last7Days.profit)}</div>
+          <div className="text-xs text-muted-foreground mt-1">{insights.salesByPeriod.last7Days.invoices} invoices</div>
         </Card>
         <Card className="p-4">
           <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Needs reorder</div>
@@ -192,8 +194,8 @@ function AIPage() {
         </Card>
       </div>
 
-      <Card className="flex flex-col" style={{ minHeight: "28rem" }}>
-        <div className="p-4 border-b flex items-center gap-2">
+      <Card className="flex flex-col flex-1 min-h-0">
+        <div className="p-4 border-b flex items-center gap-2 shrink-0">
           <Sparkles className="h-4 w-4 text-accent-strong" />
           <h3 className="font-semibold text-sm">Ask about your business</h3>
           {status && status.models.length > 0 && (
@@ -204,7 +206,7 @@ function AIPage() {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ maxHeight: "55vh" }}>
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
           {messages.length === 0 && (
             <div className="text-center py-6">
               <div className="inline-flex h-12 w-12 rounded-full bg-muted items-center justify-center mb-3">
@@ -273,7 +275,7 @@ function AIPage() {
         </div>
 
         <Separator />
-        <div className="p-3">
+        <div className="p-3 shrink-0">
           <div className="flex gap-2">
             <Input
               value={input}

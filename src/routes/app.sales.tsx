@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { useStore, formatRs, todayISO, dayOf, type Sale } from "@/lib/store";
+import { useStore, formatRs, todayISO, daysAgoISO, dayOf, type Sale } from "@/lib/store";
 import { SaleEditDialog } from "@/components/SaleEditDialog";
 import { PageHeader } from "@/components/AppLayout";
 import { StatusPill } from "@/components/Stat";
@@ -18,10 +18,10 @@ import { toast } from "sonner";
 /** Quick day/range shortcuts for the sales date filter. */
 const DATE_PRESETS = [
   { label: "Today", range: () => ({ from: todayISO(), to: todayISO() }) },
-  { label: "Yesterday", range: () => { const d = new Date(); d.setDate(d.getDate() - 1); const v = d.toISOString().slice(0, 10); return { from: v, to: v }; } },
-  { label: "Last 7 days", range: () => { const d = new Date(); d.setDate(d.getDate() - 6); return { from: d.toISOString().slice(0, 10), to: todayISO() }; } },
-  { label: "Last 30 days", range: () => { const d = new Date(); d.setDate(d.getDate() - 29); return { from: d.toISOString().slice(0, 10), to: todayISO() }; } },
-  { label: "This month", range: () => { const d = new Date(); return { from: new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10), to: todayISO() }; } },
+  { label: "Yesterday", range: () => ({ from: daysAgoISO(1), to: daysAgoISO(1) }) },
+  { label: "Last 7 days", range: () => ({ from: daysAgoISO(6), to: todayISO() }) },
+  { label: "Last 30 days", range: () => ({ from: daysAgoISO(29), to: todayISO() }) },
+  { label: "This month", range: () => { const d = new Date(); return { from: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`, to: todayISO() }; } },
 ];
 
 export const Route = createFileRoute("/app/sales")({
@@ -89,7 +89,7 @@ function SalesPage() {
   const processReturn = (sale: Sale) => {
     addReturn({
       kind: "customer",
-      date: new Date().toISOString().slice(0, 10),
+      date: todayISO(),
       shopId: sale.shopId,
       invoice: sale.invoice,
       items: sale.lines.map((l) => ({ productId: l.productId, name: l.name, qty: l.qty })),
