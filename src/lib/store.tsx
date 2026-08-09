@@ -66,10 +66,24 @@ export interface Sale {
   synced: boolean;
 }
 
+/** A wholesaler / vendor you buy stock from. */
+export interface Supplier {
+  id: string;
+  name: string;
+  contact: string;
+  phone: string;
+  email: string;
+  address: string;
+  notes: string;
+  active: boolean;
+}
+
 export interface Purchase {
   id: string;
   billNo: string;
+  /** Kept alongside supplierId so older bills still read correctly. */
   supplier: string;
+  supplierId?: string;
   date: string;
   lines: { productId: string; shopId: string; qty: number; rate: number }[];
   total: number;
@@ -102,6 +116,7 @@ export interface ReturnRec {
   invoice: string;
   /** Supplier returns only. */
   supplier?: string;
+  supplierId?: string;
   items: { productId: string; name: string; qty: number }[];
   /** Refund paid to the customer, or credit owed by the supplier. */
   refund: number;
@@ -192,6 +207,7 @@ interface StoreState {
   inventory: InventoryRow[];
   sales: Sale[];
   purchases: Purchase[];
+  suppliers: Supplier[];
   expenses: Expense[];
   returns: ReturnRec[];
   settings: Settings;
@@ -203,6 +219,8 @@ interface StoreState {
   updateSale: (s: Sale) => void;
   deleteSale: (id: string) => void;
   addPurchase: (p: Omit<Purchase, "id">) => void;
+  addSupplier: (s: Omit<Supplier, "id">) => Supplier;
+  updateSupplier: (s: Supplier) => void;
   addExpense: (e: Omit<Expense, "id">) => void;
   addReturn: (r: Omit<ReturnRec, "id" | "returnNo">) => void;
   updateProductAlert: (productId: string, lowAlert: number) => void;
@@ -295,11 +313,26 @@ function genSales(): Sale[] {
   return out;
 }
 
+const SUPPLIERS: Supplier[] = [
+  {
+    id: "sup1", name: "Glow Cosmetics Pvt", contact: "Bilal Ahmed", phone: "0321-4567890",
+    email: "orders@glowcosmetics.pk", address: "Hall Road, Lahore", notes: "Delivers Mon & Thu. 30-day credit.", active: true,
+  },
+  {
+    id: "sup2", name: "Luxe Distributors", contact: "Sana Malik", phone: "0300-9876543",
+    email: "sales@luxedist.pk", address: "Shahalam Market, Lahore", notes: "Minimum order Rs 50,000.", active: true,
+  },
+  {
+    id: "sup3", name: "Aira Textiles", contact: "Imran Sheikh", phone: "0333-1122334",
+    email: "imran@airatextiles.pk", address: "Faisalabad", notes: "Seasonal stock, 2-week lead time.", active: true,
+  },
+];
+
 function genPurchases(): Purchase[] {
-  const suppliers = ["Glow Cosmetics Pvt", "Luxe Distributors", "Aira Textiles"];
   return Array.from({ length: 6 }).map((_, i) => {
     const date = new Date();
     date.setDate(date.getDate() - i * 4);
+    const supplier = SUPPLIERS[i % SUPPLIERS.length];
     const lines = [
       { productId: PRODUCTS[i % PRODUCTS.length].id, shopId: SHOPS[i % 3].id, qty: 20, rate: PRODUCTS[i % PRODUCTS.length].cost },
       { productId: PRODUCTS[(i + 2) % PRODUCTS.length].id, shopId: SHOPS[(i + 1) % 3].id, qty: 15, rate: PRODUCTS[(i + 2) % PRODUCTS.length].cost },
@@ -308,7 +341,8 @@ function genPurchases(): Purchase[] {
     return {
       id: `pur-${i + 1}`,
       billNo: `BILL-${2000 + i}`,
-      supplier: suppliers[i % suppliers.length],
+      supplier: supplier.name,
+      supplierId: supplier.id,
       date: date.toISOString().slice(0, 10),
       lines,
       total,
@@ -360,6 +394,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [inventory, setInventory] = useState<InventoryRow[]>(() => genInventory());
   const [sales, setSales] = useState<Sale[]>(() => genSales());
   const [purchases, setPurchases] = useState<Purchase[]>(() => genPurchases());
+  const [suppliers, setSuppliers] = useState<Supplier[]>(SUPPLIERS);
   const [expenses, setExpenses] = useState<Expense[]>(() => genExpenses());
   const [returns, setReturns] = useState<ReturnRec[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
@@ -386,6 +421,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       inventory,
       sales,
       purchases,
+      suppliers,
       expenses,
       returns,
       settings,
@@ -484,6 +520,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return next;
         });
       },
+      addSupplier: (sup) => {
+        const created: Supplier = { ...sup, id: `sup-${Date.now()}` };
+        setSuppliers((prev) => [...prev, created]);
+        return created;
+      },
+      updateSupplier: (sup) => {
+        setSuppliers((prev) => prev.map((x) => (x.id === sup.id ? sup : x)));
+        // Bills store the name too, so renaming a supplier must not orphan them.
+        setPurchases((prev) => prev.map((p) => (p.supplierId === sup.id ? { ...p, supplier: sup.name } : p)));
+        setReturns((prev) => prev.map((r) => (r.supplierId === sup.id ? { ...r, supplier: sup.name } : r)));
+      },
       addExpense: (e) => setExpenses((prev) => [{ ...e, id: `exp-${Date.now()}` }, ...prev]),
       addReturn: (r) => {
         const isSupplier = r.kind === "supplier";
@@ -529,7 +576,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return { ...prev, perProduct };
         }),
     }),
-    [user, ready, online, shops, users, products, inventory, sales, purchases, expenses, returns, settings, discounts],
+    [user, ready, online, shops, users, products, inventory, sales, purchases, suppliers, expenses, returns, settings, discounts],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

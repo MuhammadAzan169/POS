@@ -211,6 +211,7 @@ function NewSupplierReturn({
       shopId,
       invoice: purchase.billNo,
       supplier: purchase.supplier,
+      supplierId: purchase.supplierId,
       items: chosen.map((x) => ({ productId: x.product!.id, name: x.product!.name, qty: x.qty })),
       refund: credit || suggestedCredit,
       reason: reason || "Returned to supplier",

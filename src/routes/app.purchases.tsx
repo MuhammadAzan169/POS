@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, Trash2, Download, PackagePlus, ScanLine } from "lucide-react";
+import { Plus, Trash2, Download, PackagePlus, ScanLine, Truck } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
 
@@ -28,11 +28,14 @@ export const Route = createFileRoute("/app/purchases")({
 type Line = { productId: string; shopId: string; qty: number; rate: number };
 
 function PurchasesPage() {
-  const { user, purchases, shops, products, inventory, addPurchase } = useStore();
+  const { user, purchases, shops, products, inventory, suppliers, addPurchase, addSupplier } = useStore();
   const isAdmin = user?.role === "admin";
 
   const [open, setOpen] = useState(false);
-  const [supplier, setSupplier] = useState("Glow Cosmetics Pvt");
+  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
+  const [addingSupplier, setAddingSupplier] = useState(false);
+  const [newSupplier, setNewSupplier] = useState({ name: "", contact: "", phone: "" });
+  const supplier = suppliers.find((x) => x.id === supplierId);
   const [billNo, setBillNo] = useState("");
   const [date, setDate] = useState(todayISO());
   const emptyLine = (): Line => ({ productId: products[0]?.id ?? "", shopId: shops[0]?.id ?? "", qty: 10, rate: products[0]?.cost ?? 0 });
@@ -119,6 +122,25 @@ function PurchasesPage() {
     setOpen(true);
   };
 
+  /**
+   * Creates the vendor inline rather than in a nested dialog: a second Dialog is
+   * portalled outside this one, so clicking inside it counted as an outside click
+   * and dismissed the half-built bill.
+   */
+  const saveNewSupplier = () => {
+    const name = newSupplier.name.trim();
+    if (!name) { toast.error("Supplier name required"); return; }
+    if (suppliers.some((x) => x.name.toLowerCase() === name.toLowerCase())) {
+      toast.error(`“${name}” already exists`);
+      return;
+    }
+    const created = addSupplier({ ...newSupplier, name, email: "", address: "", notes: "", active: true });
+    setSupplierId(created.id);
+    setAddingSupplier(false);
+    setNewSupplier({ name: "", contact: "", phone: "" });
+    toast.success(`${name} added`);
+  };
+
   /** Barcode entry inside the bill: adds or bumps the matching line. */
   const scanIntoBill = () => {
     const code = scan.trim();
@@ -139,7 +161,7 @@ function PurchasesPage() {
   };
 
   const save = () => {
-    if (!supplier.trim()) { toast.error("Supplier required"); return; }
+    if (!supplier) { toast.error("Select a supplier"); return; }
     if (!billNo.trim()) { toast.error("Bill number required"); return; }
     // The delete button could strip every line, and qty/rate accepted 0 — both
     // let an empty Rs 0 bill through that still counted as a purchase.
@@ -150,7 +172,7 @@ function PurchasesPage() {
       toast.error(`Bill ${billNo.trim()} already exists`);
       return;
     }
-    addPurchase({ supplier, billNo: billNo.trim(), date, lines, total });
+    addPurchase({ supplier: supplier.name, supplierId: supplier.id, billNo: billNo.trim(), date, lines, total });
     toast.success("Purchase saved and stock added to shops");
     setOpen(false);
     setBillNo("");
@@ -389,10 +411,66 @@ function PurchasesPage() {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>New purchase</DialogTitle></DialogHeader>
           <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1.5"><Label>Supplier</Label><Input value={supplier} onChange={(e) => setSupplier(e.target.value)} /></div>
+            <div className="space-y-1.5">
+              <Label>Supplier</Label>
+              <Select
+                value={supplierId}
+                onValueChange={(v) => { if (v === "__new__") { setAddingSupplier(true); return; } setSupplierId(v); }}
+              >
+                <SelectTrigger><SelectValue placeholder="Select a supplier..." /></SelectTrigger>
+                <SelectContent>
+                  {suppliers.filter((x) => x.active || x.id === supplierId).map((x) => (
+                    <SelectItem key={x.id} value={x.id}>{x.name}</SelectItem>
+                  ))}
+                  <SelectItem value="__new__">+ Add new supplier...</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1.5"><Label>Bill no</Label><Input value={billNo} onChange={(e) => setBillNo(e.target.value)} placeholder="BILL-1234" /></div>
             <div className="space-y-1.5"><Label>Date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
           </div>
+
+          {addingSupplier && (
+            <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
+              <div className="text-sm font-medium">New supplier</div>
+              <div className="grid sm:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Name</Label>
+                  <Input
+                    autoFocus
+                    value={newSupplier.name}
+                    onChange={(e) => setNewSupplier({ ...newSupplier, name: e.target.value })}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveNewSupplier(); } }}
+                    placeholder="e.g. Noor Traders"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Contact person</Label>
+                  <Input value={newSupplier.contact} onChange={(e) => setNewSupplier({ ...newSupplier, contact: e.target.value })} placeholder="Optional" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Phone</Label>
+                  <Input value={newSupplier.phone} onChange={(e) => setNewSupplier({ ...newSupplier, phone: e.target.value })} placeholder="Optional" />
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button size="sm" variant="outline" onClick={() => { setAddingSupplier(false); setNewSupplier({ name: "", contact: "", phone: "" }); }}>
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={saveNewSupplier}>Add supplier</Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Full details (email, address, notes) can be filled in from the Suppliers tab.</p>
+            </div>
+          )}
+
+          {supplier && !addingSupplier && (supplier.contact || supplier.phone || supplier.notes) && (
+            <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 -mt-1">
+              <span className="inline-flex items-center gap-1"><Truck className="h-3 w-3" />{supplier.name}</span>
+              {supplier.contact && <span>{supplier.contact}</span>}
+              {supplier.phone && <span>{supplier.phone}</span>}
+              {supplier.notes && <span className="italic">{supplier.notes}</span>}
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label>Add by barcode</Label>
