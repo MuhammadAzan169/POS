@@ -14,7 +14,7 @@ export const Route = createFileRoute("/app/reports")({ component: ReportsPage })
 
 function ReportsPage() {
   const { user, sales, expenses, shops, products, inventory } = useStore();
-  if (user?.role !== "admin") return <div className="text-center py-20 text-muted-foreground">Reports with profit are admin-only.</div>;
+  const isAdmin = user?.role === "admin";
 
   const dailyData = useMemo(() => {
     const map = new Map<string, { date: string; sales: number; profit: number }>();
@@ -73,6 +73,9 @@ function ReportsPage() {
     toast.success("Report exported");
   };
 
+  // Gate after every hook has run, so signing out of this page doesn't change the hook count.
+  if (!isAdmin) return <div className="text-center py-20 text-muted-foreground">Reports with profit are admin-only.</div>;
+
   return (
     <div>
       <PageHeader title="Reports" subtitle="Owner analytics with profit, expenses, and inventory value." actions={
@@ -90,26 +93,37 @@ function ReportsPage() {
           <TabsTrigger value="top">Top items</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="sales">
+        <TabsContent value="sales" className="mt-4">
           <Card className="p-5">
             <h3 className="font-semibold mb-4">Daily sales & profit (last 14 days)</h3>
             <div className="h-72">
               <ResponsiveContainer>
                 <LineChart data={dailyData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis dataKey="date" stroke="var(--color-muted-foreground)" fontSize={11} />
+                  {/* Raw ISO dates ("2026-08-10") crowded the axis into overlap. */}
+                  <XAxis
+                    dataKey="date"
+                    stroke="var(--color-muted-foreground)"
+                    fontSize={11}
+                    tickFormatter={(d: string) => new Date(d).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+                    minTickGap={16}
+                  />
                   <YAxis stroke="var(--color-muted-foreground)" fontSize={11} />
-                  <Tooltip contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8 }} formatter={(v: number) => formatRs(v)} />
+                  <Tooltip
+                    contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8 }}
+                    formatter={(v: number) => formatRs(v)}
+                    labelFormatter={(d: string) => new Date(d).toLocaleDateString(undefined, { dateStyle: "medium" })}
+                  />
                   <Legend />
-                  <Line type="monotone" dataKey="sales" stroke="var(--color-chart-1)" strokeWidth={2.5} dot={false} />
-                  <Line type="monotone" dataKey="profit" stroke="var(--color-chart-2)" strokeWidth={2.5} dot={false} />
+                  <Line type="monotone" name="Sales" dataKey="sales" stroke="var(--color-chart-1)" strokeWidth={2.5} dot={false} />
+                  <Line type="monotone" name="Profit" dataKey="profit" stroke="var(--color-chart-2)" strokeWidth={2.5} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
           </Card>
         </TabsContent>
 
-        <TabsContent value="pl">
+        <TabsContent value="pl" className="mt-4">
           <Card className="p-5">
             <h3 className="font-semibold mb-4">Profit & Loss by shop</h3>
             <div className="h-72">
@@ -143,7 +157,7 @@ function ReportsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="inventory">
+        <TabsContent value="inventory" className="mt-4">
           <Card className="p-5">
             <h3 className="font-semibold mb-4">Inventory value (at cost)</h3>
             <div className="text-3xl font-bold mb-6">{formatRs(inventoryValue)}</div>
@@ -164,7 +178,7 @@ function ReportsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="top">
+        <TabsContent value="top" className="mt-4">
           <Card className="p-5">
             <h3 className="font-semibold mb-4">Top selling items</h3>
             <table className="w-full text-sm">

@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -20,8 +20,9 @@ import {
   Search,
   User as UserIcon,
 } from "lucide-react";
-import { useStore } from "@/lib/store";
+import { useStore, formatRs } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { toast } from "sonner";
 
 type NavItem = { to: string; label: string; icon: ReactNode };
@@ -50,6 +51,107 @@ const SHOP_NAV: NavItem[] = [
   { to: "/app/account", label: "Account", icon: <UserIcon className="h-4 w-4" /> },
 ];
 
+/**
+ * The header search box used to be a plain <input> wired to nothing — typing in
+ * it did absolutely nothing. It now searches products and invoices and routes to
+ * the matching page with the query pre-applied.
+ */
+function GlobalSearch() {
+  const { user, products, sales } = useStore();
+  const navigate = useNavigate();
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  const isAdmin = user?.role === "admin";
+
+  const results = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return { products: [], sales: [] };
+    const visibleSales = sales.filter((s) => (isAdmin ? true : s.shopId === user?.shopId));
+    return {
+      products: products
+        .filter((p) => p.name.toLowerCase().includes(term) || p.barcode.includes(term))
+        .slice(0, 4),
+      sales: visibleSales
+        .filter((s) => s.invoice.toLowerCase().includes(term) || s.customer.toLowerCase().includes(term))
+        .slice(0, 4),
+    };
+  }, [q, products, sales, isAdmin, user?.shopId]);
+
+  const hasResults = results.products.length > 0 || results.sales.length > 0;
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  const go = (to: "/app/products" | "/app/sales", term: string) => {
+    setOpen(false);
+    setQ("");
+    navigate({ to, search: { q: term } });
+  };
+
+  return (
+    <div ref={boxRef} className="hidden md:block flex-1 max-w-md relative">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+      <input
+        type="text"
+        value={q}
+        onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") { setOpen(false); return; }
+          if (e.key !== "Enter" || !q.trim()) return;
+          if (results.products.length) go("/app/products", q.trim());
+          else if (results.sales.length) go("/app/sales", q.trim());
+          else toast.info(`Nothing matches “${q.trim()}”`);
+        }}
+        placeholder="Search products, invoices, customers…"
+        className="w-full pl-9 pr-3 py-2 text-sm bg-muted/60 border border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:bg-background"
+      />
+      {open && q.trim() && (
+        <div className="absolute left-0 right-0 top-full mt-1.5 rounded-md border bg-popover text-popover-foreground shadow-lg overflow-hidden z-50">
+          {!hasResults && <div className="px-3 py-4 text-sm text-muted-foreground">No matches.</div>}
+          {results.products.length > 0 && (
+            <div className="py-1">
+              <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Products</div>
+              {results.products.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => go("/app/products", p.name)}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between gap-3"
+                >
+                  <span className="truncate">{p.name}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">{formatRs(p.price)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {results.sales.length > 0 && (
+            <div className="py-1 border-t">
+              <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Invoices</div>
+              {results.sales.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => go("/app/sales", s.invoice)}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between gap-3"
+                >
+                  <span className="font-mono text-xs truncate">{s.invoice}</span>
+                  <span className="text-xs text-muted-foreground shrink-0 truncate">{s.customer}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AppLayout({ children }: { children: ReactNode }) {
   const { user, logout, online, setOnline, shops } = useStore();
   const navigate = useNavigate();
@@ -63,11 +165,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const nav = user.role === "admin" ? ADMIN_NAV : SHOP_NAV;
   const shop = user.shopId ? shops.find((s) => s.id === user.shopId) : null;
+  // Shared by the sidebar and the mobile strip so a sub-route highlights the
+  // same item in both — the mobile strip used to only match the exact path.
+  const isActive = (to: string) =>
+    location.pathname === to || (to !== "/app/dashboard" && location.pathname.startsWith(`${to}/`));
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-background">
+    <div data-app-shell className="flex h-dvh overflow-hidden bg-background">
       {/* Sidebar */}
-      <aside className="hidden md:flex w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
+      <aside data-print="hide" className="hidden md:flex w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
         <div className="px-5 py-5 border-b border-sidebar-border">
           <div className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-lg bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bold">
@@ -81,7 +187,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
           {nav.map((item) => {
-            const active = location.pathname === item.to || (item.to !== "/app/dashboard" && location.pathname.startsWith(item.to));
+            const active = isActive(item.to);
             return (
               <Link
                 key={item.to}
@@ -112,23 +218,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="h-16 shrink-0 border-b bg-card flex items-center px-4 md:px-6 gap-4 z-10">
+        <header data-print="hide" className="h-16 shrink-0 border-b bg-card flex items-center px-4 md:px-6 gap-3 md:gap-4 z-20">
           <div className="md:hidden">
             <div className="h-8 w-8 rounded-md bg-primary text-primary-foreground flex items-center justify-center font-bold">A</div>
           </div>
-          <div className="hidden md:flex flex-1 max-w-md relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search products, invoices, customers…"
-              className="w-full pl-9 pr-3 py-2 text-sm bg-muted/60 border border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:bg-background"
-            />
-          </div>
-          <div className="flex-1 md:hidden" />
+          <GlobalSearch />
           <button
             onClick={() => setOnline(!online)}
             className={cn(
-              "flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full border transition-colors",
+              // ml-auto anchors this whole trailing cluster to the right edge. The
+              // search box is capped at max-w-md, so without it everything after
+              // the search sits bunched beside it with dead space to the right.
+              "ml-auto flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full border transition-colors shrink-0",
               online
                 ? "bg-success/10 text-success border-success/30"
                 : "bg-warning/15 text-warning-foreground border-warning/40",
@@ -144,13 +245,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 ? toast.success("All data is up to date")
                 : toast.warning("Offline — changes will sync when reconnected")
             }
-            className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             <span>{online ? "Synced" : "Pending"}</span>
           </button>
-          <div className="flex items-center gap-2 pl-3 border-l">
-            <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
+          <ThemeToggle />
+          <div className="flex items-center gap-2 pl-3 border-l shrink-0">
+            <div className="h-8 w-8 shrink-0 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
               {user.name.charAt(0)}
             </div>
             <div className="hidden sm:block leading-tight">
@@ -163,10 +265,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </header>
 
         {/* Mobile nav */}
-        <div className="md:hidden shrink-0 border-b bg-card overflow-x-auto">
+        <div data-print="hide" className="md:hidden shrink-0 border-b bg-card overflow-x-auto">
           <div className="flex gap-1 p-2">
             {nav.map((item) => {
-              const active = location.pathname === item.to;
+              const active = isActive(item.to);
               return (
                 <Link
                   key={item.to}
@@ -184,7 +286,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <main className="flex-1 overflow-y-auto">
+        <main data-app-main className="flex-1 overflow-y-auto">
           <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] w-full mx-auto">{children}</div>
         </main>
       </div>
@@ -199,7 +301,7 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight">{title}</h1>
         {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
       </div>
-      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+      {actions && <div data-print="hide" className="flex flex-wrap gap-2">{actions}</div>}
     </div>
   );
 }

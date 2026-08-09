@@ -169,3 +169,71 @@
     letter-spacing: -0.02em;
   }
 }
+
+/*
+ * Print.
+ *
+ * Every "Print" button calls window.print(), which without these rules puts the
+ * sidebar, header, mobile nav and dialog chrome on the paper. Anything marked
+ * data-print="hide" is dropped; marking a node data-print="only" prints just
+ * that node (used for the POS receipt).
+ */
+@media print {
+  [data-print="hide"] {
+    display: none !important;
+  }
+
+  body:has([data-print="only"]) > *:not(:has([data-print="only"])) {
+    display: none !important;
+  }
+
+  body:has([data-print="only"]) [data-print="only"] {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    max-width: none;
+    border: 0;
+    box-shadow: none;
+    background: #fff;
+    color: #000;
+  }
+
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* The app shell is a fixed-height flex column with its own scroller; on paper
+     that clips everything after the first page. */
+  [data-app-shell],
+  [data-app-main] {
+    display: block !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  main, [data-app-main] > * {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+  }
+
+  .shadow-sm, .shadow, .shadow-md, .shadow-lg {
+    box-shadow: none !important;
+  }
+
+  table {
+    break-inside: auto;
+  }
+
+  tr {
+    break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+}

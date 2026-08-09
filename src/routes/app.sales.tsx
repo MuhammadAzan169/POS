@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStore, formatRs, type Sale } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { StatusPill } from "@/components/Stat";
@@ -12,15 +12,26 @@ import { Download, Printer, Undo2 } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/app/sales")({ component: SalesPage });
+export const Route = createFileRoute("/app/sales")({
+  // Optional, so plain <Link to="/app/sales"> keeps working without a search prop.
+  validateSearch: (search: Record<string, unknown>): { q?: string } =>
+    typeof search.q === "string" && search.q ? { q: search.q } : {},
+  component: SalesPage,
+});
 
 function SalesPage() {
   const { user, sales, shops, addReturn } = useStore();
   const navigate = useNavigate();
+  const { q: searchParam } = Route.useSearch();
   const isAdmin = user?.role === "admin";
   const [shopFilter, setShopFilter] = useState<string>("all");
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(searchParam ?? "");
   const [open, setOpen] = useState<string | null>(null);
+
+  // Arriving from the header search (or a second search while already here)
+  // should refill the filter box.
+  // The ?? "" keeps the <Input> controlled when the param is absent.
+  useEffect(() => { setQ(searchParam ?? ""); }, [searchParam]);
 
   const rows = useMemo(() => {
     return sales
@@ -61,7 +72,7 @@ function SalesPage() {
       date: new Date().toISOString().slice(0, 10),
       shopId: sale.shopId,
       invoice: sale.invoice,
-      items: sale.lines.map((l) => ({ name: l.name, qty: l.qty })),
+      items: sale.lines.map((l) => ({ productId: l.productId, name: l.name, qty: l.qty })),
       refund: sale.total,
       reason: "Customer return",
     });
@@ -97,7 +108,7 @@ function SalesPage() {
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-muted/50">
+            <thead className="bg-muted/50 sticky top-0 z-10">
               <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
                 <th className="px-4 py-3 font-medium">Invoice</th>
                 <th className="px-4 py-3 font-medium">Date</th>
@@ -124,8 +135,10 @@ function SalesPage() {
                   <td className="px-4 py-3"><StatusPill status={s.synced ? "Synced" : "Pending"} /></td>
                 </tr>
               ))}
+              {/* Shop users see 7 columns, not 9 — a fixed colSpan left the empty
+                  row overhanging the table and breaking the bottom border. */}
               {rows.length === 0 && (
-                <tr><td colSpan={9} className="px-4 py-12 text-center text-sm text-muted-foreground">No sales match these filters.</td></tr>
+                <tr><td colSpan={isAdmin ? 9 : 7} className="px-4 py-12 text-center text-sm text-muted-foreground">No sales match these filters.</td></tr>
               )}
             </tbody>
           </table>

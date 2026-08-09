@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStore, formatRs } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
@@ -10,12 +10,28 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/app/products")({ component: ProductsPage });
+/** Guards the divide-by-zero that rendered "NaN%"/"Infinity%" for zero-priced items. */
+function margin(price: number, cost: number) {
+  if (!price) return "—";
+  return `${Math.round(((price - cost) / price) * 100)}%`;
+}
+
+export const Route = createFileRoute("/app/products")({
+  // Optional, so plain <Link to="/app/products"> keeps working without a search prop.
+  validateSearch: (search: Record<string, unknown>): { q?: string } =>
+    typeof search.q === "string" && search.q ? { q: search.q } : {},
+  component: ProductsPage,
+});
 
 function ProductsPage() {
   const { user, products, inventory, addProduct } = useStore();
+  const { q: searchParam } = Route.useSearch();
   const isAdmin = user?.role === "admin";
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(searchParam ?? "");
+
+  // Keep the filter in step with the header search that navigated here.
+  // The ?? "" keeps the <Input> controlled when the param is absent.
+  useEffect(() => { setQ(searchParam ?? ""); }, [searchParam]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ barcode: "", name: "", category: "Cosmetics", brand: "", cost: 0, price: 0, lowAlert: 5 });
 
@@ -53,8 +69,9 @@ function ProductsPage() {
                   <div className="space-y-1.5"><Label>Cost (Rs)</Label><Input type="number" value={form.cost} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })} /></div>
                   <div className="space-y-1.5"><Label>Sell price (Rs)</Label><Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} /></div>
                   {form.cost > 0 && form.price > 0 && (
-                    <div className="col-span-2 text-sm text-success bg-success/10 rounded-md p-2">
-                      Margin: {formatRs(form.price - form.cost)} ({Math.round(((form.price - form.cost) / form.price) * 100)}%)
+                    <div className={`col-span-2 text-sm rounded-md p-2 ${form.price >= form.cost ? "text-success bg-success/10" : "text-destructive bg-destructive/10"}`}>
+                      Margin: {formatRs(form.price - form.cost)} ({margin(form.price, form.cost)})
+                      {form.price < form.cost && " — selling below cost"}
                     </div>
                   )}
                 </div>
@@ -75,7 +92,7 @@ function ProductsPage() {
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-muted/50"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+            <thead className="bg-muted/50 sticky top-0 z-10"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
               <th className="px-4 py-3 font-medium">Barcode</th>
               <th className="px-4 py-3 font-medium">Name</th>
               <th className="px-4 py-3 font-medium">Category</th>
@@ -94,10 +111,13 @@ function ProductsPage() {
                   <td className="px-4 py-3">{p.brand}</td>
                   {isAdmin && <td className="px-4 py-3 text-right">{formatRs(p.cost)}</td>}
                   <td className="px-4 py-3 text-right font-medium">{formatRs(p.price)}</td>
-                  {isAdmin && <td className="px-4 py-3 text-right text-success">{Math.round(((p.price - p.cost) / p.price) * 100)}%</td>}
+                  {isAdmin && <td className={`px-4 py-3 text-right ${p.price >= p.cost ? "text-success" : "text-destructive"}`}>{margin(p.price, p.cost)}</td>}
                   <td className="px-4 py-3 text-right">{p.totalStock}</td>
                 </tr>
               ))}
+              {rows.length === 0 && (
+                <tr><td colSpan={isAdmin ? 8 : 6} className="px-4 py-12 text-center text-sm text-muted-foreground">No products match “{q}”.</td></tr>
+              )}
             </tbody>
           </table>
         </div>

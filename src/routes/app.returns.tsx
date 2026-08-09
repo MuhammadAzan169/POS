@@ -41,7 +41,7 @@ function ReturnsPage() {
       date: todayISO(),
       shopId: sale.shopId,
       invoice: sale.invoice,
-      items: sale.lines.map((l) => ({ name: l.name, qty: l.qty })),
+      items: sale.lines.map((l) => ({ productId: l.productId, name: l.name, qty: l.qty })),
       refund: refund || sale.total,
       reason: reason || "Customer return",
     });

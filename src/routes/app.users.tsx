@@ -79,7 +79,8 @@ function UsersPage() {
                   <td className="px-4 py-3"><span className={`text-xs px-2 py-0.5 rounded-full ${u.role === "admin" ? "bg-primary/15 text-primary" : "bg-accent/20 text-accent-foreground"}`}>{u.role}</span></td>
                   <td className="px-4 py-3">{u.shopId ? shops.find((s) => s.id === u.shopId)?.name : "—"}</td>
                   <td className="px-4 py-3 text-muted-foreground text-xs">{u.lastLogin ?? "—"}</td>
-                  <td className="px-4 py-3"><StatusPill status={u.active ? "OK" : "OUT"} /></td>
+                  {/* Was "OK"/"OUT" — stock-level wording on a user account. */}
+                  <td className="px-4 py-3"><StatusPill status={u.active ? "Active" : "Disabled"} /></td>
                   <td className="px-4 py-3 text-right"><Button variant="ghost" size="sm" onClick={() => toast.success(`Password reset link sent to ${u.email}`)}>Reset password</Button></td>
                 </tr>
               ))}

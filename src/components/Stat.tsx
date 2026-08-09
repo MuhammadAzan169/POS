@@ -50,6 +50,8 @@ export function StatusPill({ status }: { status: string }) {
     OUT: "bg-destructive/10 text-destructive border-destructive/30",
     Synced: "bg-success/15 text-success border-success/30",
     Pending: "bg-warning/20 text-warning-foreground border-warning/40",
+    Active: "bg-success/15 text-success border-success/30",
+    Disabled: "bg-muted text-muted-foreground border-border",
   };
   return (
     <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border", map[status] ?? "bg-muted text-muted-foreground border-border")}>

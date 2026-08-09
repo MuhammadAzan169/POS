@@ -24,7 +24,9 @@ function InventoryPage() {
         product: products.find((p) => p.id === r.productId)!,
         shop: shops.find((s) => s.id === r.shopId)!,
       }))
-      .filter((r) => (q ? r.product?.name.toLowerCase().includes(q.toLowerCase()) : true))
+      // A row whose product/shop no longer exists would blow up the sort below.
+      .filter((r) => Boolean(r.product && r.shop))
+      .filter((r) => (q ? r.product.name.toLowerCase().includes(q.toLowerCase()) : true))
       .sort((a, b) => a.product.name.localeCompare(b.product.name));
   }, [inventory, products, shops, shop, q, isAdmin, user?.shopId]);
 
@@ -49,7 +51,7 @@ function InventoryPage() {
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-muted/50"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+            <thead className="bg-muted/50 sticky top-0 z-10"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
               <th className="px-4 py-3 font-medium">Product</th>
               <th className="px-4 py-3 font-medium">Shop</th>
               <th className="px-4 py-3 font-medium text-right">Qty</th>
@@ -69,6 +71,11 @@ function InventoryPage() {
                   </tr>
                 );
               })}
+              {rows.length === 0 && (
+                <tr><td colSpan={5} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                  {q ? `No stock rows match “${q}”.` : "No stock records yet."}
+                </td></tr>
+              )}
             </tbody>
           </table>
         </div>

@@ -31,16 +31,17 @@ export const Route = createFileRoute("/app/dashboard")({
 
 function Dashboard() {
   const { user, sales, expenses, shops, products, inventory } = useStore();
-  if (!user) return null;
-  const isAdmin = user.role === "admin";
+  // No early return before the hooks below — signing out flips `user` to null and
+  // a conditional return here would change the hook count mid-render.
+  const isAdmin = user?.role === "admin";
 
   const filteredSales = useMemo(
-    () => (isAdmin ? sales : sales.filter((s) => s.shopId === user.shopId)),
-    [sales, isAdmin, user.shopId],
+    () => (isAdmin ? sales : sales.filter((s) => s.shopId === user?.shopId)),
+    [sales, isAdmin, user?.shopId],
   );
   const filteredExp = useMemo(
-    () => (isAdmin ? expenses : expenses.filter((e) => e.shopId === user.shopId)),
-    [expenses, isAdmin, user.shopId],
+    () => (isAdmin ? expenses : expenses.filter((e) => e.shopId === user?.shopId)),
+    [expenses, isAdmin, user?.shopId],
   );
 
   const totals = useMemo(() => {
@@ -66,25 +67,31 @@ function Dashboard() {
   const lowStock = useMemo(() => {
     const rows = inventory
       .filter((row) => {
-        if (!isAdmin && row.shopId !== user.shopId) return false;
+        if (!isAdmin && row.shopId !== user?.shopId) return false;
         const p = products.find((pp) => pp.id === row.productId);
         return p && row.qty <= p.lowAlert;
       })
       .slice(0, 6);
-    return rows.map((row) => ({
-      ...row,
-      product: products.find((p) => p.id === row.productId)!,
-      shop: shops.find((s) => s.id === row.shopId)!,
-    }));
-  }, [inventory, products, shops, isAdmin, user.shopId]);
+    return rows
+      .map((row) => ({
+        ...row,
+        product: products.find((p) => p.id === row.productId),
+        shop: shops.find((s) => s.id === row.shopId),
+      }))
+      .filter((row): row is typeof row & { product: NonNullable<typeof row.product>; shop: NonNullable<typeof row.shop> } =>
+        Boolean(row.product && row.shop),
+      );
+  }, [inventory, products, shops, isAdmin, user?.shopId]);
 
   const recent = filteredSales.slice(0, 5);
+
+  if (!user) return null;
 
   return (
     <div>
       <PageHeader
         title={isAdmin ? "Owner dashboard" : "My dashboard"}
-        subtitle={isAdmin ? "Live snapshot across all shops." : `Today at ${shops.find((s) => s.id === user.shopId)?.name}.`}
+        subtitle={isAdmin ? "Live snapshot across all shops." : `Today at ${shops.find((s) => s.id === user.shopId)?.name ?? "your shop"}.`}
         actions={
           isAdmin ? (
             <>
@@ -103,7 +110,9 @@ function Dashboard() {
         }
       />
 
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+      {/* Shop users only get 2 of these 5 cards — a fixed 5-column grid left them
+          squeezed into a third of the row with dead space beside them. */}
+      <div className={isAdmin ? "grid gap-4 grid-cols-2 lg:grid-cols-4 xl:grid-cols-5" : "grid gap-4 grid-cols-1 sm:grid-cols-2"}>
         <StatCard label="Total sales" value={formatRs(totals.sumSales)} sub={`${totals.invoices} invoices`} icon={<ShoppingBag className="h-5 w-5" />} tone="primary" />
         {isAdmin && (
           <StatCard label="Total profit" value={formatRs(totals.sumProfit)} sub="across all shops" icon={<TrendingUp className="h-5 w-5" />} tone="success" />
@@ -193,6 +202,9 @@ function Dashboard() {
                   <td className="px-5 py-3"><StatusPill status={s.status} /></td>
                 </tr>
               ))}
+              {recent.length === 0 && (
+                <tr><td colSpan={isAdmin ? 6 : 5} className="px-5 py-10 text-center text-sm text-muted-foreground">No sales recorded yet.</td></tr>
+              )}
             </tbody>
           </table>
         </div>

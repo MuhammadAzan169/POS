@@ -91,7 +91,7 @@ export interface ReturnRec {
   date: string;
   shopId: string;
   invoice: string;
-  items: { name: string; qty: number }[];
+  items: { productId: string; name: string; qty: number }[];
   refund: number;
   reason: string;
 }
@@ -349,6 +349,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addReturn: (r) => {
         const rr: ReturnRec = { ...r, id: `ret-${Date.now()}`, returnNo: `RET-${1000 + returns.length + 1}` };
         setReturns((prev) => [rr, ...prev]);
+        // A return must also close out the original invoice and put the stock back,
+        // otherwise the same invoice stays returnable and totals stay inflated.
+        setSales((prev) => prev.map((s) => (s.invoice === r.invoice ? { ...s, status: "Returned", profit: 0 } : s)));
+        setInventory((prev) => {
+          const next = [...prev];
+          r.items.forEach((item) => {
+            const idx = next.findIndex((row) => row.productId === item.productId && row.shopId === r.shopId);
+            if (idx >= 0) next[idx] = { ...next[idx], qty: next[idx].qty + item.qty };
+            else next.push({ productId: item.productId, shopId: r.shopId, qty: item.qty });
+          });
+          return next;
+        });
       },
       addProduct: (p) => setProducts((prev) => [...prev, { ...p, id: `p-${Date.now()}` }]),
       updateProduct: (p) => setProducts((prev) => prev.map((x) => (x.id === p.id ? p : x))),
