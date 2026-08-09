@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useStore, formatRs, todayISO } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
@@ -11,7 +11,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
-const CATS = ["Rent", "Salary", "Bills", "Transport", "Misc"];
+const BASE_CATS = ["Rent", "Salary", "Bills", "Transport", "Misc"];
+/** Sentinel for the "type my own" entry in the category dropdown. */
+const CUSTOM = "__custom__";
 
 export const Route = createFileRoute("/app/expenses")({ component: ExpensesPage });
 
@@ -19,6 +21,8 @@ function ExpensesPage() {
   const { user, expenses, shops, addExpense } = useStore();
   const isAdmin = user?.role === "admin";
   const [open, setOpen] = useState(false);
+  const [isCustom, setIsCustom] = useState(false);
+  const [customCat, setCustomCat] = useState("");
   const [form, setForm] = useState({
     date: todayISO(),
     shopId: user?.shopId ?? shops[0]?.id ?? "",
@@ -29,12 +33,23 @@ function ExpensesPage() {
 
   const rows = expenses.filter((e) => (isAdmin ? true : e.shopId === user?.shopId));
 
+  // Categories already used in recorded expenses join the list, so a custom one
+  // typed today is reusable tomorrow instead of being typed again.
+  const categories = useMemo(
+    () => Array.from(new Set([...BASE_CATS, ...expenses.map((e) => e.category)])).sort(),
+    [expenses],
+  );
+
   const save = () => {
-    if (!form.description || form.amount <= 0) { toast.error("Description and amount required"); return; }
-    addExpense({ ...form, addedBy: user?.name ?? "Unknown" });
+    const category = isCustom ? customCat.trim() : form.category;
+    if (!category) { toast.error("Category required"); return; }
+    if (!form.description.trim() || form.amount <= 0) { toast.error("Description and amount required"); return; }
+    addExpense({ ...form, category, description: form.description.trim(), addedBy: user?.name ?? "Unknown" });
     toast.success("Expense recorded");
     setOpen(false);
-    setForm({ ...form, description: "", amount: 0 });
+    setForm({ ...form, category, description: "", amount: 0 });
+    setIsCustom(false);
+    setCustomCat("");
   };
 
   return (
@@ -55,11 +70,33 @@ function ExpensesPage() {
                 </div>
               )}
               <div className="space-y-1.5"><Label>Category</Label>
-                <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
+                <Select
+                  value={isCustom ? CUSTOM : form.category}
+                  onValueChange={(v) => {
+                    if (v === CUSTOM) { setIsCustom(true); return; }
+                    setIsCustom(false);
+                    setForm({ ...form, category: v });
+                  }}
+                >
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{CATS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    <SelectItem value={CUSTOM}>+ Add custom category…</SelectItem>
+                  </SelectContent>
                 </Select>
               </div>
+              {isCustom && (
+                <div className="space-y-1.5 col-span-2">
+                  <Label>New category name</Label>
+                  <Input
+                    autoFocus
+                    value={customCat}
+                    onChange={(e) => setCustomCat(e.target.value)}
+                    placeholder="e.g. Marketing, Repairs, Packaging"
+                  />
+                  <p className="text-xs text-muted-foreground">Saved with this expense and offered in the list from then on.</p>
+                </div>
+              )}
               <div className="space-y-1.5"><Label>Amount (Rs)</Label><Input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })} /></div>
               <div className="space-y-1.5 col-span-2"><Label>Description</Label><Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
             </div>

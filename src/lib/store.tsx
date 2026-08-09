@@ -85,13 +85,25 @@ export interface Expense {
   addedBy: string;
 }
 
+/**
+ * Two distinct flows share this record:
+ *  - "customer": a shopper brings goods back. Stock goes UP, money goes out.
+ *  - "supplier": we send goods back to the wholesaler. Stock goes DOWN, we get credit.
+ */
+export type ReturnKind = "customer" | "supplier";
+
 export interface ReturnRec {
   id: string;
+  kind: ReturnKind;
   returnNo: string;
   date: string;
   shopId: string;
+  /** Customer returns reference a sale invoice; supplier returns reference a purchase bill. */
   invoice: string;
+  /** Supplier returns only. */
+  supplier?: string;
   items: { productId: string; name: string; qty: number }[];
+  /** Refund paid to the customer, or credit owed by the supplier. */
   refund: number;
   reason: string;
 }
@@ -129,6 +141,7 @@ interface StoreState {
   addPurchase: (p: Omit<Purchase, "id">) => void;
   addExpense: (e: Omit<Expense, "id">) => void;
   addReturn: (r: Omit<ReturnRec, "id" | "returnNo">) => void;
+  updateProductAlert: (productId: string, lowAlert: number) => void;
   addProduct: (p: Omit<Product, "id">) => void;
   updateProduct: (p: Product) => void;
   addShop: (s: Omit<Shop, "id">) => void;
@@ -362,23 +375,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       addExpense: (e) => setExpenses((prev) => [{ ...e, id: `exp-${Date.now()}` }, ...prev]),
       addReturn: (r) => {
-        const rr: ReturnRec = { ...r, id: `ret-${Date.now()}`, returnNo: `RET-${1000 + returns.length + 1}` };
+        const isSupplier = r.kind === "supplier";
+        const prefix = isSupplier ? "SRET" : "RET";
+        const sameKind = returns.filter((x) => x.kind === r.kind).length;
+        const rr: ReturnRec = { ...r, id: `ret-${Date.now()}`, returnNo: `${prefix}-${1000 + sameKind + 1}` };
         setReturns((prev) => [rr, ...prev]);
-        // A return must also close out the original invoice and put the stock back,
-        // otherwise the same invoice stays returnable and totals stay inflated.
-        setSales((prev) => prev.map((s) => (s.invoice === r.invoice ? { ...s, status: "Returned", profit: 0 } : s)));
+
+        // A customer return must also close out the original invoice, otherwise the
+        // same invoice stays returnable and sales totals stay inflated.
+        if (!isSupplier) {
+          setSales((prev) => prev.map((s) => (s.invoice === r.invoice ? { ...s, status: "Returned", profit: 0 } : s)));
+        }
+
+        // Customer returns put stock back on the shelf; supplier returns take it away.
+        const sign = isSupplier ? -1 : 1;
         setInventory((prev) => {
           const next = [...prev];
           r.items.forEach((item) => {
             const idx = next.findIndex((row) => row.productId === item.productId && row.shopId === r.shopId);
-            if (idx >= 0) next[idx] = { ...next[idx], qty: next[idx].qty + item.qty };
-            else next.push({ productId: item.productId, shopId: r.shopId, qty: item.qty });
+            if (idx >= 0) next[idx] = { ...next[idx], qty: Math.max(0, next[idx].qty + sign * item.qty) };
+            else if (!isSupplier) next.push({ productId: item.productId, shopId: r.shopId, qty: item.qty });
           });
           return next;
         });
       },
       addProduct: (p) => setProducts((prev) => [...prev, { ...p, id: `p-${Date.now()}` }]),
       updateProduct: (p) => setProducts((prev) => prev.map((x) => (x.id === p.id ? p : x))),
+      updateProductAlert: (productId, lowAlert) =>
+        setProducts((prev) => prev.map((x) => (x.id === productId ? { ...x, lowAlert: Math.max(0, lowAlert) } : x))),
       addShop: (s) => setShops((prev) => [...prev, { ...s, id: `s-${Date.now()}` }]),
       updateShop: (s) => setShops((prev) => prev.map((x) => (x.id === s.id ? s : x))),
       addUser: (u) => setUsers((prev) => [...prev, { ...u, id: `u-${Date.now()}` }]),
@@ -402,4 +426,53 @@ export function formatRs(n: number, currency = "Rs") {
 
 export function todayISO() {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** YYYY-MM-DD for any stored date, whether it's an ISO timestamp or already a date. */
+export function dayOf(date: string) {
+  return date.slice(0, 10);
+}
+
+/**
+ * Rebuilds stock as it stood at the END of `asOf` (YYYY-MM-DD).
+ *
+ * There are no historical snapshots, so this rewinds today's quantities back
+ * through every movement recorded AFTER that day:
+ *   sales after      → stock was higher then  (add back)
+ *   purchases after  → stock was lower then   (subtract)
+ *   customer returns after → stock was lower then (subtract)
+ *   supplier returns after → stock was higher then (add back)
+ *
+ * Accurate only as far back as the recorded movements go.
+ */
+export function stockAsOf(
+  asOf: string,
+  data: { inventory: InventoryRow[]; sales: Sale[]; purchases: Purchase[]; returns: ReturnRec[] },
+): InventoryRow[] {
+  const key = (productId: string, shopId: string) => `${productId}|${shopId}`;
+  const map = new Map<string, InventoryRow>();
+  data.inventory.forEach((r) => map.set(key(r.productId, r.shopId), { ...r }));
+
+  const shift = (productId: string, shopId: string, delta: number) => {
+    const k = key(productId, shopId);
+    const row = map.get(k);
+    if (row) row.qty += delta;
+    else map.set(k, { productId, shopId, qty: delta });
+  };
+
+  data.sales
+    .filter((s) => dayOf(s.date) > asOf && s.status !== "Returned")
+    .forEach((s) => s.lines.forEach((l) => shift(l.productId, s.shopId, l.qty)));
+
+  data.purchases
+    .filter((p) => dayOf(p.date) > asOf)
+    .forEach((p) => p.lines.forEach((l) => shift(l.productId, l.shopId, -l.qty)));
+
+  data.returns
+    .filter((r) => dayOf(r.date) > asOf)
+    .forEach((r) =>
+      r.items.forEach((i) => shift(i.productId, r.shopId, r.kind === "supplier" ? i.qty : -i.qty)),
+    );
+
+  return [...map.values()].map((r) => ({ ...r, qty: Math.max(0, r.qty) }));
 }

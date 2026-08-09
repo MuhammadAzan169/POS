@@ -23,6 +23,7 @@ import { Route as AppPosRouteImport } from './routes/app.pos'
 import { Route as AppInventoryRouteImport } from './routes/app.inventory'
 import { Route as AppExpensesRouteImport } from './routes/app.expenses'
 import { Route as AppDashboardRouteImport } from './routes/app.dashboard'
+import { Route as AppAlertsRouteImport } from './routes/app.alerts'
 import { Route as AppAccountRouteImport } from './routes/app.account'
 
 const AppRoute = AppRouteImport.update({
@@ -95,6 +96,11 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAlertsRoute = AppAlertsRouteImport.update({
+  id: '/alerts',
+  path: '/alerts',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAccountRoute = AppAccountRouteImport.update({
   id: '/account',
   path: '/account',
@@ -105,6 +111,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/app/account': typeof AppAccountRoute
+  '/app/alerts': typeof AppAlertsRoute
   '/app/dashboard': typeof AppDashboardRoute
   '/app/expenses': typeof AppExpensesRoute
   '/app/inventory': typeof AppInventoryRoute
@@ -122,6 +129,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/app/account': typeof AppAccountRoute
+  '/app/alerts': typeof AppAlertsRoute
   '/app/dashboard': typeof AppDashboardRoute
   '/app/expenses': typeof AppExpensesRoute
   '/app/inventory': typeof AppInventoryRoute
@@ -140,6 +148,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/app/account': typeof AppAccountRoute
+  '/app/alerts': typeof AppAlertsRoute
   '/app/dashboard': typeof AppDashboardRoute
   '/app/expenses': typeof AppExpensesRoute
   '/app/inventory': typeof AppInventoryRoute
@@ -159,6 +168,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/app/account'
+    | '/app/alerts'
     | '/app/dashboard'
     | '/app/expenses'
     | '/app/inventory'
@@ -176,6 +186,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/app/account'
+    | '/app/alerts'
     | '/app/dashboard'
     | '/app/expenses'
     | '/app/inventory'
@@ -193,6 +204,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/app/account'
+    | '/app/alerts'
     | '/app/dashboard'
     | '/app/expenses'
     | '/app/inventory'
@@ -312,6 +324,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/alerts': {
+      id: '/app/alerts'
+      path: '/alerts'
+      fullPath: '/app/alerts'
+      preLoaderRoute: typeof AppAlertsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/account': {
       id: '/app/account'
       path: '/account'
@@ -324,6 +343,7 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppAccountRoute: typeof AppAccountRoute
+  AppAlertsRoute: typeof AppAlertsRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppExpensesRoute: typeof AppExpensesRoute
   AppInventoryRoute: typeof AppInventoryRoute
@@ -340,6 +360,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppAccountRoute: AppAccountRoute,
+  AppAlertsRoute: AppAlertsRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppExpensesRoute: AppExpensesRoute,
   AppInventoryRoute: AppInventoryRoute,

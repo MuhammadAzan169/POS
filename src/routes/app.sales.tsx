@@ -70,6 +70,7 @@ function SalesPage() {
 
   const processReturn = (sale: Sale) => {
     addReturn({
+      kind: "customer",
       date: new Date().toISOString().slice(0, 10),
       shopId: sale.shopId,
       invoice: sale.invoice,
