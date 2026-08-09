@@ -154,14 +154,25 @@ function GlobalSearch() {
 }
 
 export function AppLayout({ children }: { children: ReactNode }) {
-  const { user, logout, online, setOnline, shops } = useStore();
+  const { user, ready, logout, online, setOnline, shops } = useStore();
   const navigate = useNavigate();
   const location = useLocation();
 
+  // The session is restored in an effect, so `user` is null for the first render
+  // of any hard load. Redirecting on that null sent every deep link and every
+  // refresh to "/", which then bounced to the dashboard — you could never land
+  // on or reload a page other than the dashboard.
   useEffect(() => {
-    if (!user) navigate({ to: "/" });
-  }, [user, navigate]);
+    if (ready && !user) navigate({ to: "/" });
+  }, [ready, user, navigate]);
 
+  if (!ready) {
+    return (
+      <div className="h-dvh flex items-center justify-center bg-background text-sm text-muted-foreground">
+        Loading…
+      </div>
+    );
+  }
   if (!user) return null;
 
   const nav = user.role === "admin" ? ADMIN_NAV : SHOP_NAV;

@@ -21,15 +21,15 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
-  const { user, login } = useStore();
+  const { user, ready, login } = useStore();
   const navigate = useNavigate();
   const [email, setEmail] = useState("admin@apos.pk");
   const [password, setPassword] = useState("demo");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (user) navigate({ to: "/app/dashboard" });
-  }, [user, navigate]);
+    if (ready && user) navigate({ to: "/app/dashboard" });
+  }, [ready, user, navigate]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

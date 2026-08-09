@@ -108,7 +108,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    // The inline theme script below sets class/color-scheme on <html> before
+    // React hydrates. React owns this element, so without suppressHydrationWarning
+    // every page logs "server rendered HTML didn't match the client properties".
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>

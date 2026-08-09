@@ -110,6 +110,8 @@ export interface Settings {
 
 interface StoreState {
   user: User | null;
+  /** False until the saved session has been read from localStorage. */
+  ready: boolean;
   online: boolean;
   shops: Shop[];
   users: User[];
@@ -269,6 +271,7 @@ const LS_USER = "apos.user";
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [ready, setReady] = useState(false);
   const [online, setOnline] = useState(true);
   const [shops, setShops] = useState<Shop[]>(SHOPS);
   const [users, setUsers] = useState<User[]>(USERS);
@@ -285,11 +288,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const raw = typeof window !== "undefined" ? window.localStorage.getItem(LS_USER) : null;
       if (raw) setUser(JSON.parse(raw));
     } catch {}
+    // Marks the session restored. Guards let the app avoid treating the brief
+    // "not loaded yet" window as "signed out" and bouncing to the login screen.
+    setReady(true);
   }, []);
 
   const value = useMemo<StoreState>(
     () => ({
       user,
+      ready,
       online,
       shops,
       users,
@@ -377,7 +384,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addUser: (u) => setUsers((prev) => [...prev, { ...u, id: `u-${Date.now()}` }]),
       updateSettings: (s) => setSettings((prev) => ({ ...prev, ...s })),
     }),
-    [user, online, shops, users, products, inventory, sales, purchases, expenses, returns, settings],
+    [user, ready, online, shops, users, products, inventory, sales, purchases, expenses, returns, settings],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
