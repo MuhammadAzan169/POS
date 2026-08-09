@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import { ProductEditDialog } from "@/components/ProductEditDialog";
+import type { Product } from "@/lib/store";
 
 /** Guards the divide-by-zero that rendered "NaN%"/"Infinity%" for zero-priced items. */
 function margin(price: number, cost: number) {
@@ -28,6 +30,7 @@ function ProductsPage() {
   const { q: searchParam } = Route.useSearch();
   const isAdmin = user?.role === "admin";
   const [q, setQ] = useState(searchParam ?? "");
+  const [editing, setEditing] = useState<Product | null>(null);
 
   // Keep the filter in step with the header search that navigated here.
   // The ?? "" keeps the <Input> controlled when the param is absent.
@@ -75,7 +78,7 @@ function ProductsPage() {
                   <div className="space-y-1.5"><Label>Cost (Rs)</Label><Input type="number" value={form.cost} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })} /></div>
                   <div className="space-y-1.5"><Label>Sell price (Rs)</Label><Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} /></div>
                   {form.cost > 0 && form.price > 0 && (
-                    <div className={`col-span-2 text-sm rounded-md p-2 ${form.price >= form.cost ? "text-success bg-success/10" : "text-destructive bg-destructive/10"}`}>
+                    <div className={`col-span-2 text-sm rounded-md p-2 ${form.price >= form.cost ? "text-success-strong bg-success/10" : "text-destructive bg-destructive/10"}`}>
                       Margin: {formatRs(form.price - form.cost)} ({margin(form.price, form.cost)})
                       {form.price < form.cost && " — selling below cost"}
                     </div>
@@ -107,6 +110,7 @@ function ProductsPage() {
               <th className="px-4 py-3 font-medium text-right">Price</th>
               {isAdmin && <th className="px-4 py-3 font-medium text-right">Margin</th>}
               <th className="px-4 py-3 font-medium text-right">Stock</th>
+              {isAdmin && <th className="px-4 py-3 font-medium text-right">Edit</th>}
             </tr></thead>
             <tbody>
               {rows.map((p) => (
@@ -117,17 +121,26 @@ function ProductsPage() {
                   <td className="px-4 py-3">{p.brand}</td>
                   {isAdmin && <td className="px-4 py-3 text-right">{formatRs(p.cost)}</td>}
                   <td className="px-4 py-3 text-right font-medium">{formatRs(p.price)}</td>
-                  {isAdmin && <td className={`px-4 py-3 text-right ${p.price >= p.cost ? "text-success" : "text-destructive"}`}>{margin(p.price, p.cost)}</td>}
+                  {isAdmin && <td className={`px-4 py-3 text-right ${p.price >= p.cost ? "text-success-strong" : "text-destructive"}`}>{margin(p.price, p.cost)}</td>}
                   <td className="px-4 py-3 text-right">{p.totalStock}</td>
+                  {isAdmin && (
+                    <td className="px-4 py-3 text-right">
+                      <Button size="sm" variant="ghost" onClick={() => setEditing(p)}>
+                        <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
+                      </Button>
+                    </td>
+                  )}
                 </tr>
               ))}
               {rows.length === 0 && (
-                <tr><td colSpan={isAdmin ? 8 : 6} className="px-4 py-12 text-center text-sm text-muted-foreground">No products match “{q}”.</td></tr>
+                <tr><td colSpan={isAdmin ? 9 : 6} className="px-4 py-12 text-center text-sm text-muted-foreground">No products match “{q}”.</td></tr>
               )}
             </tbody>
           </table>
         </div>
       </Card>
+
+      <ProductEditDialog product={editing} onClose={() => setEditing(null)} />
     </div>
   );
 }

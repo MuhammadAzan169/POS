@@ -108,16 +108,77 @@ export interface ReturnRec {
   reason: string;
 }
 
+/** Which blocks appear on a printed receipt, and how it's laid out. */
+export interface ReceiptDesign {
+  showBusinessName: boolean;
+  showAddress: boolean;
+  showPhone: boolean;
+  showHeaderText: boolean;
+  showFooterText: boolean;
+  showInvoiceNo: boolean;
+  showDateTime: boolean;
+  showCashier: boolean;
+  showCustomer: boolean;
+  showShopName: boolean;
+  showItemBarcodes: boolean;
+  showUnitPrice: boolean;
+  showPaymentLine: boolean;
+  showThankYouDivider: boolean;
+  paperWidth: "58mm" | "80mm" | "A4";
+  fontSize: "sm" | "md" | "lg";
+  align: "left" | "center";
+}
+
+export const DEFAULT_RECEIPT: ReceiptDesign = {
+  showBusinessName: true,
+  showAddress: true,
+  showPhone: true,
+  showHeaderText: true,
+  showFooterText: true,
+  showInvoiceNo: true,
+  showDateTime: true,
+  showCashier: true,
+  showCustomer: true,
+  showShopName: true,
+  showItemBarcodes: false,
+  showUnitPrice: true,
+  showPaymentLine: true,
+  showThankYouDivider: true,
+  paperWidth: "80mm",
+  fontSize: "md",
+  align: "center",
+};
+
+/**
+ * Discounts live here rather than on Settings so the Discounts tab owns them.
+ * A product's own percentage wins; anything without one uses `overallPct`.
+ * Both are capped by `maxPct`.
+ */
+export interface DiscountRules {
+  enabled: boolean;
+  overallPct: number;
+  maxPct: number;
+  perProduct: Record<string, number>;
+}
+
+export const DEFAULT_DISCOUNTS: DiscountRules = {
+  enabled: true,
+  overallPct: 0,
+  maxPct: 20,
+  perProduct: {},
+};
+
 export interface Settings {
   businessName: string;
   currency: string;
   address: string;
   phone: string;
+  taxNumber: string;
+  invoicePrefix: string;
   receiptHeader: string;
   receiptFooter: string;
   lowStockDefault: number;
-  allowDiscount: boolean;
-  maxDiscount: number;
+  receipt: ReceiptDesign;
 }
 
 interface StoreState {
@@ -134,10 +195,13 @@ interface StoreState {
   expenses: Expense[];
   returns: ReturnRec[];
   settings: Settings;
+  discounts: DiscountRules;
   login: (email: string, password: string) => User | null;
   logout: () => void;
   setOnline: (v: boolean) => void;
   addSale: (s: Omit<Sale, "id" | "invoice" | "synced">) => Sale;
+  updateSale: (s: Sale) => void;
+  deleteSale: (id: string) => void;
   addPurchase: (p: Omit<Purchase, "id">) => void;
   addExpense: (e: Omit<Expense, "id">) => void;
   addReturn: (r: Omit<ReturnRec, "id" | "returnNo">) => void;
@@ -148,6 +212,9 @@ interface StoreState {
   updateShop: (s: Shop) => void;
   addUser: (u: Omit<User, "id">) => void;
   updateSettings: (s: Partial<Settings>) => void;
+  updateReceiptDesign: (r: Partial<ReceiptDesign>) => void;
+  updateDiscounts: (d: Partial<DiscountRules>) => void;
+  setProductDiscount: (productId: string, pct: number | null) => void;
 }
 
 const SHOPS: Shop[] = [
@@ -271,11 +338,12 @@ const DEFAULT_SETTINGS: Settings = {
   currency: "Rs",
   address: "Lahore, Pakistan",
   phone: "0300-1234567",
+  taxNumber: "",
+  invoicePrefix: "INV",
   receiptHeader: "Thank you for shopping with us",
   receiptFooter: "Thank You! Visit again",
   lowStockDefault: 5,
-  allowDiscount: true,
-  maxDiscount: 20,
+  receipt: DEFAULT_RECEIPT,
 };
 
 const StoreContext = createContext<StoreState | null>(null);
@@ -295,6 +363,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [expenses, setExpenses] = useState<Expense[]>(() => genExpenses());
   const [returns, setReturns] = useState<ReturnRec[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [discounts, setDiscounts] = useState<DiscountRules>(DEFAULT_DISCOUNTS);
 
   useEffect(() => {
     try {
@@ -320,6 +389,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       expenses,
       returns,
       settings,
+      discounts,
       login: (email, _password) => {
         const u = USERS.find((x) => x.email.toLowerCase() === email.toLowerCase());
         if (!u) return null;
@@ -338,7 +408,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const sale: Sale = {
           ...s,
           id: `sale-${Date.now()}`,
-          invoice: `INV-S${shopIdx}-${String(counter).padStart(6, "0")}`,
+          invoice: `${settings.invoicePrefix || "INV"}-S${shopIdx}-${String(counter).padStart(6, "0")}`,
           synced: online,
         };
         setSales((prev) => [sale, ...prev]);
@@ -351,6 +421,47 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }),
         );
         return sale;
+      },
+      /**
+       * Editing a completed sale has to move stock by the DIFFERENCE between the
+       * old and new line quantities, or inventory silently drifts.
+       */
+      updateSale: (updated) => {
+        const previous = sales.find((s) => s.id === updated.id);
+        setSales((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+        if (!previous) return;
+        setInventory((prev) => {
+          const next = [...prev];
+          const bump = (productId: string, delta: number) => {
+            if (delta === 0) return;
+            const i = next.findIndex((r) => r.productId === productId && r.shopId === updated.shopId);
+            if (i >= 0) next[i] = { ...next[i], qty: Math.max(0, next[i].qty + delta) };
+            else if (delta > 0) next.push({ productId, shopId: updated.shopId, qty: delta });
+          };
+          const ids = new Set([...previous.lines, ...updated.lines].map((l) => l.productId));
+          ids.forEach((id) => {
+            const before = previous.lines.find((l) => l.productId === id)?.qty ?? 0;
+            const after = updated.lines.find((l) => l.productId === id)?.qty ?? 0;
+            // Selling fewer units puts the difference back on the shelf.
+            bump(id, before - after);
+          });
+          return next;
+        });
+      },
+      /** Removing a sale returns its items to stock, unless it was already returned. */
+      deleteSale: (id) => {
+        const sale = sales.find((s) => s.id === id);
+        setSales((prev) => prev.filter((s) => s.id !== id));
+        if (!sale || sale.status === "Returned") return;
+        setInventory((prev) => {
+          const next = [...prev];
+          sale.lines.forEach((l) => {
+            const i = next.findIndex((r) => r.productId === l.productId && r.shopId === sale.shopId);
+            if (i >= 0) next[i] = { ...next[i], qty: next[i].qty + l.qty };
+            else next.push({ productId: l.productId, shopId: sale.shopId, qty: l.qty });
+          });
+          return next;
+        });
       },
       addPurchase: (p) => {
         const purchase: Purchase = { ...p, id: `pur-${Date.now()}` };
@@ -407,8 +518,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateShop: (s) => setShops((prev) => prev.map((x) => (x.id === s.id ? s : x))),
       addUser: (u) => setUsers((prev) => [...prev, { ...u, id: `u-${Date.now()}` }]),
       updateSettings: (s) => setSettings((prev) => ({ ...prev, ...s })),
+      updateReceiptDesign: (r) => setSettings((prev) => ({ ...prev, receipt: { ...prev.receipt, ...r } })),
+      updateDiscounts: (d) => setDiscounts((prev) => ({ ...prev, ...d })),
+      setProductDiscount: (productId, pct) =>
+        setDiscounts((prev) => {
+          const perProduct = { ...prev.perProduct };
+          // null clears the override so the product falls back to the overall rate.
+          if (pct === null) delete perProduct[productId];
+          else perProduct[productId] = Math.min(100, Math.max(0, pct));
+          return { ...prev, perProduct };
+        }),
     }),
-    [user, ready, online, shops, users, products, inventory, sales, purchases, expenses, returns, settings],
+    [user, ready, online, shops, users, products, inventory, sales, purchases, expenses, returns, settings, discounts],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
@@ -426,6 +547,22 @@ export function formatRs(n: number, currency = "Rs") {
 
 export function todayISO() {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * The discount percentage that actually applies to a product.
+ * Product override wins over the overall rate; both are capped by maxPct.
+ * Single source of truth so POS, the Discounts tab and receipts never disagree.
+ */
+export function discountPctFor(productId: string, d: DiscountRules) {
+  if (!d.enabled) return 0;
+  const raw = d.perProduct[productId] ?? d.overallPct;
+  return Math.min(Math.max(raw, 0), Math.max(0, d.maxPct));
+}
+
+/** Money off a line, rounded to whole currency units. */
+export function discountAmountFor(productId: string, unitPrice: number, qty: number, d: DiscountRules) {
+  return Math.round((unitPrice * qty * discountPctFor(productId, d)) / 100);
 }
 
 /** YYYY-MM-DD for any stored date, whether it's an ISO timestamp or already a date. */

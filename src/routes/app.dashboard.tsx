@@ -153,7 +153,7 @@ function Dashboard() {
 
         <Card className={isAdmin ? "p-5" : "p-5 lg:col-span-3"}>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-warning-foreground" /> Low stock</h3>
+            <h3 className="font-semibold flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-warning-strong" /> Low stock</h3>
             <Link to="/app/inventory" className="text-xs text-primary hover:underline">View all</Link>
           </div>
           {lowStock.length === 0 ? (
@@ -198,7 +198,7 @@ function Dashboard() {
                   <td className="px-5 py-3">{shops.find((sh) => sh.id === s.shopId)?.name}</td>
                   <td className="px-5 py-3">{s.customer}</td>
                   <td className="px-5 py-3 text-right font-medium">{formatRs(s.total)}</td>
-                  {isAdmin && <td className="px-5 py-3 text-right text-success font-medium">{formatRs(s.profit)}</td>}
+                  {isAdmin && <td className="px-5 py-3 text-right text-success-strong font-medium">{formatRs(s.profit)}</td>}
                   <td className="px-5 py-3"><StatusPill status={s.status} /></td>
                 </tr>
               ))}

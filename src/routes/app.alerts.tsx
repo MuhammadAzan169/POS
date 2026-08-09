@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
@@ -8,15 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Confirm } from "@/components/Confirm";
-import { Download, BellRing, Search } from "lucide-react";
+import { Download, BellRing, Search, PackagePlus } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/alerts")({ component: AlertsPage });
 
 function AlertsPage() {
-  const { user, products, inventory, shops, settings, updateProductAlert } = useStore();
+  const { user, products, inventory, shops, settings, updateProductAlert, updateSettings } = useStore();
   const isAdmin = user?.role === "admin";
+  const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [onlyBreached, setOnlyBreached] = useState(false);
   // Local edits so typing doesn't rewrite the store on every keystroke.
@@ -41,15 +42,30 @@ function AlertsPage() {
       .sort((a, b) => b.breachedCount - a.breachedCount || a.product.name.localeCompare(b.product.name));
   }, [products, inventory, shops, q, onlyBreached]);
 
+  /** Reorder for the shop that is furthest below the alert level. */
+  const restock = (productId: string, perShop: { shop: { id: string }; qty: number }[], lowAlert: number) => {
+    const worst = [...perShop].sort((a, b) => a.qty - b.qty)[0];
+    navigate({
+      to: "/app/purchases",
+      search: { restock: productId, shop: worst?.shop.id, qty: Math.max(1, lowAlert * 2 - (worst?.qty ?? 0)) },
+    });
+  };
+
+  /**
+   * Commits from the input's own value rather than the `drafts` map: that lookup
+   * came from an earlier render, so typing then immediately clicking away
+   * silently dropped the edit.
+   */
   const commit = (productId: string, raw: string) => {
+    setDrafts((d) => { const next = { ...d }; delete next[productId]; return next; });
     const value = Number(raw);
     if (raw.trim() === "" || Number.isNaN(value) || value < 0) {
       toast.error("Enter a number of 0 or more");
-      setDrafts((d) => { const next = { ...d }; delete next[productId]; return next; });
       return;
     }
+    const current = products.find((p) => p.id === productId)?.lowAlert;
+    if (Math.floor(value) === current) return;
     updateProductAlert(productId, Math.floor(value));
-    setDrafts((d) => { const next = { ...d }; delete next[productId]; return next; });
     toast.success("Alert level updated");
   };
 
@@ -114,6 +130,17 @@ function AlertsPage() {
         >
           Only products below alert ({breachedTotal})
         </button>
+        {/* Moved here from Settings, where it sat next to unrelated options. */}
+        <div className="space-y-1.5">
+          <Label className="text-xs">Default for new products</Label>
+          <Input
+            type="number"
+            min={0}
+            value={settings.lowStockDefault}
+            onChange={(e) => updateSettings({ lowStockDefault: Math.max(0, Number(e.target.value) || 0) })}
+            className="w-32"
+          />
+        </div>
         <div className="ml-auto flex items-end gap-2">
           <div className="space-y-1.5">
             <Label className="text-xs">Set all listed to</Label>
@@ -150,6 +177,7 @@ function AlertsPage() {
                 <th className="px-4 py-3 font-medium text-right">Total</th>
                 <th className="px-4 py-3 font-medium text-right w-36">Alert level</th>
                 <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium text-right">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -163,7 +191,7 @@ function AlertsPage() {
                     {r.perShop.map((x) => (
                       <td
                         key={x.shop.id}
-                        className={`px-4 py-3 text-right ${x.qty === 0 ? "text-destructive font-medium" : x.qty <= r.product.lowAlert ? "text-warning-foreground font-medium" : ""}`}
+                        className={`px-4 py-3 text-right ${x.qty === 0 ? "text-destructive font-medium" : x.qty <= r.product.lowAlert ? "text-warning-strong font-medium" : ""}`}
                       >
                         {x.qty}
                       </td>
@@ -176,14 +204,14 @@ function AlertsPage() {
                         aria-label={`Low-stock alert for ${r.product.name}`}
                         value={draft ?? String(r.product.lowAlert)}
                         onChange={(e) => setDrafts((d) => ({ ...d, [r.product.id]: e.target.value }))}
-                        onBlur={(e) => { if (draft !== undefined) commit(r.product.id, e.target.value); }}
+                        onBlur={(e) => commit(r.product.id, e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                         className="h-8 text-right"
                       />
                     </td>
                     <td className="px-4 py-3">
                       {r.breachedCount > 0 ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs text-warning-foreground">
+                        <span className="inline-flex items-center gap-1.5 text-xs text-warning-strong">
                           <BellRing className="h-3.5 w-3.5" />
                           {r.breachedCount} shop{r.breachedCount === 1 ? "" : "s"} low
                         </span>
@@ -191,12 +219,17 @@ function AlertsPage() {
                         <StatusPill status="OK" />
                       )}
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      <Button size="sm" variant="outline" onClick={() => restock(r.product.id, r.perShop, r.product.lowAlert)}>
+                        <PackagePlus className="h-3.5 w-3.5 mr-1.5" />Restock
+                      </Button>
+                    </td>
                   </tr>
                 );
               })}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={shops.length + 6} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                  <td colSpan={shops.length + 7} className="px-4 py-12 text-center text-sm text-muted-foreground">
                     {onlyBreached ? "No product is below its alert level." : `No products match “${q}”.`}
                   </td>
                 </tr>

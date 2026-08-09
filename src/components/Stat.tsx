@@ -17,9 +17,9 @@ export function StatCard({
 }) {
   const toneStyles: Record<string, string> = {
     default: "bg-muted/60 text-foreground",
-    success: "bg-success/15 text-success",
-    warning: "bg-warning/20 text-warning-foreground",
-    accent: "bg-accent/20 text-accent-foreground",
+    success: "bg-success/15 text-success-strong",
+    warning: "bg-warning/20 text-warning-strong",
+    accent: "bg-accent/20 text-accent-strong",
     primary: "bg-primary/10 text-primary",
   };
   return (
@@ -42,15 +42,15 @@ export function StatCard({
 
 export function StatusPill({ status }: { status: string }) {
   const map: Record<string, string> = {
-    Completed: "bg-success/15 text-success border-success/30",
+    Completed: "bg-success/15 text-success-strong border-success/30",
     Returned: "bg-destructive/10 text-destructive border-destructive/30",
-    Partial: "bg-warning/20 text-warning-foreground border-warning/40",
-    OK: "bg-success/15 text-success border-success/30",
-    LOW: "bg-warning/20 text-warning-foreground border-warning/40",
+    Partial: "bg-warning/20 text-warning-strong border-warning/40",
+    OK: "bg-success/15 text-success-strong border-success/30",
+    LOW: "bg-warning/20 text-warning-strong border-warning/40",
     OUT: "bg-destructive/10 text-destructive border-destructive/30",
-    Synced: "bg-success/15 text-success border-success/30",
-    Pending: "bg-warning/20 text-warning-foreground border-warning/40",
-    Active: "bg-success/15 text-success border-success/30",
+    Synced: "bg-success/15 text-success-strong border-success/30",
+    Pending: "bg-warning/20 text-warning-strong border-warning/40",
+    Active: "bg-success/15 text-success-strong border-success/30",
     Disabled: "bg-muted text-muted-foreground border-border",
   };
   return (

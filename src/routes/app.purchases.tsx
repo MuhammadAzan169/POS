@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { useStore, formatRs, todayISO } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { StatusPill } from "@/components/Stat";
@@ -14,7 +14,16 @@ import { Plus, Trash2, Download, PackagePlus, ScanLine } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/app/purchases")({ component: PurchasesPage });
+export const Route = createFileRoute("/app/purchases")({
+  // Lets Inventory / Stock alerts link straight into a prefilled bill:
+  //   /app/purchases?restock=<productId>&shop=<shopId>&qty=<n>
+  validateSearch: (search: Record<string, unknown>): { restock?: string; shop?: string; qty?: number } => ({
+    restock: typeof search.restock === "string" ? search.restock : undefined,
+    shop: typeof search.shop === "string" ? search.shop : undefined,
+    qty: Number(search.qty) > 0 ? Number(search.qty) : undefined,
+  }),
+  component: PurchasesPage,
+});
 
 type Line = { productId: string; shopId: string; qty: number; rate: number };
 
@@ -30,6 +39,9 @@ function PurchasesPage() {
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [scan, setScan] = useState("");
   const [shopFilter, setShopFilter] = useState("all");
+  const [allQ, setAllQ] = useState("");
+  const { restock: restockParam, shop: shopParam, qty: qtyParam } = Route.useSearch();
+  const navigate = useNavigate();
 
   // Every shop/product pair at or below its alert level — what actually needs reordering.
   const restockRows = useMemo(() => {
@@ -44,7 +56,37 @@ function PurchasesPage() {
       .sort((a, b) => a.row.qty - b.row.qty || a.product!.name.localeCompare(b.product!.name));
   }, [inventory, products, shops, shopFilter]);
 
+  // Every product x shop pair, so anything can be reordered at any time.
+  const allRows = useMemo(() => {
+    const term = allQ.trim().toLowerCase();
+    return shops
+      .flatMap((shop) =>
+        products.map((product) => ({
+          product,
+          shop,
+          qty: inventory.find((r) => r.productId === product.id && r.shopId === shop.id)?.qty ?? 0,
+        })),
+      )
+      .filter((r) => (shopFilter === "all" ? true : r.shop.id === shopFilter))
+      .filter((r) => (term ? r.product.name.toLowerCase().includes(term) || r.product.barcode.includes(term) : true))
+      .sort((a, b) => a.product.name.localeCompare(b.product.name) || a.shop.name.localeCompare(b.shop.name));
+  }, [products, shops, inventory, shopFilter, allQ]);
+
   const total = lines.reduce((a, l) => a + l.qty * l.rate, 0);
+
+  // Arriving from Inventory / Stock alerts opens the bill already filled in, then
+  // clears the params so a refresh does not reopen it.
+  useEffect(() => {
+    if (!restockParam) return;
+    const prod = products.find((x) => x.id === restockParam);
+    if (!prod) return;
+    setLines([{ productId: prod.id, shopId: shopParam || shops[0]?.id || "", qty: Math.max(1, qtyParam ?? 1), rate: prod.cost }]);
+    setBillNo("");
+    setDate(todayISO());
+    setOpen(true);
+    navigate({ to: "/app/purchases", search: {}, replace: true });
+
+  }, [restockParam, shopParam, qtyParam]);
 
   const openBlank = () => {
     setLines([emptyLine()]);
@@ -170,6 +212,7 @@ function PurchasesPage() {
       <Tabs defaultValue="restock">
         <TabsList>
           <TabsTrigger value="restock">Needs restock ({restockRows.length})</TabsTrigger>
+          <TabsTrigger value="all">All items ({allRows.length})</TabsTrigger>
           <TabsTrigger value="history">Purchase history ({purchases.length})</TabsTrigger>
         </TabsList>
 
@@ -234,6 +277,69 @@ function PurchasesPage() {
                 </tbody>
               </table>
             </div>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="all" className="mt-4">
+          <Card className="p-4 mb-4 flex flex-wrap gap-3 items-end">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Search</Label>
+              <Input placeholder="Product name or barcode..." value={allQ} onChange={(e) => setAllQ(e.target.value)} className="w-full sm:w-64" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Shop</Label>
+              <Select value={shopFilter} onValueChange={setShopFilter}>
+                <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All shops</SelectItem>
+                  {shops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground ml-auto">Reorder anything, whether or not it is low.</p>
+          </Card>
+
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 sticky top-0 z-10"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-3 font-medium">Product</th>
+                  <th className="px-4 py-3 font-medium">Shop</th>
+                  <th className="px-4 py-3 font-medium text-right">In stock</th>
+                  <th className="px-4 py-3 font-medium text-right">Alert level</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Barcode</th>
+                  <th className="px-4 py-3 font-medium text-right">Action</th>
+                </tr></thead>
+                <tbody>
+                  {allRows.slice(0, 200).map((r) => (
+                    <tr key={`${r.product.id}-${r.shop.id}`} className="border-t hover:bg-muted/40">
+                      <td className="px-4 py-3 font-medium">{r.product.name}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{r.shop.name}</td>
+                      <td className="px-4 py-3 text-right font-medium">{r.qty}</td>
+                      <td className="px-4 py-3 text-right text-muted-foreground">{r.product.lowAlert}</td>
+                      <td className="px-4 py-3">
+                        <StatusPill status={r.qty === 0 ? "OUT" : r.qty <= r.product.lowAlert ? "LOW" : "OK"} />
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.product.barcode || "\u2014"}</td>
+                      <td className="px-4 py-3 text-right">
+                        <Button size="sm" variant="outline" onClick={() => restock(r.product.id, r.shop.id, suggestQty(r.qty, r.product.lowAlert))}>
+                          <PackagePlus className="h-3.5 w-3.5 mr-1.5" />Restock
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                  {allRows.length === 0 && (
+                    <tr><td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">No products match this filter.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {allRows.length > 200 && (
+              <div className="px-4 py-3 text-xs text-muted-foreground border-t">
+                Showing the first 200 of {allRows.length} rows - narrow the search or pick a shop.
+              </div>
+            )}
           </Card>
         </TabsContent>
 

@@ -14,6 +14,7 @@ import {
   Settings as SettingsIcon,
   ScanLine,
   BellRing,
+  Percent,
   LogOut,
   Wifi,
   WifiOff,
@@ -36,6 +37,7 @@ const ADMIN_NAV: NavItem[] = [
   { to: "/app/products", label: "Products", icon: <ScanLine className="h-4 w-4" /> },
   { to: "/app/inventory", label: "Inventory", icon: <Boxes className="h-4 w-4" /> },
   { to: "/app/alerts", label: "Stock Alerts", icon: <BellRing className="h-4 w-4" /> },
+  { to: "/app/discounts", label: "Discounts", icon: <Percent className="h-4 w-4" /> },
   { to: "/app/returns", label: "Returns", icon: <Undo2 className="h-4 w-4" /> },
   { to: "/app/expenses", label: "Expenses", icon: <Wallet className="h-4 w-4" /> },
   { to: "/app/reports", label: "Reports", icon: <BarChart3 className="h-4 w-4" /> },
@@ -252,8 +254,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
               // the search sits bunched beside it with dead space to the right.
               "ml-auto flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full border transition-colors shrink-0",
               online
-                ? "bg-success/10 text-success border-success/30"
-                : "bg-warning/15 text-warning-foreground border-warning/40",
+                ? "bg-success/10 text-success-strong border-success/30"
+                : "bg-warning/15 text-warning-strong border-warning/40",
             )}
             title="Toggle online/offline (demo)"
           >

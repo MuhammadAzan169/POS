@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useStore, todayISO, stockAsOf } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, CalendarClock, RotateCcw } from "lucide-react";
+import { Download, CalendarClock, RotateCcw, PackagePlus } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
 
@@ -32,6 +32,7 @@ function daysAgoISO(days: number) {
 function InventoryPage() {
   const { user, inventory, products, shops, sales, purchases, returns, settings } = useStore();
   const isAdmin = user?.role === "admin";
+  const navigate = useNavigate();
   const [shop, setShop] = useState<string>(isAdmin ? "all" : user?.shopId ?? "all");
   const [q, setQ] = useState("");
   const today = todayISO();
@@ -65,6 +66,10 @@ function InventoryPage() {
   }, [source, products, shops, shop, q, isAdmin, user?.shopId]);
 
   const statusOf = (qty: number, lowAlert: number) => (qty === 0 ? "OUT" : qty <= lowAlert ? "LOW" : "OK");
+
+  /** Hands off to Purchases, which opens a bill prefilled for this product+shop. */
+  const restock = (productId: string, shopId: string, qty: number, lowAlert: number) =>
+    navigate({ to: "/app/purchases", search: { restock: productId, shop: shopId, qty: Math.max(1, lowAlert * 2 - qty) } });
 
   const totals = useMemo(
     () => ({
@@ -172,7 +177,7 @@ function InventoryPage() {
         </Card>
         <Card className="p-4">
           <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Need attention</div>
-          <div className={`text-2xl font-bold mt-1 ${totals.low > 0 ? "text-warning-foreground" : ""}`}>{totals.low}</div>
+          <div className={`text-2xl font-bold mt-1 ${totals.low > 0 ? "text-warning-strong" : ""}`}>{totals.low}</div>
         </Card>
         {isAdmin && (
           <Card className="p-4">
@@ -194,6 +199,7 @@ function InventoryPage() {
               <th className="px-4 py-3 font-medium text-right">Low alert</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium">Barcode</th>
+              {isAdmin && <th className="px-4 py-3 font-medium text-right">Action</th>}
             </tr></thead>
             <tbody>
               {rows.map((r) => {
@@ -206,11 +212,24 @@ function InventoryPage() {
                     <td className="px-4 py-3 text-right text-muted-foreground">{r.product.lowAlert}</td>
                     <td className="px-4 py-3"><StatusPill status={status} /></td>
                     <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.product.barcode || "—"}</td>
+                    {isAdmin && (
+                      <td className="px-4 py-3 text-right">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isHistorical}
+                          title={isHistorical ? "Switch back to today to reorder" : "Reorder this item"}
+                          onClick={() => restock(r.productId, r.shopId, r.qty, r.product.lowAlert)}
+                        >
+                          <PackagePlus className="h-3.5 w-3.5 mr-1.5" />Restock
+                        </Button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
               {rows.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                <tr><td colSpan={isAdmin ? 7 : 6} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   {q ? `No stock rows match “${q}”.` : "No stock records for this selection."}
                 </td></tr>
               )}

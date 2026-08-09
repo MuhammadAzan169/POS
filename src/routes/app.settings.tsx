@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { useStore, formatRs } from "@/lib/store";
+import { useStore, type ReceiptDesign } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
+import { Receipt as ReceiptView } from "@/components/Receipt";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,6 @@ import { downloadJson } from "@/lib/export";
 
 export const Route = createFileRoute("/app/settings")({ component: SettingsPage });
 
-/** Section shell so every block gets the same title/description/spacing treatment. */
 function Section({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
     <Card className="p-5 sm:p-6">
@@ -28,18 +28,7 @@ function Section({ title, description, children }: { title: string; description:
   );
 }
 
-/** Field with an optional hint and a width that suits its content. */
-function Field({
-  label,
-  hint,
-  className,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  className?: string;
-  children: ReactNode;
-}) {
+function Field({ label, hint, className, children }: { label: string; hint?: string; className?: string; children: ReactNode }) {
   return (
     <div className={`space-y-1.5 ${className ?? ""}`}>
       <Label>{label}</Label>
@@ -49,49 +38,110 @@ function Field({
   );
 }
 
+/** One on/off row in the receipt designer. */
+function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="flex items-center justify-between gap-3 py-1.5 cursor-pointer">
+      <span className="text-sm">{label}</span>
+      <Switch checked={checked} onCheckedChange={onChange} />
+    </label>
+  );
+}
+
+/** Segmented picker for the small either/or layout choices. */
+function Segmented<T extends string>({
+  value, options, onChange,
+}: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
+  return (
+    <div className="flex gap-1.5">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          onClick={() => onChange(o.value)}
+          className={`flex-1 text-xs px-2 py-1.5 rounded-md border transition-colors ${
+            value === o.value ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const SAMPLE = {
+  invoice: "INV-S1-000123",
+  at: new Date(),
+  shopName: "Main Branch",
+  cashier: "Shop 1 Cashier",
+  customer: "Ayesha K.",
+  payment: "Cash",
+  tendered: 2000,
+  change: 650,
+  subtotal: 1500,
+  discount: 150,
+  total: 1350,
+  lines: [
+    { name: "Matte Lipstick — Ruby 02", qty: 2, price: 450, barcode: "8901001" },
+    { name: "Kajal Pencil — Black", qty: 4, price: 150, barcode: "8901002" },
+  ],
+};
+
 function SettingsPage() {
   const store = useStore();
-  const { user, settings, updateSettings } = store;
+  const { user, settings, updateSettings, updateReceiptDesign } = store;
   const isAdmin = user?.role === "admin";
+  const d = settings.receipt;
 
   const exportBackup = () => {
-    const { shops, users, products, inventory, sales, purchases, expenses, returns } = store;
+    const { shops, users, products, inventory, sales, purchases, expenses, returns, discounts } = store;
     downloadJson(`apos-backup-${new Date().toISOString().slice(0, 10)}.json`, {
       exportedAt: new Date().toISOString(),
-      settings, shops, users, products, inventory, sales, purchases, expenses, returns,
+      settings, discounts, shops, users, products, inventory, sales, purchases, expenses, returns,
     });
     toast.success("Backup downloaded");
   };
 
   if (!isAdmin) {
-    // Keeps the page frame instead of dropping a bare sentence onto a blank screen.
     return (
       <div>
-        <PageHeader title="Settings" subtitle="Business, receipt and defaults." />
+        <PageHeader title="Settings" subtitle="Business details and receipt design." />
         <Card className="p-10 text-center text-sm text-muted-foreground">Admins only.</Card>
       </div>
     );
   }
 
+  const toggles: { key: keyof ReceiptDesign; label: string }[] = [
+    { key: "showBusinessName", label: "Business name" },
+    { key: "showShopName", label: "Shop name" },
+    { key: "showAddress", label: "Address" },
+    { key: "showPhone", label: "Phone" },
+    { key: "showHeaderText", label: "Header text" },
+    { key: "showInvoiceNo", label: "Invoice number" },
+    { key: "showDateTime", label: "Date & time" },
+    { key: "showCustomer", label: "Customer name" },
+    { key: "showCashier", label: "Cashier name" },
+    { key: "showUnitPrice", label: "Unit price per item" },
+    { key: "showItemBarcodes", label: "Item barcodes" },
+    { key: "showPaymentLine", label: "Payment & change" },
+    { key: "showThankYouDivider", label: "Dividers" },
+    { key: "showFooterText", label: "Footer text" },
+  ];
+
   return (
     <div>
       <PageHeader
         title="Settings"
-        subtitle="Business details, receipt text and checkout defaults."
+        subtitle="Business details and receipt design. Stock alerts and discounts have their own tabs."
         actions={
           <>
-            <Button variant="outline" onClick={exportBackup}>
-              <Download className="h-4 w-4 mr-1.5" />Export backup
-            </Button>
-            <Button onClick={() => toast.success("Settings saved")}>
-              <Save className="h-4 w-4 mr-1.5" />Save changes
-            </Button>
+            <Button variant="outline" onClick={exportBackup}><Download className="h-4 w-4 mr-1.5" />Export backup</Button>
+            <Button onClick={() => toast.success("Settings saved")}><Save className="h-4 w-4 mr-1.5" />Save changes</Button>
           </>
         }
       />
 
-      {/* Settings on the left, a live receipt preview parked alongside on wide screens. */}
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px] items-start">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] items-start">
         <div className="grid gap-5 min-w-0">
           <Section title="Business" description="Shown on receipts and exported reports.">
             <div className="grid gap-4 sm:grid-cols-6">
@@ -107,10 +157,16 @@ function SettingsPage() {
               <Field label="Phone" className="sm:col-span-2">
                 <Input value={settings.phone} onChange={(e) => updateSettings({ phone: e.target.value })} />
               </Field>
+              <Field label="Tax / NTN number" hint="Printed on receipts when set." className="sm:col-span-4">
+                <Input value={settings.taxNumber} onChange={(e) => updateSettings({ taxNumber: e.target.value })} placeholder="Optional" />
+              </Field>
+              <Field label="Invoice prefix" hint="e.g. INV-S1-000123" className="sm:col-span-2">
+                <Input value={settings.invoicePrefix} onChange={(e) => updateSettings({ invoicePrefix: e.target.value })} />
+              </Field>
             </div>
           </Section>
 
-          <Section title="Receipt" description="Lines printed above and below the sale on every receipt.">
+          <Section title="Receipt text" description="The lines printed above and below the sale.">
             <div className="grid gap-4">
               <Field label="Header text" hint="Appears under the shop address.">
                 <Input value={settings.receiptHeader} onChange={(e) => updateSettings({ receiptHeader: e.target.value })} />
@@ -121,43 +177,42 @@ function SettingsPage() {
             </div>
           </Section>
 
-          <Section title="Defaults" description="Applied to new products and the checkout screen.">
-            <div className="grid gap-4">
-              <Field label="Default low-stock alert" hint="Used when a new product doesn't set its own." className="sm:max-w-[200px]">
-                <Input
-                  type="number"
-                  min={0}
-                  value={settings.lowStockDefault}
-                  onChange={(e) => updateSettings({ lowStockDefault: Math.max(0, Number(e.target.value)) })}
+          <Section title="Receipt design" description="Choose what prints and how it's laid out. The preview updates as you change these.">
+            <div className="grid gap-5 sm:grid-cols-3">
+              <Field label="Paper width">
+                <Segmented
+                  value={d.paperWidth}
+                  onChange={(v) => updateReceiptDesign({ paperWidth: v })}
+                  options={[{ value: "58mm", label: "58mm" }, { value: "80mm", label: "80mm" }, { value: "A4", label: "A4" }]}
                 />
               </Field>
-
-              <div className="flex items-center justify-between gap-4 p-3 border rounded-lg">
-                <div className="min-w-0">
-                  <div className="font-medium text-sm">Allow discount at checkout</div>
-                  <div className="text-xs text-muted-foreground">Cashiers can apply discounts up to the maximum.</div>
-                </div>
-                <Switch
-                  className="shrink-0"
-                  checked={settings.allowDiscount}
-                  onCheckedChange={(v) => updateSettings({ allowDiscount: v })}
+              <Field label="Font size">
+                <Segmented
+                  value={d.fontSize}
+                  onChange={(v) => updateReceiptDesign({ fontSize: v })}
+                  options={[{ value: "sm", label: "Small" }, { value: "md", label: "Medium" }, { value: "lg", label: "Large" }]}
                 />
-              </div>
+              </Field>
+              <Field label="Alignment">
+                <Segmented
+                  value={d.align}
+                  onChange={(v) => updateReceiptDesign({ align: v })}
+                  options={[{ value: "left", label: "Left" }, { value: "center", label: "Centred" }]}
+                />
+              </Field>
+            </div>
 
-              {/* Reserved height so toggling the switch doesn't jump the page. */}
-              <div className="min-h-[76px]">
-                {settings.allowDiscount && (
-                  <Field label="Max discount %" hint="0–100." className="sm:max-w-[200px]">
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={settings.maxDiscount}
-                      onChange={(e) => updateSettings({ maxDiscount: Math.min(100, Math.max(0, Number(e.target.value))) })}
-                    />
-                  </Field>
-                )}
-              </div>
+            <Separator className="my-5" />
+
+            <div className="grid sm:grid-cols-2 gap-x-8">
+              {toggles.map((t) => (
+                <Toggle
+                  key={t.key}
+                  label={t.label}
+                  checked={Boolean(d[t.key])}
+                  onChange={(v) => updateReceiptDesign({ [t.key]: v } as Partial<ReceiptDesign>)}
+                />
+              ))}
             </div>
           </Section>
         </div>
@@ -167,23 +222,10 @@ function SettingsPage() {
             <ReceiptIcon className="h-4 w-4 text-muted-foreground" />
             <h3 className="font-semibold">Receipt preview</h3>
           </div>
-          <p className="text-xs text-muted-foreground">Updates as you type.</p>
+          <p className="text-xs text-muted-foreground">Sample sale. Updates as you type.</p>
           <Separator className="my-4" />
-          <div className="font-mono text-xs bg-muted/40 border rounded-lg p-4">
-            <div className="text-center space-y-0.5">
-              <div className="font-bold text-sm">{settings.businessName || "Business name"}</div>
-              {settings.address && <div className="text-muted-foreground">{settings.address}</div>}
-              {settings.phone && <div className="text-muted-foreground">{settings.phone}</div>}
-              {settings.receiptHeader && <div className="mt-1.5">{settings.receiptHeader}</div>}
-            </div>
-            <div className="my-2 border-t border-dashed" />
-            <div className="space-y-1">
-              <div className="flex justify-between gap-2"><span className="truncate">2 × Sample item</span><span>{formatRs(900, settings.currency)}</span></div>
-              <div className="flex justify-between gap-2"><span className="truncate">1 × Another item</span><span>{formatRs(450, settings.currency)}</span></div>
-            </div>
-            <div className="my-2 border-t border-dashed" />
-            <div className="flex justify-between font-bold text-sm"><span>TOTAL</span><span>{formatRs(1350, settings.currency)}</span></div>
-            <div className="mt-3 text-center">{settings.receiptFooter || "Footer text"}</div>
+          <div className="max-h-[70vh] overflow-y-auto">
+            <ReceiptView data={SAMPLE} settings={settings} />
           </div>
         </Card>
       </div>

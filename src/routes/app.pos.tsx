@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useRef, useEffect } from "react";
-import { useStore, formatRs, type Product } from "@/lib/store";
+import { useStore, formatRs, discountPctFor, discountAmountFor, type Product } from "@/lib/store";
+import { Receipt as ReceiptView, type ReceiptData } from "@/components/Receipt";
 import { PageHeader } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,22 +15,9 @@ export const Route = createFileRoute("/app/pos")({ component: POS });
 
 interface CartLine { product: Product; qty: number; discount: number; }
 
-/** The printed receipt only showed a total — it now carries the whole sale. */
-interface Receipt {
-  invoice: string;
-  total: number;
-  change: number;
-  subtotal: number;
-  discount: number;
-  payment: string;
-  customer: string;
-  tendered: number;
-  at: Date;
-  lines: { name: string; qty: number; price: number }[];
-}
 
 function POS() {
-  const { user, products, inventory, addSale, settings, shops } = useStore();
+  const { user, products, inventory, addSale, settings, shops, discounts } = useStore();
   const shopId = user?.shopId ?? shops[0]?.id ?? "";
   const [q, setQ] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -37,7 +25,7 @@ function POS() {
   const [payment, setPayment] = useState<"Cash" | "Card" | "Other">("Cash");
   const [tendered, setTendered] = useState(0);
   const [receiptOpen, setReceiptOpen] = useState(false);
-  const [lastSale, setLastSale] = useState<Receipt | null>(null);
+  const [lastSale, setLastSale] = useState<ReceiptData | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { searchRef.current?.focus(); }, []);
@@ -81,7 +69,8 @@ function POS() {
   };
 
   const subtotal = cart.reduce((a, l) => a + l.qty * l.product.price, 0);
-  const discount = cart.reduce((a, l) => a + l.discount, 0);
+  // Discounts come from the Discounts tab: a product's own rate, else the overall rate.
+  const discount = cart.reduce((a, l) => a + discountAmountFor(l.product.id, l.product.price, l.qty, discounts), 0);
   const total = Math.max(0, subtotal - discount);
   const change = Math.max(0, tendered - total);
 
@@ -89,7 +78,8 @@ function POS() {
     if (receiptOpen) return;
     if (cart.length === 0) { toast.error("Cart is empty"); return; }
     const lines = cart.map((l) => ({
-      productId: l.product.id, name: l.product.name, qty: l.qty, price: l.product.price, cost: l.product.cost, discount: l.discount,
+      productId: l.product.id, name: l.product.name, qty: l.qty, price: l.product.price, cost: l.product.cost,
+      discount: discountAmountFor(l.product.id, l.product.price, l.qty, discounts),
     }));
     const profit = lines.reduce((a, l) => a + l.qty * (l.price - l.cost), 0) - discount;
     const sale = addSale({
@@ -106,7 +96,9 @@ function POS() {
       customer,
       tendered,
       at: new Date(),
-      lines: lines.map((l) => ({ name: l.name, qty: l.qty, price: l.price })),
+      cashier: user?.name ?? "Shop",
+      shopName: shops.find((s) => s.id === shopId)?.name,
+      lines: cart.map((l) => ({ name: l.product.name, qty: l.qty, price: l.product.price, barcode: l.product.barcode })),
     });
     setReceiptOpen(true);
     setCart([]);
@@ -148,7 +140,7 @@ function POS() {
                     <div className="font-medium text-sm line-clamp-2 mt-0.5">{p.name}</div>
                     <div className="flex justify-between items-end mt-2">
                       <div className="font-semibold">{formatRs(p.price)}</div>
-                      <div className={`text-xs ${s === 0 ? "text-destructive" : s <= p.lowAlert ? "text-warning-foreground" : "text-muted-foreground"}`}>
+                      <div className={`text-xs ${s === 0 ? "text-destructive" : s <= p.lowAlert ? "text-warning-strong" : "text-muted-foreground"}`}>
                         {s === 0 ? "Out" : `${s} left`}
                       </div>
                     </div>
@@ -221,10 +213,10 @@ function POS() {
           </div>
           <div className="mt-5 pt-4 border-t space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatRs(subtotal)}</span></div>
-            {settings.allowDiscount && <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span>− {formatRs(discount)}</span></div>}
+            {discounts.enabled && discount > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span>− {formatRs(discount)}</span></div>}
             <div className="flex justify-between text-xl font-bold pt-2 border-t"><span>Total</span><span>{formatRs(total)}</span></div>
             {payment === "Cash" && tendered > 0 && (
-              <div className="flex justify-between text-success font-medium"><span>Change due</span><span>{formatRs(change)}</span></div>
+              <div className="flex justify-between text-success-strong font-medium"><span>Change due</span><span>{formatRs(change)}</span></div>
             )}
           </div>
           <Button className="w-full mt-5 h-12 text-base" onClick={complete}>
@@ -238,42 +230,8 @@ function POS() {
         <DialogContent className="max-w-sm">
           <DialogHeader data-print="hide"><DialogTitle>Sale complete</DialogTitle></DialogHeader>
           {lastSale && (
-            <div data-print="only" className="font-mono text-sm bg-muted/40 border rounded-lg p-4 max-h-[60vh] overflow-y-auto">
-              <div className="text-center space-y-0.5">
-                <div className="font-bold text-base">{settings.businessName}</div>
-                <div className="text-xs text-muted-foreground">{shops.find((s) => s.id === shopId)?.name}</div>
-                {settings.address && <div className="text-xs text-muted-foreground">{settings.address}</div>}
-                {settings.phone && <div className="text-xs text-muted-foreground">{settings.phone}</div>}
-                {settings.receiptHeader && <div className="text-xs mt-1.5">{settings.receiptHeader}</div>}
-              </div>
-              <div className="my-2 border-t border-dashed" />
-              <div className="text-xs space-y-0.5">
-                <div className="flex justify-between gap-2"><span>Invoice</span><span>{lastSale.invoice}</span></div>
-                <div className="flex justify-between gap-2"><span>Date</span><span>{lastSale.at.toLocaleString()}</span></div>
-                <div className="flex justify-between gap-2"><span>Customer</span><span className="truncate">{lastSale.customer}</span></div>
-                <div className="flex justify-between gap-2"><span>Cashier</span><span className="truncate">{user?.name ?? "Shop"}</span></div>
-              </div>
-              <div className="my-2 border-t border-dashed" />
-              {/* The receipt used to omit the items entirely. */}
-              <div className="text-xs space-y-1">
-                {lastSale.lines.map((l, i) => (
-                  <div key={i} className="flex justify-between gap-2">
-                    <span className="min-w-0 truncate">{l.qty} × {l.name}</span>
-                    <span className="shrink-0">{formatRs(l.qty * l.price)}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="my-2 border-t border-dashed" />
-              <div className="text-xs space-y-0.5">
-                <div className="flex justify-between"><span>Subtotal</span><span>{formatRs(lastSale.subtotal)}</span></div>
-                {lastSale.discount > 0 && <div className="flex justify-between"><span>Discount</span><span>− {formatRs(lastSale.discount)}</span></div>}
-              </div>
-              <div className="flex justify-between text-base font-bold mt-1.5"><span>TOTAL</span><span>{formatRs(lastSale.total)}</span></div>
-              <div className="text-xs space-y-0.5 mt-1">
-                <div className="flex justify-between"><span>Paid ({lastSale.payment})</span><span>{formatRs(lastSale.payment === "Cash" && lastSale.tendered > 0 ? lastSale.tendered : lastSale.total)}</span></div>
-                {lastSale.change > 0 && <div className="flex justify-between"><span>Change</span><span>{formatRs(lastSale.change)}</span></div>}
-              </div>
-              <div className="mt-3 text-xs text-center">{settings.receiptFooter}</div>
+            <div data-print="only" className="max-h-[60vh] overflow-y-auto">
+              <ReceiptView data={lastSale} settings={settings} />
             </div>
           )}
           <DialogFooter data-print="hide" className="!justify-between">

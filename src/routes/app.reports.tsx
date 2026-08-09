@@ -189,7 +189,7 @@ function ReportsPage() {
                     <td className="py-3">{t.name}</td>
                     <td className="py-3 text-right">{t.qty}</td>
                     <td className="py-3 text-right font-medium">{formatRs(t.revenue)}</td>
-                    <td className="py-3 text-right text-success font-medium">{formatRs(t.profit)}</td>
+                    <td className="py-3 text-right text-success-strong font-medium">{formatRs(t.profit)}</td>
                   </tr>
                 ))}
               </tbody>

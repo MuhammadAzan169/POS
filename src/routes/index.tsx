@@ -128,7 +128,7 @@ function Index() {
               </button>
               {["shop1", "shop2", "shop3"].map((s, i) => (
                 <button key={s} onClick={() => quick(`${s}@apos.pk`)} className="flex items-center gap-3 p-3 border rounded-lg hover:border-primary hover:bg-muted/40 transition-colors text-left">
-                  <div className="h-9 w-9 rounded-md bg-accent/20 text-accent-foreground flex items-center justify-center"><Store className="h-4 w-4" /></div>
+                  <div className="h-9 w-9 rounded-md bg-accent/20 text-accent-strong flex items-center justify-center"><Store className="h-4 w-4" /></div>
                   <div className="flex-1">
                     <div className="text-sm font-medium">Shop {i + 1} cashier</div>
                     <div className="text-xs text-muted-foreground">{s}@apos.pk · own shop only, no profit</div>

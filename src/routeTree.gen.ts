@@ -22,6 +22,7 @@ import { Route as AppProductsRouteImport } from './routes/app.products'
 import { Route as AppPosRouteImport } from './routes/app.pos'
 import { Route as AppInventoryRouteImport } from './routes/app.inventory'
 import { Route as AppExpensesRouteImport } from './routes/app.expenses'
+import { Route as AppDiscountsRouteImport } from './routes/app.discounts'
 import { Route as AppDashboardRouteImport } from './routes/app.dashboard'
 import { Route as AppAlertsRouteImport } from './routes/app.alerts'
 import { Route as AppAccountRouteImport } from './routes/app.account'
@@ -91,6 +92,11 @@ const AppExpensesRoute = AppExpensesRouteImport.update({
   path: '/expenses',
   getParentRoute: () => AppRoute,
 } as any)
+const AppDiscountsRoute = AppDiscountsRouteImport.update({
+  id: '/discounts',
+  path: '/discounts',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -113,6 +119,7 @@ export interface FileRoutesByFullPath {
   '/app/account': typeof AppAccountRoute
   '/app/alerts': typeof AppAlertsRoute
   '/app/dashboard': typeof AppDashboardRoute
+  '/app/discounts': typeof AppDiscountsRoute
   '/app/expenses': typeof AppExpensesRoute
   '/app/inventory': typeof AppInventoryRoute
   '/app/pos': typeof AppPosRoute
@@ -131,6 +138,7 @@ export interface FileRoutesByTo {
   '/app/account': typeof AppAccountRoute
   '/app/alerts': typeof AppAlertsRoute
   '/app/dashboard': typeof AppDashboardRoute
+  '/app/discounts': typeof AppDiscountsRoute
   '/app/expenses': typeof AppExpensesRoute
   '/app/inventory': typeof AppInventoryRoute
   '/app/pos': typeof AppPosRoute
@@ -150,6 +158,7 @@ export interface FileRoutesById {
   '/app/account': typeof AppAccountRoute
   '/app/alerts': typeof AppAlertsRoute
   '/app/dashboard': typeof AppDashboardRoute
+  '/app/discounts': typeof AppDiscountsRoute
   '/app/expenses': typeof AppExpensesRoute
   '/app/inventory': typeof AppInventoryRoute
   '/app/pos': typeof AppPosRoute
@@ -170,6 +179,7 @@ export interface FileRouteTypes {
     | '/app/account'
     | '/app/alerts'
     | '/app/dashboard'
+    | '/app/discounts'
     | '/app/expenses'
     | '/app/inventory'
     | '/app/pos'
@@ -188,6 +198,7 @@ export interface FileRouteTypes {
     | '/app/account'
     | '/app/alerts'
     | '/app/dashboard'
+    | '/app/discounts'
     | '/app/expenses'
     | '/app/inventory'
     | '/app/pos'
@@ -206,6 +217,7 @@ export interface FileRouteTypes {
     | '/app/account'
     | '/app/alerts'
     | '/app/dashboard'
+    | '/app/discounts'
     | '/app/expenses'
     | '/app/inventory'
     | '/app/pos'
@@ -317,6 +329,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppExpensesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/discounts': {
+      id: '/app/discounts'
+      path: '/discounts'
+      fullPath: '/app/discounts'
+      preLoaderRoute: typeof AppDiscountsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/dashboard': {
       id: '/app/dashboard'
       path: '/dashboard'
@@ -345,6 +364,7 @@ interface AppRouteChildren {
   AppAccountRoute: typeof AppAccountRoute
   AppAlertsRoute: typeof AppAlertsRoute
   AppDashboardRoute: typeof AppDashboardRoute
+  AppDiscountsRoute: typeof AppDiscountsRoute
   AppExpensesRoute: typeof AppExpensesRoute
   AppInventoryRoute: typeof AppInventoryRoute
   AppPosRoute: typeof AppPosRoute
@@ -362,6 +382,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAccountRoute: AppAccountRoute,
   AppAlertsRoute: AppAlertsRoute,
   AppDashboardRoute: AppDashboardRoute,
+  AppDiscountsRoute: AppDiscountsRoute,
   AppExpensesRoute: AppExpensesRoute,
   AppInventoryRoute: AppInventoryRoute,
   AppPosRoute: AppPosRoute,
