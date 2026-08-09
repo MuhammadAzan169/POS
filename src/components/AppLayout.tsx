@@ -16,6 +16,8 @@ import {
   BellRing,
   Percent,
   Truck,
+  Database,
+  Sparkles,
   LogOut,
   Wifi,
   WifiOff,
@@ -33,6 +35,7 @@ type NavItem = { to: string; label: string; icon: ReactNode };
 
 const ADMIN_NAV: NavItem[] = [
   { to: "/app/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
+  { to: "/app/ai", label: "AI Assistant", icon: <Sparkles className="h-4 w-4" /> },
   { to: "/app/sales", label: "Sales", icon: <Receipt className="h-4 w-4" /> },
   { to: "/app/purchases", label: "Purchases", icon: <Package className="h-4 w-4" /> },
   { to: "/app/suppliers", label: "Suppliers", icon: <Truck className="h-4 w-4" /> },
@@ -159,6 +162,31 @@ function GlobalSearch() {
   );
 }
 
+/** Tells you at a glance whether data is coming from Supabase or the demo set. */
+function DataSourceBadge() {
+  const { usingSupabase, dbError } = useStore();
+  if (usingSupabase && !dbError) return null;
+
+  const title = dbError
+    ? `Supabase problem: ${dbError}`
+    : "Running on built-in demo data. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env to use Supabase.";
+
+  return (
+    <span
+      title={title}
+      className={cn(
+        "hidden lg:inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full border shrink-0",
+        dbError
+          ? "bg-destructive/10 text-destructive border-destructive/30"
+          : "bg-warning/15 text-warning-strong border-warning/40",
+      )}
+    >
+      <Database className="h-3.5 w-3.5" />
+      <span>{dbError ? "Database error" : "Demo data"}</span>
+    </span>
+  );
+}
+
 export function AppLayout({ children }: { children: ReactNode }) {
   const { user, ready, logout, online, setOnline, shops } = useStore();
   const navigate = useNavigate();
@@ -248,6 +276,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <div className="h-8 w-8 rounded-md bg-primary text-primary-foreground flex items-center justify-center font-bold">A</div>
           </div>
           <GlobalSearch />
+          <DataSourceBadge />
           <button
             onClick={() => setOnline(!online)}
             className={cn(
