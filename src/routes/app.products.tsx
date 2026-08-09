@@ -42,8 +42,14 @@ function ProductsPage() {
   }, [products, inventory, q]);
 
   const save = () => {
-    if (!form.name) { toast.error("Name required"); return; }
-    addProduct({ ...form, active: true, size: "", color: "" });
+    if (!form.name.trim()) { toast.error("Name required"); return; }
+    if (form.price <= 0) { toast.error("Sell price must be greater than 0"); return; }
+    if (form.cost < 0 || form.lowAlert < 0) { toast.error("Cost and low-stock alert can't be negative"); return; }
+    if (form.barcode.trim() && products.some((p) => p.barcode === form.barcode.trim())) {
+      toast.error(`Barcode ${form.barcode.trim()} is already used`);
+      return;
+    }
+    addProduct({ ...form, name: form.name.trim(), barcode: form.barcode.trim(), active: true, size: "", color: "" });
     toast.success("Product added");
     setOpen(false);
     setForm({ barcode: "", name: "", category: "Cosmetics", brand: "", cost: 0, price: 0, lowAlert: 5 });

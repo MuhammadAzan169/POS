@@ -335,6 +335,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addPurchase: (p) => {
         const purchase: Purchase = { ...p, id: `pur-${Date.now()}` };
         setPurchases((prev) => [purchase, ...prev]);
+        // The purchase form promises "latest cost will update for <product>";
+        // nothing was actually doing it. Past sales keep the cost they recorded.
+        setProducts((prev) =>
+          prev.map((prod) => {
+            const line = p.lines.find((l) => l.productId === prod.id && l.rate > 0);
+            return line ? { ...prod, cost: line.rate } : prod;
+          }),
+        );
         setInventory((prev) => {
           const next = [...prev];
           p.lines.forEach((l) => {

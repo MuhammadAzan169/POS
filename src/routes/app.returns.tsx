@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Undo2 } from "lucide-react";
+import { Confirm } from "@/components/Confirm";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/returns")({ component: ReturnsPage });
@@ -27,6 +28,8 @@ function ReturnsPage() {
   const [invoiceId, setInvoiceId] = useState("");
   const [reason, setReason] = useState("Customer return");
   const [refund, setRefund] = useState(0);
+
+  const selectedSale = sales.find((s) => s.id === invoiceId);
 
   const pickInvoice = (id: string) => {
     setInvoiceId(id);
@@ -85,7 +88,21 @@ function ReturnsPage() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-                <Button onClick={save} disabled={!invoiceId}>Save return</Button>
+                <Confirm
+                  title="Record this return?"
+                  description={
+                    <>
+                      A refund of <strong>{formatRs(refund || selectedSale?.total || 0)}</strong> will be recorded,
+                      the items go back into stock, and{" "}
+                      <strong>{selectedSale?.invoice ?? "the invoice"}</strong> is marked as returned. This can't be undone.
+                    </>
+                  }
+                  confirmLabel="Record return"
+                  destructive
+                  disabled={!invoiceId}
+                  onConfirm={save}
+                  trigger={<Button disabled={!invoiceId}>Save return</Button>}
+                />
               </DialogFooter>
             </DialogContent>
           </Dialog>

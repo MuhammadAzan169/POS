@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useState } from "react";
+import { Confirm } from "@/components/Confirm";
 
 export const Route = createFileRoute("/app/account")({ component: AccountPage });
 
@@ -37,7 +38,23 @@ function AccountPage() {
             <div className="space-y-1.5"><Label>Confirm</Label><Input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} /></div>
           </div>
           <div className="flex justify-end mt-4">
-            <Button onClick={() => { if (pw && pw === pw2) toast.success("Password updated"); else toast.error("Passwords don't match"); }}>Update password</Button>
+            {/* Previously accepted a 1-character password and left both fields filled. */}
+            <Confirm
+              title="Update your password?"
+              description="You'll use the new password the next time you sign in."
+              confirmLabel="Update password"
+              disabled={!pw || !pw2}
+              onConfirm={() => {
+                if (pw.length < 6) { toast.error("Password must be at least 6 characters"); return; }
+                if (pw !== pw2) { toast.error("Passwords don't match"); return; }
+                toast.success("Password updated");
+                setPw("");
+                setPw2("");
+              }}
+              trigger={
+                <Button disabled={!pw || !pw2}>Update password</Button>
+              }
+            />
           </div>
         </Card>
       </div>

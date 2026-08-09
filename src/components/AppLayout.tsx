@@ -23,6 +23,7 @@ import {
 import { useStore, formatRs } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Confirm } from "@/components/Confirm";
 import { toast } from "sonner";
 
 type NavItem = { to: string; label: string; icon: ReactNode };
@@ -206,13 +207,20 @@ export function AppLayout({ children }: { children: ReactNode }) {
           })}
         </nav>
         <div className="p-3 border-t border-sidebar-border">
-          <button
-            onClick={() => { logout(); navigate({ to: "/" }); }}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground transition-colors"
-          >
-            <LogOut className="h-4 w-4" />
-            <span>Sign out</span>
-          </button>
+          <Confirm
+            title="Sign out?"
+            description="You'll be returned to the sign-in screen. Any sale still in the cart will be lost."
+            confirmLabel="Sign out"
+            onConfirm={() => { logout(); navigate({ to: "/" }); }}
+            trigger={
+              <button
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground transition-colors"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>Sign out</span>
+              </button>
+            }
+          />
         </div>
       </aside>
 
@@ -262,6 +270,23 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </div>
             </div>
           </div>
+          {/* The sidebar (and its sign-out) is hidden below md, which left mobile
+              users with no way to sign out at all. */}
+          <Confirm
+            title="Sign out?"
+            description="You'll be returned to the sign-in screen. Any sale still in the cart will be lost."
+            confirmLabel="Sign out"
+            onConfirm={() => { logout(); navigate({ to: "/" }); }}
+            trigger={
+              <button
+                aria-label="Sign out"
+                title="Sign out"
+                className="md:hidden h-9 w-9 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            }
+          />
         </header>
 
         {/* Mobile nav */}

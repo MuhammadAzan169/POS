@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Download, Printer, Undo2 } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
+import { Confirm } from "@/components/Confirm";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/sales")({
@@ -187,15 +188,26 @@ function SalesPage() {
                 </div>
                 <div className="flex gap-2 pt-2">
                   <Button variant="outline" className="flex-1" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" />Print</Button>
-                  <Button
-                    variant="outline"
-                    className="flex-1"
+                  <Confirm
+                    title={`Return ${selected.invoice}?`}
+                    description={
+                      <>
+                        This refunds <strong>{formatRs(selected.total)}</strong>, puts{" "}
+                        {selected.lines.reduce((a, l) => a + l.qty, 0)} item(s) back into stock, and marks the
+                        invoice as returned. This can't be undone.
+                      </>
+                    }
+                    confirmLabel="Process return"
+                    destructive
                     disabled={selected.status === "Returned"}
-                    onClick={() => processReturn(selected)}
-                  >
-                    <Undo2 className="h-4 w-4 mr-1.5" />
-                    {selected.status === "Returned" ? "Returned" : "Return"}
-                  </Button>
+                    onConfirm={() => processReturn(selected)}
+                    trigger={
+                      <Button variant="outline" className="flex-1" disabled={selected.status === "Returned"}>
+                        <Undo2 className="h-4 w-4 mr-1.5" />
+                        {selected.status === "Returned" ? "Returned" : "Return"}
+                      </Button>
+                    }
+                  />
                 </div>
               </div>
             </>

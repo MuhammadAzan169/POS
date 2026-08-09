@@ -15,21 +15,37 @@ export const Route = createFileRoute("/app/purchases")({ component: PurchasesPag
 
 function PurchasesPage() {
   const { user, purchases, shops, products, addPurchase } = useStore();
+  const isAdmin = user?.role === "admin";
   const [open, setOpen] = useState(false);
   const [supplier, setSupplier] = useState("Glow Cosmetics Pvt");
   const [billNo, setBillNo] = useState("");
   const [date, setDate] = useState(todayISO());
   const [lines, setLines] = useState([{ productId: products[0]?.id ?? "", shopId: shops[0]?.id ?? "", qty: 10, rate: products[0]?.cost ?? 0 }]);
 
-  if (user?.role !== "admin") {
-    return <div className="text-center py-20 text-muted-foreground">Admins only.</div>;
+  if (!isAdmin) {
+    return (
+      <div>
+        <PageHeader title="Purchases" subtitle="Record wholesale bills and distribute stock to shops." />
+        <Card className="p-10 text-center text-sm text-muted-foreground">Admins only.</Card>
+      </div>
+    );
   }
 
   const total = lines.reduce((a, l) => a + l.qty * l.rate, 0);
 
   const save = () => {
-    if (!billNo) { toast.error("Bill number required"); return; }
-    addPurchase({ supplier, billNo, date, lines, total });
+    if (!supplier.trim()) { toast.error("Supplier required"); return; }
+    if (!billNo.trim()) { toast.error("Bill number required"); return; }
+    // The delete button could strip every line, and qty/rate accepted 0 — both
+    // let an empty Rs 0 bill through that still counted as a purchase.
+    if (lines.length === 0) { toast.error("Add at least one line item"); return; }
+    if (lines.some((l) => !l.productId || !l.shopId)) { toast.error("Every line needs a product and a shop"); return; }
+    if (lines.some((l) => l.qty <= 0)) { toast.error("Every line needs a quantity of at least 1"); return; }
+    if (purchases.some((p) => p.billNo.toLowerCase() === billNo.trim().toLowerCase())) {
+      toast.error(`Bill ${billNo.trim()} already exists`);
+      return;
+    }
+    addPurchase({ supplier, billNo: billNo.trim(), date, lines, total });
     toast.success("Purchase saved and routed to shops");
     setOpen(false);
     setBillNo("");
@@ -83,11 +99,21 @@ function PurchasesPage() {
                         </div>
                         <div className="col-span-1 flex items-center gap-1">
                           <span className="text-xs text-muted-foreground truncate">{formatRs(l.qty * l.rate)}</span>
-                          <button onClick={() => setLines((prev) => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive">
+                          {/* Removing the only line left the form unsubmittable-but-looking-fine. */}
+                          <button
+                            onClick={() => setLines((prev) => prev.filter((_, j) => j !== i))}
+                            disabled={lines.length === 1}
+                            title={lines.length === 1 ? "A purchase needs at least one line" : "Remove line"}
+                            className="text-muted-foreground hover:text-destructive disabled:opacity-40 disabled:hover:text-muted-foreground disabled:cursor-not-allowed"
+                          >
                             <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
-                        {p && <div className="col-span-12 -mt-1 text-xs text-muted-foreground pl-1">Latest cost will update for "{p.name}"</div>}
+                        {p && l.rate > 0 && l.rate !== p.cost && (
+                          <div className="col-span-12 -mt-1 text-xs text-muted-foreground pl-1">
+                            Cost for “{p.name}” updates {formatRs(p.cost)} → {formatRs(l.rate)}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { StatusPill } from "@/components/Stat";
 import { Plus } from "lucide-react";
+import { Confirm } from "@/components/Confirm";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/users")({ component: UsersPage });
@@ -19,7 +20,14 @@ function UsersPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", shopId: shops[0]?.id ?? "" });
 
-  if (user?.role !== "admin") return <div className="text-center py-20 text-muted-foreground">Admins only.</div>;
+  if (user?.role !== "admin") {
+    return (
+      <div>
+        <PageHeader title="Users" subtitle="Manage owner & shop logins." />
+        <Card className="p-10 text-center text-sm text-muted-foreground">Admins only.</Card>
+      </div>
+    );
+  }
 
   const save = () => {
     if (!form.name.trim() || !form.email.trim()) { toast.error("Name and email required"); return; }
@@ -81,7 +89,15 @@ function UsersPage() {
                   <td className="px-4 py-3 text-muted-foreground text-xs">{u.lastLogin ?? "—"}</td>
                   {/* Was "OK"/"OUT" — stock-level wording on a user account. */}
                   <td className="px-4 py-3"><StatusPill status={u.active ? "Active" : "Disabled"} /></td>
-                  <td className="px-4 py-3 text-right"><Button variant="ghost" size="sm" onClick={() => toast.success(`Password reset link sent to ${u.email}`)}>Reset password</Button></td>
+                  <td className="px-4 py-3 text-right">
+                    <Confirm
+                      title="Send a password reset?"
+                      description={<>A reset link will be emailed to <strong>{u.email}</strong> and their current password will stop working.</>}
+                      confirmLabel="Send reset link"
+                      onConfirm={() => toast.success(`Password reset link sent to ${u.email}`)}
+                      trigger={<Button variant="ghost" size="sm">Reset password</Button>}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

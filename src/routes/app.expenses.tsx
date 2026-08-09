@@ -68,8 +68,10 @@ function ExpensesPage() {
         </Dialog>
       } />
       <Card className="overflow-hidden">
+        {/* Was missing the scroll wrapper every other table has — it overflowed the card on mobile. */}
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-muted/50"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+          <thead className="bg-muted/50 sticky top-0 z-10"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
             <th className="px-4 py-3 font-medium">Date</th>
             {isAdmin && <th className="px-4 py-3 font-medium">Shop</th>}
             <th className="px-4 py-3 font-medium">Category</th>
@@ -88,8 +90,12 @@ function ExpensesPage() {
                 <td className="px-4 py-3 text-right font-medium">{formatRs(e.amount)}</td>
               </tr>
             ))}
+            {rows.length === 0 && (
+              <tr><td colSpan={isAdmin ? 6 : 5} className="px-4 py-12 text-center text-sm text-muted-foreground">No expenses recorded yet.</td></tr>
+            )}
           </tbody>
         </table>
+        </div>
       </Card>
     </div>
   );

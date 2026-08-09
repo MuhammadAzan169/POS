@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { StatusPill } from "@/components/Stat";
 import { Plus, Store } from "lucide-react";
+import { Confirm } from "@/components/Confirm";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/shops")({ component: ShopsPage });
@@ -21,7 +22,14 @@ function ShopsPage() {
   const [editing, setEditing] = useState<Shop | null>(null);
   const [form, setForm] = useState(EMPTY);
 
-  if (user?.role !== "admin") return <div className="text-center py-20 text-muted-foreground">Admins only.</div>;
+  if (user?.role !== "admin") {
+    return (
+      <div>
+        <PageHeader title="Shops" subtitle="Manage outlet locations." />
+        <Card className="p-10 text-center text-sm text-muted-foreground">Admins only.</Card>
+      </div>
+    );
+  }
 
   const openAdd = () => { setEditing(null); setForm(EMPTY); setOpen(true); };
   const openEdit = (s: Shop) => { setEditing(s); setForm({ name: s.name, address: s.address, phone: s.phone }); setOpen(true); };
@@ -53,7 +61,7 @@ function ShopsPage() {
             <Card key={s.id} className="p-5">
               <div className="flex items-start justify-between">
                 <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center"><Store className="h-5 w-5" /></div>
-                <StatusPill status={s.active ? "OK" : "OUT"} />
+                <StatusPill status={s.active ? "Active" : "Disabled"} />
               </div>
               <h3 className="font-semibold mt-4">{s.name}</h3>
               <div className="text-sm text-muted-foreground mt-1">{s.address}</div>
@@ -63,7 +71,18 @@ function ShopsPage() {
               </div>
               <div className="flex gap-2 mt-4">
                 <Button variant="outline" size="sm" className="flex-1" onClick={() => openEdit(s)}>Edit</Button>
-                <Button variant="outline" size="sm" className="flex-1" onClick={() => toggleActive(s)}>{s.active ? "Deactivate" : "Activate"}</Button>
+                {s.active ? (
+                  <Confirm
+                    title={`Deactivate ${s.name}?`}
+                    description="The outlet stops appearing as an active location. Its sales history and stock are kept, and you can reactivate it at any time."
+                    confirmLabel="Deactivate"
+                    destructive
+                    onConfirm={() => toggleActive(s)}
+                    trigger={<Button variant="outline" size="sm" className="flex-1">Deactivate</Button>}
+                  />
+                ) : (
+                  <Button variant="outline" size="sm" className="flex-1" onClick={() => toggleActive(s)}>Activate</Button>
+                )}
               </div>
             </Card>
           );

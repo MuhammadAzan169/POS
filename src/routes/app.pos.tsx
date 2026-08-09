@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Plus, Minus, X, ScanLine, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Confirm } from "@/components/Confirm";
 
 export const Route = createFileRoute("/app/pos")({ component: POS });
 
@@ -160,7 +161,16 @@ function POS() {
           <Card>
             <div className="p-4 border-b flex items-center justify-between">
               <h3 className="font-semibold">Cart ({cart.length})</h3>
-              {cart.length > 0 && <Button variant="ghost" size="sm" onClick={() => setCart([])}>Clear</Button>}
+              {cart.length > 0 && (
+                <Confirm
+                  title="Clear the cart?"
+                  description={`All ${cart.length} item${cart.length === 1 ? "" : "s"} will be removed. This can't be undone.`}
+                  confirmLabel="Clear cart"
+                  destructive
+                  onConfirm={() => { setCart([]); toast.success("Cart cleared"); }}
+                  trigger={<Button variant="ghost" size="sm">Clear</Button>}
+                />
+              )}
             </div>
             {cart.length === 0 ? (
               <div className="p-10 text-center text-sm text-muted-foreground">Cart is empty.</div>
