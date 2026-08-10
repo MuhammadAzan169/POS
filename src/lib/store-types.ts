@@ -67,7 +67,7 @@ export interface Sale {
   discount: number;
   total: number;
   profit: number;
-  payment: "Cash" | "Card" | "Other";
+  payment: "Cash" | "Card" | "Online";
   status: "Completed" | "Returned" | "Partial";
   synced: boolean;
 }

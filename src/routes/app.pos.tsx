@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useRef, useEffect } from "react";
-import { useStore, formatRs, discountPctFor, discountAmountFor, type Product } from "@/lib/store";
+import { useStore, formatRs, discountAmountFor, type Product, type Sale } from "@/lib/store";
 import { Receipt as ReceiptView, type ReceiptData } from "@/components/Receipt";
 import { PageHeader } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { Plus, Minus, X, ScanLine, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Confirm } from "@/components/Confirm";
+import { PaymentPicker } from "@/components/PaymentPicker";
 
 export const Route = createFileRoute("/app/pos")({ component: POS });
 
@@ -22,7 +23,7 @@ function POS() {
   const [q, setQ] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customer, setCustomer] = useState("Walk-in");
-  const [payment, setPayment] = useState<"Cash" | "Card" | "Other">("Cash");
+  const [payment, setPayment] = useState<Sale["payment"]>("Cash");
   const [tendered, setTendered] = useState(0);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [lastSale, setLastSale] = useState<ReceiptData | null>(null);
@@ -198,11 +199,7 @@ function POS() {
             </div>
             <div className="space-y-1.5">
               <label className="text-xs text-muted-foreground">Payment</label>
-              <div className="grid grid-cols-3 gap-2">
-                {(["Cash", "Card", "Other"] as const).map((p) => (
-                  <button key={p} onClick={() => setPayment(p)} className={`py-2 rounded-md border text-sm ${payment === p ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"}`}>{p}</button>
-                ))}
-              </div>
+              <PaymentPicker value={payment} onChange={setPayment} />
             </div>
             {payment === "Cash" && (
               <div className="space-y-1.5">

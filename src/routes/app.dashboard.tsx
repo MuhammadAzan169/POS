@@ -112,7 +112,7 @@ function Dashboard() {
 
       {/* Shop users only get 2 of these 5 cards — a fixed 5-column grid left them
           squeezed into a third of the row with dead space beside them. */}
-      <div className={isAdmin ? "grid gap-4 grid-cols-2 lg:grid-cols-4 xl:grid-cols-5" : "grid gap-4 grid-cols-1 sm:grid-cols-2"}>
+      <div className={isAdmin ? "grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4 xl:grid-cols-5" : "grid gap-3 sm:gap-4 grid-cols-2"}>
         <StatCard label="Total sales" value={formatRs(totals.sumSales)} sub={`${totals.invoices} invoices`} icon={<ShoppingBag className="h-5 w-5" />} tone="primary" />
         {isAdmin && (
           <StatCard label="Total profit" value={formatRs(totals.sumProfit)} sub="across all shops" icon={<TrendingUp className="h-5 w-5" />} tone="success" />
@@ -179,7 +179,7 @@ function Dashboard() {
           <h3 className="font-semibold">Recent activity</h3>
           <Link to="/app/sales" className="text-xs text-primary hover:underline">All sales →</Link>
         </div>
-        <div className="overflow-x-auto -mx-5">
+        <div className="overflow-x-auto -mx-5 px-0">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b">

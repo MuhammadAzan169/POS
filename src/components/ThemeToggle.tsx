@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export const THEME_KEY = "apos.theme";
+/** Kept in sync with the inline theme script in __root.tsx. */
+const THEME_KEY = "apos.theme";
 
 /**
  * The stylesheet ships a full `.dark` palette but nothing ever put the class on

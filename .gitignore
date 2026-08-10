@@ -28,6 +28,8 @@ dist-ssr
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+# Shared editor settings (silences Tailwind v4 false-positive CSS errors).
+!.vscode/settings.json
 .idea
 .DS_Store
 *.suo

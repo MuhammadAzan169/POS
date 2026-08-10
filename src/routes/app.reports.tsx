@@ -13,7 +13,7 @@ import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianG
 export const Route = createFileRoute("/app/reports")({ component: ReportsPage });
 
 function ReportsPage() {
-  const { user, sales, expenses, shops, products, inventory } = useStore();
+  const { user, sales, expenses, shops, products, inventory, settings } = useStore();
   const isAdmin = user?.role === "admin";
 
   const dailyData = useMemo(() => {
@@ -85,8 +85,20 @@ function ReportsPage() {
         </>
       } />
 
+      <div data-print="show" className="hidden mb-4 pb-3 border-b">
+        <div className="text-lg font-bold">{settings.businessName}</div>
+        <div className="text-xs">
+          {[settings.address, settings.phone].filter(Boolean).join(" · ")}
+          {settings.taxNumber ? ` · NTN ${settings.taxNumber}` : ""}
+        </div>
+        <div className="text-xs mt-1">
+          Business report · generated {new Date().toLocaleString()}
+        </div>
+      </div>
+
       <Tabs defaultValue="sales">
-        <TabsList>
+        {/* Only the open tab's content is meaningful on paper. */}
+        <TabsList data-print="hide">
           <TabsTrigger value="sales">Sales</TabsTrigger>
           <TabsTrigger value="pl">Profit & Loss</TabsTrigger>
           <TabsTrigger value="inventory">Inventory</TabsTrigger>

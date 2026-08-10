@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore, formatRs } from "@/lib/store";
 import { computeInsights, buildBrief } from "@/lib/insights";
+import { MarkdownView } from "@/components/MarkdownView";
 import { askAssistant, aiStatus } from "@/lib/ai";
 import { PageHeader } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
@@ -31,39 +32,6 @@ const QUICK_ASKS = [
   { label: "Where is money going?", q: "Break down my expenses and tell me if anything looks out of line." },
   { label: "This week vs last", q: "How does this week compare with last week, and what changed?" },
 ];
-
-/** Minimal markdown rendering: headings, bullets and **bold** are all the model uses. */
-function Markdown({ text }: { text: string }) {
-  const blocks = text.split(/\n{2,}/);
-  const inline = (s: string) =>
-    s.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
-      part.startsWith("**") && part.endsWith("**") ? (
-        <strong key={i}>{part.slice(2, -2)}</strong>
-      ) : (
-        <span key={i}>{part}</span>
-      ),
-    );
-
-  return (
-    <div className="space-y-2.5 text-sm leading-relaxed">
-      {blocks.map((block, i) => {
-        const lines = block.split("\n").filter(Boolean);
-        const isList = lines.every((l) => /^\s*[-*•]\s+/.test(l));
-        if (isList) {
-          return (
-            <ul key={i} className="list-disc pl-5 space-y-1">
-              {lines.map((l, j) => <li key={j}>{inline(l.replace(/^\s*[-*•]\s+/, ""))}</li>)}
-            </ul>
-          );
-        }
-        if (/^#{1,6}\s/.test(block)) {
-          return <h4 key={i} className="font-semibold">{inline(block.replace(/^#{1,6}\s/, ""))}</h4>;
-        }
-        return <p key={i}>{inline(block)}</p>;
-      })}
-    </div>
-  );
-}
 
 function AIPage() {
   const store = useStore();
@@ -206,7 +174,7 @@ function AIPage() {
           )}
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+        <div data-chat-scroll className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
           {messages.length === 0 && (
             <div className="text-center py-6">
               <div className="inline-flex h-12 w-12 rounded-full bg-muted items-center justify-center mb-3">
@@ -237,7 +205,7 @@ function AIPage() {
                   <Bot className="h-4 w-4" />
                 </div>
               )}
-              <div className={`min-w-0 max-w-[85%] ${m.role === "user" ? "order-first" : ""}`}>
+              <div className={`min-w-0 ${m.role === "user" ? "max-w-[85%] order-first" : "max-w-full sm:max-w-[92%]"}`}>
                 <div
                   className={`rounded-lg px-3.5 py-2.5 ${
                     m.role === "user"
@@ -247,7 +215,7 @@ function AIPage() {
                         : "bg-muted/60 border"
                   }`}
                 >
-                  {m.role === "user" ? <p className="text-sm">{m.content}</p> : <Markdown text={m.content} />}
+                  {m.role === "user" ? <p className="text-sm">{m.content}</p> : <MarkdownView text={m.content} />}
                 </div>
                 {m.model && (
                   <div className="text-[11px] text-muted-foreground mt-1 px-1">answered by {m.model}</div>

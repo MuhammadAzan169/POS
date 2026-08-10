@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Confirm } from "@/components/Confirm";
+import { PaymentPicker } from "@/components/PaymentPicker";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -83,19 +84,7 @@ export function SaleEditDialog({ sale, onClose }: { sale: Sale | null; onClose: 
           </div>
           <div className="space-y-1.5">
             <Label>Payment</Label>
-            <div className="grid grid-cols-3 gap-2">
-              {(["Cash", "Card", "Other"] as const).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setDraft({ ...draft, payment: p })}
-                  className={`py-2 rounded-md border text-sm transition-colors ${
-                    draft.payment === p ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
+            <PaymentPicker value={draft.payment} onChange={(p) => setDraft({ ...draft, payment: p })} />
           </div>
         </div>
 

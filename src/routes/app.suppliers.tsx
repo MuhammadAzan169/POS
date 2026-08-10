@@ -23,7 +23,7 @@ const EMPTY: Omit<Supplier, "id"> = {
 };
 
 /** Add / edit form, shared by both actions. */
-export function SupplierDialog({
+function SupplierDialog({
   open, initial, onClose, onSaved,
 }: {
   open: boolean;

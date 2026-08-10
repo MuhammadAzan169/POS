@@ -1,0 +1,19 @@
+{
+  // Tailwind v4 uses at-rules the built-in CSS language service doesn't know
+  // (@theme, @source, @custom-variant, and @import "tailwindcss" source(none)).
+  // It reports them as "semi-colon expected" / "Unknown at rule" errors even
+  // though the stylesheet compiles correctly. Turning off the built-in
+  // validator silences the false positives; install the "Tailwind CSS
+  // IntelliSense" extension for real completion and linting.
+  "css.validate": false,
+  "less.validate": false,
+  "scss.validate": false,
+  "css.lint.unknownAtRules": "ignore",
+
+  // components.json points at a remote shadcn schema VS Code won't fetch
+  // unless the domain is trusted; this keeps the file quiet either way.
+  "json.schemaDownload.enable": true,
+
+  "editor.formatOnSave": false,
+  "files.eol": "\r\n"
+}

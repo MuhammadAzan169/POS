@@ -73,7 +73,7 @@ create table if not exists sales (
   discount numeric(12,2) not null default 0,
   total    numeric(12,2) not null default 0,
   profit   numeric(12,2) not null default 0,
-  payment  text not null default 'Cash' check (payment in ('Cash', 'Card', 'Other')),
+  payment  text not null default 'Cash' check (payment in ('Cash', 'Card', 'Online')),
   status   text not null default 'Completed' check (status in ('Completed', 'Returned', 'Partial')),
   synced   boolean not null default true
 );

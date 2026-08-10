@@ -27,8 +27,3 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
       },
     })
   : null;
-
-/** Human-readable reason the app is running on demo data, for the UI to show. */
-export const supabaseStatus = isSupabaseConfigured
-  ? "connected"
-  : "Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env to use Supabase.";

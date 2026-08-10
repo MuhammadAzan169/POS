@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useStore, formatRs, todayISO, daysAgoISO, dayOf, type Sale } from "@/lib/store";
 import { SaleEditDialog } from "@/components/SaleEditDialog";
+import { Receipt as ReceiptView, type ReceiptData } from "@/components/Receipt";
 import { PageHeader } from "@/components/AppLayout";
 import { StatusPill } from "@/components/Stat";
 import { Card } from "@/components/ui/card";
@@ -31,10 +32,30 @@ export const Route = createFileRoute("/app/sales")({
   component: SalesPage,
 });
 
+/** A stored sale rendered through the same receipt layout used at checkout. */
+function useSaleToReceipt() {
+  const { shops } = useStore();
+  return (s: Sale): ReceiptData => ({
+    invoice: s.invoice,
+    at: new Date(s.date),
+    shopName: shops.find((x) => x.id === s.shopId)?.name,
+    cashier: s.cashier,
+    customer: s.customer,
+    payment: s.payment,
+    tendered: 0,
+    change: 0,
+    subtotal: s.subtotal,
+    discount: s.discount,
+    total: s.total,
+    lines: s.lines.map((l) => ({ name: l.name, qty: l.qty, price: l.price })),
+  });
+}
+
 function SalesPage() {
   const { user, sales, shops, addReturn, deleteSale, settings } = useStore();
   const navigate = useNavigate();
   const { q: searchParam } = Route.useSearch();
+  const saleToReceipt = useSaleToReceipt();
   const isAdmin = user?.role === "admin";
   const [shopFilter, setShopFilter] = useState<string>("all");
   const [q, setQ] = useState(searchParam ?? "");
@@ -269,7 +290,8 @@ function SalesPage() {
                   <div className="flex justify-between font-semibold text-base pt-2 border-t"><span>Total</span><span>{formatRs(selected.total)}</span></div>
                   {isAdmin && <div className="flex justify-between text-success-strong"><span>Profit</span><span>{formatRs(selected.profit)}</span></div>}
                 </div>
-                <div className="flex gap-2 pt-2">
+                {/* Screen-only actions: never appear on paper. */}
+                <div data-print="hide" className="flex gap-2 pt-2">
                   <Button variant="outline" className="flex-1" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" />Print</Button>
                   <Button
                     variant="outline"
@@ -305,6 +327,13 @@ function SalesPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Hidden on screen; the print stylesheet shows only this element. */}
+      {selected && (
+        <div data-print="only" className="hidden print:block">
+          <ReceiptView data={saleToReceipt(selected)} settings={settings} />
+        </div>
+      )}
 
       <SaleEditDialog sale={editing} onClose={() => setEditing(null)} />
     </div>

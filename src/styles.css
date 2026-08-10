@@ -246,24 +246,64 @@
  * data-print="hide" is dropped; marking a node data-print="only" prints just
  * that node (used for the POS receipt).
  */
+/*
+ * Small screens: let wide data tables scroll sideways rather than wrap.
+ *
+ * Without this an invoice number breaks mid-word ("INV-S1-
+000102") and every
+ * row grows to three lines. The tables already sit in an .overflow-x-auto
+ * wrapper, so nowrap simply uses the scroll that is already there.
+ */
+@media (max-width: 640px) {
+  .overflow-x-auto > table th,
+  .overflow-x-auto > table td {
+    white-space: nowrap;
+  }
+}
+
 @media print {
-  [data-print="hide"] {
-    display: none !important;
+  /*
+   * Two modes:
+   *  1. Something on the page is marked data-print="only" (a receipt, an
+   *     invoice) — print just that, wherever it sits in the DOM.
+   *  2. Nothing is — print the page, minus anything marked data-print="hide".
+   *
+   * Mode 1 uses visibility rather than display so ANCESTORS stay laid out.
+   * A Radix dialog or sheet is portalled to <body>, so a display-based rule
+   * would have to know the portal's shape; visibility does not care.
+   */
+  body:has([data-print="only"]) * {
+    visibility: hidden;
   }
 
-  body:has([data-print="only"]) > *:not(:has([data-print="only"])) {
-    display: none !important;
+  body:has([data-print="only"]) [data-print="only"],
+  body:has([data-print="only"]) [data-print="only"] * {
+    visibility: visible;
   }
 
   body:has([data-print="only"]) [data-print="only"] {
     position: absolute;
-    inset: 0 auto auto 0;
+    left: 0;
+    top: 0;
     width: 100%;
     max-width: none;
+    max-height: none;
+    overflow: visible;
+    margin: 0;
     border: 0;
     box-shadow: none;
     background: #fff;
     color: #000;
+  }
+
+  /* Never print navigation, toolbars or action buttons. */
+  [data-print="hide"] {
+    display: none !important;
+  }
+
+  /* Blocks that exist only on paper (report headers, letterheads). */
+  [data-print="show"] {
+    display: block !important;
   }
 
   html, body {
@@ -289,19 +329,16 @@
     max-width: none !important;
   }
 
+  /* Cards and tables should read as plain paper, not UI. */
   .shadow-sm, .shadow, .shadow-md, .shadow-lg {
     box-shadow: none !important;
   }
 
-  table {
-    break-inside: auto;
-  }
+  table { break-inside: auto; }
+  tr, .break-avoid { break-inside: avoid; }
+  thead { display: table-header-group; }
 
-  tr {
-    break-inside: avoid;
-  }
-
-  thead {
-    display: table-header-group;
+  @page {
+    margin: 12mm;
   }
 }

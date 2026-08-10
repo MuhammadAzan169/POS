@@ -357,10 +357,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        {/* min-h-full + flex lets a page opt into filling the viewport (the AI chat
-            does, via flex-1) while ordinary pages keep their natural height. */}
+        {/*
+          h-full, not min-h-full: a minimum lets the container grow with its
+          content, so a `flex-1` child (the AI chat) had nothing to size against
+          and expanded past the viewport. A definite height gives flex-1 a real
+          limit; longer pages simply overflow and <main> scrolls as before.
+        */}
         <main data-app-main className="flex-1 overflow-y-auto">
-          <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] w-full mx-auto min-h-full flex flex-col">{children}</div>
+          <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] w-full mx-auto h-full flex flex-col">{children}</div>
         </main>
       </div>
     </div>
