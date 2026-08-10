@@ -1,6 +1,17 @@
-import { createStart, createMiddleware } from "@tanstack/react-start";
+import { createStart, createMiddleware, createCsrfMiddleware } from "@tanstack/react-start";
 
 import { renderErrorPage } from "./lib/error-page";
+
+/**
+ * Server functions are same-origin RPC endpoints. Without this, any website a
+ * signed-in user visits could POST to them from the user's browser — which for
+ * `askAssistant` means spending our OpenRouter credit, and for anything added
+ * later could mean writing data. The filter limits the check to server
+ * functions so normal document requests are untouched.
+ */
+const csrfMiddleware = createCsrfMiddleware({
+  filter: (ctx) => ctx.handlerType === "serverFn",
+});
 
 const errorMiddleware = createMiddleware().server(async ({ next }) => {
   try {
@@ -18,5 +29,6 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
 });
 
 export const startInstance = createStart(() => ({
-  requestMiddleware: [errorMiddleware],
+  // CSRF first: reject forged requests before any handler work happens.
+  requestMiddleware: [csrfMiddleware, errorMiddleware],
 }));
