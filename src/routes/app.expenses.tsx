@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useStore, formatRs, todayISO } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -59,7 +60,7 @@ function ExpensesPage() {
           <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1.5" />Add expense</Button></DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>New expense</DialogTitle></DialogHeader>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5"><Label>Date</Label><Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
               {isAdmin && (
                 <div className="space-y-1.5"><Label>Shop</Label>
@@ -86,7 +87,7 @@ function ExpensesPage() {
                 </Select>
               </div>
               {isCustom && (
-                <div className="space-y-1.5 col-span-2">
+                <div className="space-y-1.5 sm:col-span-2">
                   <Label>New category name</Label>
                   <Input
                     autoFocus
@@ -98,15 +99,31 @@ function ExpensesPage() {
                 </div>
               )}
               <div className="space-y-1.5"><Label>Amount (Rs)</Label><Input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })} /></div>
-              <div className="space-y-1.5 col-span-2"><Label>Description</Label><Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+              <div className="space-y-1.5 sm:col-span-2"><Label>Description</Label><Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
             </div>
             <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={save}>Save</Button></DialogFooter>
           </DialogContent>
         </Dialog>
       } />
       <Card className="overflow-hidden">
-        {/* Was missing the scroll wrapper every other table has — it overflowed the card on mobile. */}
-        <div className="overflow-x-auto">
+        <MobileCards
+          items={rows}
+          keyOf={(e) => e.id}
+          empty="No expenses recorded yet."
+          render={(e) => (
+            <ListCard
+              title={e.description}
+              subtitle={e.date}
+              right={formatRs(e.amount)}
+              badges={<span className="text-xs px-2 py-0.5 bg-muted rounded-full">{e.category}</span>}
+              fields={[
+                ...(isAdmin ? [{ label: "Shop", value: shops.find((s) => s.id === e.shopId)?.name ?? "—" }] : []),
+                { label: "Added by", value: e.addedBy },
+              ]}
+            />
+          )}
+        />
+        <TableWrap>
         <table className="w-full text-sm">
           <thead className="bg-muted/50 sticky top-0 z-10"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
             <th className="px-4 py-3 font-medium">Date</th>
@@ -132,7 +149,7 @@ function ExpensesPage() {
             )}
           </tbody>
         </table>
-        </div>
+        </TableWrap>
       </Card>
     </div>
   );

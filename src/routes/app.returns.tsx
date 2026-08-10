@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Confirm } from "@/components/Confirm";
+import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { Undo2, Download, PackageMinus, Info } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
@@ -34,8 +35,10 @@ function FilterBar({
   const { q, shopFilter, from, to } = filters;
   const dirty = q || from || to || shopFilter !== "all";
   return (
-    <Card className="p-4 mb-4 flex flex-wrap gap-3 items-end">
-      <div className="space-y-1.5">
+    // Two columns on phones (the date pair sits side by side), unfolding into
+    // the flex bar from sm up.
+    <Card className="p-3 sm:p-4 mb-4 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-end">
+      <div className="space-y-1.5 col-span-2 sm:col-auto">
         <Label className="text-xs">Search</Label>
         <Input
           placeholder="Return no, invoice, item, reason…"
@@ -45,10 +48,10 @@ function FilterBar({
         />
       </div>
       {isAdmin && (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 col-span-2 sm:col-auto">
           <Label className="text-xs">Shop</Label>
           <Select value={shopFilter} onValueChange={(v) => setFilters({ ...filters, shopFilter: v })}>
-            <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-44"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All shops</SelectItem>
               {shops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
@@ -58,21 +61,39 @@ function FilterBar({
       )}
       <div className="space-y-1.5">
         <Label className="text-xs">From</Label>
-        <Input type="date" value={from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} className="w-40" />
+        <Input type="date" value={from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} className="w-full sm:w-40" />
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs">To</Label>
-        <Input type="date" value={to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} className="w-40" />
+        <Input type="date" value={to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} className="w-full sm:w-40" />
       </div>
       {dirty && (
-        <Button variant="ghost" size="sm" onClick={() => setFilters({ q: "", shopFilter: "all", from: "", to: "" })}>
+        <Button variant="ghost" size="sm" className="col-span-2 sm:col-auto" onClick={() => setFilters({ q: "", shopFilter: "all", from: "", to: "" })}>
           Clear
         </Button>
       )}
-      <Button variant="outline" className="ml-auto" onClick={onExport}>
+      <Button variant="outline" className="col-span-2 sm:col-auto sm:ml-auto" onClick={onExport}>
         <Download className="h-4 w-4 mr-1.5" />Export CSV
       </Button>
     </Card>
+  );
+}
+
+/** A return record as a card — shared by the customer and supplier lists. */
+function ReturnCard({ r, shopName, kind }: { r: ReturnRec; shopName?: string; kind: "customer" | "supplier" }) {
+  return (
+    <ListCard
+      title={<span className="font-mono">{r.returnNo}</span>}
+      subtitle={`${r.date} · ${kind === "customer" ? "invoice" : "bill"} ${r.invoice}`}
+      right={formatRs(r.refund)}
+      rightSub={kind === "customer" ? "refunded" : "credit"}
+      fields={[
+        ...(kind === "supplier" ? [{ label: "Supplier", value: r.supplier ?? "—" }] : []),
+        { label: kind === "supplier" ? "From shop" : "Shop", value: shopName ?? "—" },
+        { label: "Reason", value: r.reason },
+        { label: "Items", value: r.items.map((i) => `${i.qty} × ${i.name}`).join(", ") },
+      ]}
+    />
   );
 }
 
@@ -443,7 +464,13 @@ function ReturnsPage() {
             {customerRows.length === 0 ? (
               <EmptyState icon={<Undo2 className="h-5 w-5" />} title="No customer returns." hint="Open a sale invoice and choose Return to record one." />
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              <MobileCards
+                items={customerRows}
+                keyOf={(r) => r.id}
+                render={(r) => <ReturnCard r={r} kind="customer" shopName={shops.find((s) => s.id === r.shopId)?.name} />}
+              />
+              <TableWrap>
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50 sticky top-0 z-10"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
                     <th className="px-4 py-3 font-medium">Return no</th>
@@ -468,7 +495,8 @@ function ReturnsPage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </TableWrap>
+              </>
             )}
           </Card>
         </TabsContent>
@@ -492,7 +520,13 @@ function ReturnsPage() {
               {supplierRows.length === 0 ? (
                 <EmptyState icon={<PackageMinus className="h-5 w-5" />} title="No supplier returns." hint="Use “Return to supplier” to send faulty or unsold stock back." />
               ) : (
-                <div className="overflow-x-auto">
+                <>
+                <MobileCards
+                  items={supplierRows}
+                  keyOf={(r) => r.id}
+                  render={(r) => <ReturnCard r={r} kind="supplier" shopName={shops.find((s) => s.id === r.shopId)?.name} />}
+                />
+                <TableWrap>
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50 sticky top-0 z-10"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
                       <th className="px-4 py-3 font-medium">Return no</th>
@@ -519,7 +553,8 @@ function ReturnsPage() {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </TableWrap>
+                </>
               )}
             </Card>
           </TabsContent>

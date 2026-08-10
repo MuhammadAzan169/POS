@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Confirm } from "@/components/Confirm";
 import { ProductEditDialog } from "@/components/ProductEditDialog";
+import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { Download, Percent, Search, Pencil, RotateCcw } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
@@ -138,7 +139,7 @@ function DiscountsPage() {
         </div>
       </Card>
 
-      <Card className="p-4 mb-4 flex flex-wrap gap-3 items-end">
+      <Card className="p-3 sm:p-4 mb-4 grid gap-3 sm:flex sm:flex-wrap sm:items-end">
         <div className="space-y-1.5">
           <Label className="text-xs">Search</Label>
           <div className="relative">
@@ -148,7 +149,7 @@ function DiscountsPage() {
         </div>
         <button
           onClick={() => setOnlyDiscounted((v) => !v)}
-          className={`text-xs px-3 py-2 rounded-md border transition-colors ${
+          className={`min-h-10 text-xs px-3 py-2 rounded-md border transition-colors sm:min-h-9 ${
             onlyDiscounted ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"
           }`}
         >
@@ -165,7 +166,7 @@ function DiscountsPage() {
             toast.success("Item discounts cleared");
           }}
           trigger={
-            <Button variant="outline" className="ml-auto" disabled={withOwn === 0}>
+            <Button variant="outline" className="w-full sm:w-auto sm:ml-auto" disabled={withOwn === 0}>
               <RotateCcw className="h-4 w-4 mr-1.5" />Clear item rates
             </Button>
           }
@@ -173,7 +174,52 @@ function DiscountsPage() {
       </Card>
 
       <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
+        <MobileCards
+          items={rows}
+          keyOf={(r) => r.product.id}
+          empty={onlyDiscounted ? "No item currently has a discount." : `No products match “${q}”.`}
+          render={(r) => (
+            <ListCard
+              title={r.product.name}
+              subtitle={<span className="font-mono">{r.product.barcode || "No barcode"}</span>}
+              right={formatRs(r.finalPrice, settings.currency)}
+              rightSub={r.effectivePct > 0 ? `was ${formatRs(r.product.price, settings.currency)}` : undefined}
+              fields={[
+                { label: "Category", value: r.product.category },
+                {
+                  label: "Effective",
+                  value: `${r.effectivePct}%`,
+                  className: r.effectivePct > 0 ? "text-accent-strong font-medium" : "text-muted-foreground",
+                },
+                { label: "Source", value: r.hasOwn ? "Item rate" : r.effectivePct > 0 ? "Overall rate" : "None" },
+              ]}
+              actions={
+                <>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs whitespace-nowrap">Item %</Label>
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      max={100}
+                      aria-label={`Discount for ${r.product.name}`}
+                      placeholder={`${discounts.overallPct}`}
+                      value={drafts[r.product.id] ?? (r.hasOwn ? String(r.ownPct) : "")}
+                      onChange={(e) => setDrafts((d) => ({ ...d, [r.product.id]: e.target.value }))}
+                      onBlur={(e) => commit(r.product.id, e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                      className="w-20 text-right"
+                    />
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => setEditing(r.product)}>
+                    <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
+                  </Button>
+                </>
+              }
+            />
+          )}
+        />
+        <TableWrap>
           <table className="w-full text-sm">
             <thead className="bg-muted/50 sticky top-0 z-10">
               <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
@@ -224,7 +270,7 @@ function DiscountsPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
       </Card>
 
       <ProductEditDialog product={editing} onClose={() => setEditing(null)} />

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { Plus, Search, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { ProductEditDialog } from "@/components/ProductEditDialog";
@@ -69,8 +70,10 @@ function ProductsPage() {
               <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1.5" />Add product</Button></DialogTrigger>
               <DialogContent>
                 <DialogHeader><DialogTitle>New product</DialogTitle></DialogHeader>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5 col-span-2"><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+                {/* One column on phones — two 150px fields side by side made
+                    "Low-stock alert" wrap to three lines. */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5 sm:col-span-2"><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
                   <div className="space-y-1.5"><Label>Barcode</Label><Input value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} /></div>
                   <div className="space-y-1.5"><Label>Brand</Label><Input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} /></div>
                   <div className="space-y-1.5"><Label>Category</Label><Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} /></div>
@@ -78,7 +81,7 @@ function ProductsPage() {
                   <div className="space-y-1.5"><Label>Cost (Rs)</Label><Input type="number" value={form.cost} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })} /></div>
                   <div className="space-y-1.5"><Label>Sell price (Rs)</Label><Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} /></div>
                   {form.cost > 0 && form.price > 0 && (
-                    <div className={`col-span-2 text-sm rounded-md p-2 ${form.price >= form.cost ? "text-success-strong bg-success/10" : "text-destructive bg-destructive/10"}`}>
+                    <div className={`sm:col-span-2 text-sm rounded-md p-2 ${form.price >= form.cost ? "text-success-strong bg-success/10" : "text-destructive bg-destructive/10"}`}>
                       Margin: {formatRs(form.price - form.cost)} ({margin(form.price, form.cost)})
                       {form.price < form.cost && " — selling below cost"}
                     </div>
@@ -99,7 +102,39 @@ function ProductsPage() {
       </Card>
 
       <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
+        <MobileCards
+          items={rows}
+          keyOf={(p) => p.id}
+          empty={q ? `No products match “${q}”.` : "No products yet."}
+          render={(p) => (
+            <ListCard
+              title={p.name}
+              subtitle={<span className="font-mono">{p.barcode || "No barcode"}</span>}
+              right={formatRs(p.price)}
+              rightSub={isAdmin ? `cost ${formatRs(p.cost)}` : undefined}
+              fields={[
+                { label: "Category", value: p.category || "—" },
+                { label: "Brand", value: p.brand || "—" },
+                { label: "Stock", value: p.totalStock },
+                ...(isAdmin
+                  ? [{
+                      label: "Margin",
+                      value: margin(p.price, p.cost),
+                      className: p.price >= p.cost ? "text-success-strong" : "text-destructive",
+                    }]
+                  : []),
+              ]}
+              actions={
+                isAdmin ? (
+                  <Button size="sm" variant="outline" onClick={() => setEditing(p)}>
+                    <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
+                  </Button>
+                ) : undefined
+              }
+            />
+          )}
+        />
+        <TableWrap>
           <table className="w-full text-sm">
             <thead className="bg-muted/50 sticky top-0 z-10"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
               <th className="px-4 py-3 font-medium">Barcode</th>
@@ -137,7 +172,7 @@ function ProductsPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
       </Card>
 
       <ProductEditDialog product={editing} onClose={() => setEditing(null)} />

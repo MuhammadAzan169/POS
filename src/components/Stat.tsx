@@ -23,15 +23,18 @@ export function StatCard({
     primary: "bg-primary/10 text-primary",
   };
   return (
-    <Card className="p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">{label}</div>
-          <div className="font-display text-2xl md:text-3xl font-bold mt-2">{value}</div>
+    // Two of these sit side by side on a phone, so the padding, the figure and
+    // the icon all step down a size below sm; min-w-0 + break-words stop a long
+    // amount ("Rs 1,234,567") from forcing the card wider than its grid column.
+    <Card className="p-4 sm:p-5">
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
+        <div className="min-w-0">
+          <div className="text-[11px] sm:text-xs uppercase tracking-wider text-muted-foreground font-medium">{label}</div>
+          <div className="font-display text-xl sm:text-2xl md:text-3xl font-bold mt-1.5 sm:mt-2 break-words">{value}</div>
           {sub && <div className="text-xs text-muted-foreground mt-1.5">{sub}</div>}
         </div>
         {icon && (
-          <div className={cn("h-10 w-10 rounded-lg flex items-center justify-center shrink-0", toneStyles[tone])}>
+          <div className={cn("h-9 w-9 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center shrink-0", toneStyles[tone])}>
             {icon}
           </div>
         )}

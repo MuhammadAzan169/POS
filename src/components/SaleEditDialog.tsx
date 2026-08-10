@@ -88,7 +88,49 @@ export function SaleEditDialog({ sale, onClose }: { sale: Sale | null; onClose: 
           </div>
         </div>
 
-        <div className="border rounded-lg overflow-hidden">
+        {/*
+          Six columns (item, price, max, qty input, line total, delete) is far
+          more than a phone can hold. Below sm each line becomes a stacked block
+          with the qty stepper on its own row.
+        */}
+        <div className="space-y-2 sm:hidden">
+          {draft.lines.map((l) => (
+            <div key={l.productId} className="border rounded-lg p-3 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium break-words">{l.name}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {money(l.price)} each · max {maxQtyFor(l.productId)}
+                  </div>
+                </div>
+                <button
+                  onClick={() => removeLine(l.productId)}
+                  disabled={draft.lines.length === 1}
+                  title={draft.lines.length === 1 ? "A sale needs at least one item" : "Remove item"}
+                  aria-label={`Remove ${l.name}`}
+                  className="h-9 w-9 -mr-1 -mt-1 shrink-0 flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="flex items-center gap-3">
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={maxQtyFor(l.productId)}
+                  aria-label={`Quantity for ${l.name}`}
+                  value={l.qty}
+                  onChange={(e) => setQty(l.productId, Number(e.target.value) || 0)}
+                  className="w-24 text-right"
+                />
+                <div className="ml-auto font-medium">{money(l.qty * l.price)}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="border rounded-lg overflow-hidden hidden sm:block">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
               <tr>

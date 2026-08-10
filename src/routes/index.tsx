@@ -90,28 +90,41 @@ function Index() {
       </div>
 
       {/* Right login */}
-      <div className="flex items-center justify-center p-6 md:p-12">
-        <div className="w-full max-w-md">
+      <div className="flex items-center justify-center p-5 sm:p-6 md:p-12 px-safe">
+        <div className="w-full max-w-md py-6 lg:py-0">
           <div className="lg:hidden flex items-center gap-3 mb-8">
             <div className="h-10 w-10 rounded-lg bg-primary text-primary-foreground flex items-center justify-center font-bold">A</div>
             <div className="font-display font-bold text-xl">A-POS</div>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">Sign in</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Sign in</h1>
           <p className="text-muted-foreground mt-2 text-sm">Use one of the demo logins below to explore the system.</p>
 
-          <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+          <form onSubmit={handleSubmit} className="mt-6 sm:mt-8 space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              {/* Mobile keyboards default to capitalising and autocorrecting the
+                  first word, which mangles an email address as you type it. */}
+              <Input
+                id="email"
+                type="email"
+                inputMode="email"
+                autoComplete="username"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
             </div>
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <Label htmlFor="password">Password</Label>
                 <button type="button" onClick={() => toast.info("Demo mode — any password works. Just pick an account below.")} className="text-xs text-muted-foreground hover:text-foreground">Forgot password?</button>
               </div>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+              <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full h-11" disabled={loading}>
               {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>
@@ -119,17 +132,17 @@ function Index() {
           <div className="mt-8">
             <div className="text-xs uppercase tracking-wider text-muted-foreground mb-3 font-medium">Quick demo accounts</div>
             <div className="grid gap-2">
-              <button onClick={() => quick("admin@apos.pk")} className="flex items-center gap-3 p-3 border rounded-lg hover:border-primary hover:bg-muted/40 transition-colors text-left">
+              <button onClick={() => quick("admin@apos.pk")} className="flex min-h-14 items-center gap-3 p-3 border rounded-lg hover:border-primary hover:bg-muted/40 active:bg-muted transition-colors text-left">
                 <div className="h-9 w-9 rounded-md bg-primary/10 text-primary flex items-center justify-center"><ShieldCheck className="h-4 w-4" /></div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium">Owner / Admin</div>
                   <div className="text-xs text-muted-foreground">admin@apos.pk · sees all shops, cost & profit</div>
                 </div>
               </button>
               {["shop1", "shop2", "shop3"].map((s, i) => (
-                <button key={s} onClick={() => quick(`${s}@apos.pk`)} className="flex items-center gap-3 p-3 border rounded-lg hover:border-primary hover:bg-muted/40 transition-colors text-left">
+                <button key={s} onClick={() => quick(`${s}@apos.pk`)} className="flex min-h-14 items-center gap-3 p-3 border rounded-lg hover:border-primary hover:bg-muted/40 active:bg-muted transition-colors text-left">
                   <div className="h-9 w-9 rounded-md bg-accent/20 text-accent-strong flex items-center justify-center"><Store className="h-4 w-4" /></div>
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium">Shop {i + 1} cashier</div>
                     <div className="text-xs text-muted-foreground">{s}@apos.pk · own shop only, no profit</div>
                   </div>

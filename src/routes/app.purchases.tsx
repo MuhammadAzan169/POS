@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useStore, formatRs, todayISO } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { StatusPill } from "@/components/Stat";
+import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -239,18 +240,18 @@ function PurchasesPage() {
         </TabsList>
 
         <TabsContent value="restock" className="mt-4">
-          <Card className="p-4 mb-4 flex flex-wrap gap-3 items-end">
+          <Card className="p-3 sm:p-4 mb-4 grid gap-3 sm:flex sm:flex-wrap sm:items-end">
             <div className="space-y-1.5">
               <Label className="text-xs">Shop</Label>
               <Select value={shopFilter} onValueChange={setShopFilter}>
-                <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All shops</SelectItem>
                   {shops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <div className="ml-auto flex gap-2">
+            <div className="flex gap-2 sm:ml-auto [&>*]:flex-1 sm:[&>*]:flex-none">
               <Button variant="outline" onClick={exportRestock}><Download className="h-4 w-4 mr-1.5" />Export CSV</Button>
               <Button onClick={restockAllListed} disabled={restockRows.length === 0}>
                 <PackagePlus className="h-4 w-4 mr-1.5" />Restock all listed
@@ -259,7 +260,34 @@ function PurchasesPage() {
           </Card>
 
           <Card className="overflow-hidden">
-            <div className="overflow-x-auto">
+            <MobileCards
+              items={restockRows}
+              keyOf={(r) => `${r.row.productId}-${r.row.shopId}`}
+              empty="Nothing needs restocking — every product is above its alert level."
+              render={(r) => {
+                const qty = suggestQty(r.row.qty, r.product!.lowAlert);
+                return (
+                  <ListCard
+                    title={r.product!.name}
+                    subtitle={<span className="font-mono">{r.product!.barcode || "No barcode"}</span>}
+                    right={r.row.qty}
+                    rightSub="in stock"
+                    badges={<StatusPill status={r.row.qty === 0 ? "OUT" : "LOW"} />}
+                    fields={[
+                      { label: "Shop", value: r.shop!.name },
+                      { label: "Alert level", value: r.product!.lowAlert },
+                      { label: "Suggested", value: qty, className: "font-medium" },
+                    ]}
+                    actions={
+                      <Button size="sm" variant="outline" onClick={() => restock(r.product!.id, r.row.shopId, qty)}>
+                        <PackagePlus className="h-3.5 w-3.5 mr-1.5" />Restock
+                      </Button>
+                    }
+                  />
+                );
+              }}
+            />
+            <TableWrap>
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 sticky top-0 z-10"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
                   <th className="px-4 py-3 font-medium">Product</th>
@@ -298,12 +326,12 @@ function PurchasesPage() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </TableWrap>
           </Card>
         </TabsContent>
 
         <TabsContent value="all" className="mt-4">
-          <Card className="p-4 mb-4 flex flex-wrap gap-3 items-end">
+          <Card className="p-3 sm:p-4 mb-4 grid gap-3 sm:flex sm:flex-wrap sm:items-end">
             <div className="space-y-1.5">
               <Label className="text-xs">Search</Label>
               <Input placeholder="Product name or barcode..." value={allQ} onChange={(e) => setAllQ(e.target.value)} className="w-full sm:w-64" />
@@ -311,18 +339,41 @@ function PurchasesPage() {
             <div className="space-y-1.5">
               <Label className="text-xs">Shop</Label>
               <Select value={shopFilter} onValueChange={setShopFilter}>
-                <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All shops</SelectItem>
                   {shops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <p className="text-xs text-muted-foreground ml-auto">Reorder anything, whether or not it is low.</p>
+            <p className="text-xs text-muted-foreground sm:ml-auto">Reorder anything, whether or not it is low.</p>
           </Card>
 
           <Card className="overflow-hidden">
-            <div className="overflow-x-auto">
+            <MobileCards
+              items={allRows.slice(0, 200)}
+              keyOf={(r) => `${r.product.id}-${r.shop.id}`}
+              empty="No products match this filter."
+              render={(r) => (
+                <ListCard
+                  title={r.product.name}
+                  subtitle={<span className="font-mono">{r.product.barcode || "No barcode"}</span>}
+                  right={r.qty}
+                  rightSub="in stock"
+                  badges={<StatusPill status={r.qty === 0 ? "OUT" : r.qty <= r.product.lowAlert ? "LOW" : "OK"} />}
+                  fields={[
+                    { label: "Shop", value: r.shop.name },
+                    { label: "Alert level", value: r.product.lowAlert },
+                  ]}
+                  actions={
+                    <Button size="sm" variant="outline" onClick={() => restock(r.product.id, r.shop.id, suggestQty(r.qty, r.product.lowAlert))}>
+                      <PackagePlus className="h-3.5 w-3.5 mr-1.5" />Restock
+                    </Button>
+                  }
+                />
+              )}
+            />
+            <TableWrap>
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 sticky top-0 z-10"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
                   <th className="px-4 py-3 font-medium">Product</th>
@@ -356,7 +407,7 @@ function PurchasesPage() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </TableWrap>
             {allRows.length > 200 && (
               <div className="px-4 py-3 text-xs text-muted-foreground border-t">
                 Showing the first 200 of {allRows.length} rows - narrow the search or pick a shop.
@@ -366,11 +417,29 @@ function PurchasesPage() {
         </TabsContent>
 
         <TabsContent value="history" className="mt-4">
-          <Card className="p-4 mb-4 flex justify-end">
-            <Button variant="outline" onClick={exportPurchases}><Download className="h-4 w-4 mr-1.5" />Export CSV</Button>
+          <Card className="p-3 sm:p-4 mb-4 flex justify-end">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={exportPurchases}><Download className="h-4 w-4 mr-1.5" />Export CSV</Button>
           </Card>
           <Card className="overflow-hidden">
-            <div className="overflow-x-auto">
+            <MobileCards
+              items={purchases}
+              keyOf={(p) => p.id}
+              empty="No purchases recorded yet."
+              render={(p) => (
+                <ListCard
+                  title={<span className="font-mono">{p.billNo}</span>}
+                  subtitle={`${p.supplier} · ${p.date}`}
+                  right={formatRs(p.total)}
+                  badges={Array.from(new Set(p.lines.map((l) => l.shopId))).map((sid) => (
+                    <span key={sid} className="text-xs px-2 py-0.5 bg-muted rounded-full">
+                      {shops.find((s) => s.id === sid)?.name}
+                    </span>
+                  ))}
+                  fields={[{ label: "Items", value: p.lines.reduce((a, l) => a + l.qty, 0) }]}
+                />
+              )}
+            />
+            <TableWrap>
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 sticky top-0 z-10"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
                   <th className="px-4 py-3 font-medium">Bill no</th>
@@ -402,7 +471,7 @@ function PurchasesPage() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </TableWrap>
           </Card>
         </TabsContent>
       </Tabs>
@@ -410,7 +479,7 @@ function PurchasesPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>New purchase</DialogTitle></DialogHeader>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label>Supplier</Label>
               <Select
@@ -489,11 +558,18 @@ function PurchasesPage() {
           <div className="mt-1">
             <Label className="mb-2 block">Line items</Label>
             <div className="space-y-2">
+              {/*
+                Twelve columns across a 360px dialog gave the product select
+                about 110px and the delete button ~30px. On phones each line
+                becomes its own bordered block: product and shop full width,
+                then qty / rate side by side with the line total and delete.
+              */}
               {lines.map((l, i) => {
                 const p = products.find((x) => x.id === l.productId);
                 return (
-                  <div key={i} className="grid grid-cols-12 gap-2 items-end">
-                    <div className="col-span-4">
+                  <div key={i} className="grid grid-cols-2 gap-2 items-end rounded-lg border p-3 sm:grid-cols-12 sm:border-0 sm:p-0">
+                    <div className="col-span-2 sm:col-span-4">
+                      <Label className="text-xs sm:hidden">Product</Label>
                       <Select value={l.productId} onValueChange={(v) => {
                         const prod = products.find((x) => x.id === v);
                         setLines((prev) => prev.map((x, j) => j === i ? { ...x, productId: v, rate: prod?.cost ?? x.rate } : x));
@@ -502,32 +578,36 @@ function PurchasesPage() {
                         <SelectContent>{products.map((prod) => <SelectItem key={prod.id} value={prod.id}>{prod.name}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
-                    <div className="col-span-3">
+                    <div className="col-span-2 sm:col-span-3">
+                      <Label className="text-xs sm:hidden">Shop</Label>
                       <Select value={l.shopId} onValueChange={(v) => setLines((prev) => prev.map((x, j) => j === i ? { ...x, shopId: v } : x))}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>{shops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
-                    <div className="col-span-2">
-                      <Input type="number" min={1} value={l.qty} onChange={(e) => setLines((prev) => prev.map((x, j) => j === i ? { ...x, qty: Number(e.target.value) || 0 } : x))} />
+                    <div className="sm:col-span-2">
+                      <Label className="text-xs sm:hidden">Qty</Label>
+                      <Input type="number" inputMode="numeric" min={1} value={l.qty} onChange={(e) => setLines((prev) => prev.map((x, j) => j === i ? { ...x, qty: Number(e.target.value) || 0 } : x))} />
                     </div>
-                    <div className="col-span-2">
-                      <Input type="number" min={0} value={l.rate} onChange={(e) => setLines((prev) => prev.map((x, j) => j === i ? { ...x, rate: Number(e.target.value) || 0 } : x))} />
+                    <div className="sm:col-span-2">
+                      <Label className="text-xs sm:hidden">Rate</Label>
+                      <Input type="number" inputMode="decimal" min={0} value={l.rate} onChange={(e) => setLines((prev) => prev.map((x, j) => j === i ? { ...x, rate: Number(e.target.value) || 0 } : x))} />
                     </div>
-                    <div className="col-span-1 flex items-center gap-1">
+                    <div className="col-span-2 flex items-center justify-between gap-1 sm:col-span-1 sm:justify-start">
                       <span className="text-xs text-muted-foreground truncate">{formatRs(l.qty * l.rate)}</span>
                       {/* Removing the only line left the form unsubmittable-but-looking-fine. */}
                       <button
                         onClick={() => setLines((prev) => prev.filter((_, j) => j !== i))}
                         disabled={lines.length === 1}
                         title={lines.length === 1 ? "A purchase needs at least one line" : "Remove line"}
-                        className="text-muted-foreground hover:text-destructive disabled:opacity-40 disabled:hover:text-muted-foreground disabled:cursor-not-allowed"
+                        aria-label="Remove line"
+                        className="h-9 w-9 shrink-0 flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive disabled:opacity-40 disabled:hover:text-muted-foreground disabled:cursor-not-allowed sm:h-auto sm:w-auto"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                     {p && (
-                      <div className="col-span-12 -mt-1 text-xs text-muted-foreground pl-1 flex flex-wrap gap-x-3">
+                      <div className="col-span-2 -mt-1 text-xs text-muted-foreground sm:col-span-12 sm:pl-1 flex flex-wrap gap-x-3">
                         {p.barcode && <span className="font-mono">{p.barcode}</span>}
                         {l.rate > 0 && l.rate !== p.cost && <span>Cost updates {formatRs(p.cost)} → {formatRs(l.rate)}</span>}
                       </div>
@@ -541,9 +621,11 @@ function PurchasesPage() {
             </Button>
           </div>
 
-          <DialogFooter className="border-t pt-4 flex !justify-between items-center">
+          {/* flex-col-reverse (the footer default) would put the total under the
+              buttons on a phone, so this footer lays itself out explicitly. */}
+          <DialogFooter className="border-t pt-4 flex-col gap-3 !justify-between sm:flex-row sm:items-center">
             <div className="text-lg font-semibold">Total: {formatRs(total)}</div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 [&>*]:flex-1 sm:[&>*]:flex-none">
               <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
               <Button onClick={save}>Save purchase</Button>
             </div>

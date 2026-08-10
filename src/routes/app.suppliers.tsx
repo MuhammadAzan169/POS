@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Confirm } from "@/components/Confirm";
+import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { Plus, Download, Search, Pencil, Truck, Phone, Mail, MapPin, PackagePlus } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
@@ -61,8 +62,8 @@ function SupplierDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>{initial ? "Edit supplier" : "New supplier"}</DialogTitle></DialogHeader>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5 col-span-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5 sm:col-span-2">
             <Label>Supplier / vendor name</Label>
             <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Glow Cosmetics Pvt" />
           </div>
@@ -74,19 +75,19 @@ function SupplierDialog({
             <Label>Phone</Label>
             <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Optional" />
           </div>
-          <div className="space-y-1.5 col-span-2">
+          <div className="space-y-1.5 sm:col-span-2">
             <Label>Email</Label>
             <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Optional" />
           </div>
-          <div className="space-y-1.5 col-span-2">
+          <div className="space-y-1.5 sm:col-span-2">
             <Label>Address</Label>
             <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Optional" />
           </div>
-          <div className="space-y-1.5 col-span-2">
+          <div className="space-y-1.5 sm:col-span-2">
             <Label>Notes</Label>
             <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Delivery days, credit terms, minimums…" />
           </div>
-          <div className="col-span-2 flex items-center justify-between p-3 border rounded-lg">
+          <div className="sm:col-span-2 flex items-center justify-between gap-3 p-3 border rounded-lg">
             <div>
               <div className="font-medium text-sm">Active</div>
               <div className="text-xs text-muted-foreground">Inactive suppliers stay in history but aren't offered on new bills.</div>
@@ -217,7 +218,7 @@ function SuppliersPage() {
         }
       />
 
-      <Card className="p-4 mb-4 flex flex-wrap gap-3 items-end">
+      <Card className="p-3 sm:p-4 mb-4 grid gap-3 sm:flex sm:flex-wrap sm:items-end">
         <div className="space-y-1.5">
           <Label className="text-xs">Search</Label>
           <div className="relative">
@@ -225,13 +226,39 @@ function SuppliersPage() {
             <Input placeholder="Name, contact or phone…" className="pl-9 w-full sm:w-64" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
         </div>
-        <div className="text-xs text-muted-foreground ml-auto">
+        <div className="text-xs text-muted-foreground sm:ml-auto">
           {rows.length} suppliers · {money(rows.reduce((a, r) => a + r.spent, 0))} spent
         </div>
       </Card>
 
       <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
+        <MobileCards
+          items={rows}
+          keyOf={(r) => r.supplier.id}
+          empty={q ? `No supplier matches “${q}”.` : "No suppliers yet — add your first one."}
+          render={(r) => (
+            <ListCard
+              onClick={() => setOpenId(r.supplier.id)}
+              title={r.supplier.name}
+              subtitle={[r.supplier.contact, r.supplier.phone].filter(Boolean).join(" · ") || "No contact details"}
+              right={money(r.spent)}
+              rightSub="total spent"
+              badges={<StatusPill status={r.supplier.active ? "Active" : "Disabled"} />}
+              fields={[
+                { label: "Bills", value: r.bills },
+                { label: "Items", value: r.distinctItems },
+                { label: "Units", value: r.units },
+                { label: "Last purchase", value: r.lastPurchase ?? "Never" },
+              ]}
+              actions={
+                <Button size="sm" variant="outline" onClick={() => setEditing(r.supplier)}>
+                  <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
+                </Button>
+              }
+            />
+          )}
+        />
+        <TableWrap>
           <table className="w-full text-sm">
             <thead className="bg-muted/50 sticky top-0 z-10">
               <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
@@ -277,7 +304,7 @@ function SuppliersPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
       </Card>
 
       {/* ---------- Supplier detail ---------- */}

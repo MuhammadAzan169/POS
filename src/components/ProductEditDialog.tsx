@@ -40,8 +40,10 @@ export function ProductEditDialog({ product, onClose }: { product: Product | nul
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Edit product</DialogTitle></DialogHeader>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5 col-span-2">
+        {/* Single column on phones: two 150px fields side by side wrapped every
+            label ("Low-stock alert", "Sell price (Rs)") onto three lines. */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5 sm:col-span-2">
             <Label>Name</Label>
             <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </div>
@@ -79,13 +81,13 @@ export function ProductEditDialog({ product, onClose }: { product: Product | nul
           </div>
 
           {margin !== null && (
-            <div className={`col-span-2 text-sm rounded-md p-2 ${form.price >= form.cost ? "text-success-strong bg-success/10" : "text-destructive bg-destructive/10"}`}>
+            <div className={`sm:col-span-2 text-sm rounded-md p-2 ${form.price >= form.cost ? "text-success-strong bg-success/10" : "text-destructive bg-destructive/10"}`}>
               Margin: {formatRs(form.price - form.cost, settings.currency)} ({margin}%)
               {form.price < form.cost && " — selling below cost"}
             </div>
           )}
 
-          <div className="col-span-2 flex items-center justify-between p-3 border rounded-lg">
+          <div className="sm:col-span-2 flex items-center justify-between gap-3 p-3 border rounded-lg">
             <div>
               <div className="font-medium text-sm">Active</div>
               <div className="text-xs text-muted-foreground">Inactive products stay in reports but shouldn't be sold.</div>

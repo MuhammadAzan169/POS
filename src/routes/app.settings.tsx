@@ -224,7 +224,7 @@ function SettingsPage() {
           </div>
           <p className="text-xs text-muted-foreground">Sample sale. Updates as you type.</p>
           <Separator className="my-4" />
-          <div className="max-h-[70vh] overflow-y-auto">
+          <div className="max-h-[60dvh] overflow-y-auto">
             <ReceiptView data={SAMPLE} settings={settings} />
           </div>
         </Card>

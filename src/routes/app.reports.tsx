@@ -106,7 +106,7 @@ function ReportsPage() {
         </TabsList>
 
         <TabsContent value="sales" className="mt-4">
-          <Card className="p-5">
+          <Card className="p-4 sm:p-5">
             <h3 className="font-semibold mb-4">Daily sales & profit (last 14 days)</h3>
             <div className="h-72">
               <ResponsiveContainer>
@@ -136,7 +136,7 @@ function ReportsPage() {
         </TabsContent>
 
         <TabsContent value="pl" className="mt-4">
-          <Card className="p-5">
+          <Card className="p-4 sm:p-5">
             <h3 className="font-semibold mb-4">Profit & Loss by shop</h3>
             <div className="h-72">
               <ResponsiveContainer>
@@ -152,7 +152,7 @@ function ReportsPage() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mt-6">
               {perShop.map((s) => (
                 <div key={s.name} className="border rounded-lg p-4">
                   <div className="text-xs text-muted-foreground">{s.name}</div>
@@ -170,7 +170,7 @@ function ReportsPage() {
         </TabsContent>
 
         <TabsContent value="inventory" className="mt-4">
-          <Card className="p-5">
+          <Card className="p-4 sm:p-5">
             <h3 className="font-semibold mb-4">Inventory value (at cost)</h3>
             <div className="text-3xl font-bold mb-6">{formatRs(inventoryValue)}</div>
             <div className="grid md:grid-cols-3 gap-3">
@@ -191,9 +191,26 @@ function ReportsPage() {
         </TabsContent>
 
         <TabsContent value="top" className="mt-4">
-          <Card className="p-5">
+          <Card className="p-4 sm:p-5">
             <h3 className="font-semibold mb-4">Top selling items</h3>
-            <table className="w-full text-sm">
+            {/* Four numeric columns don't fit a phone; on mobile each item
+                becomes a stacked block instead of a squeezed row. */}
+            <ul className="divide-y sm:hidden">
+              {topItems.map((t) => (
+                <li key={t.name} className="py-3 first:pt-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-sm font-medium min-w-0 break-words">{t.name}</span>
+                    <span className="text-sm font-semibold shrink-0">{formatRs(t.revenue)}</span>
+                  </div>
+                  <div className="mt-1 flex gap-4 text-xs text-muted-foreground">
+                    <span>{t.qty} sold</span>
+                    <span className="text-success-strong font-medium">{formatRs(t.profit)} profit</span>
+                  </div>
+                </li>
+              ))}
+              {topItems.length === 0 && <li className="py-6 text-center text-sm text-muted-foreground">No sales yet.</li>}
+            </ul>
+            <table className="w-full text-sm hidden sm:table">
               <thead><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b"><th className="py-2 font-medium">Item</th><th className="py-2 font-medium text-right">Qty</th><th className="py-2 font-medium text-right">Revenue</th><th className="py-2 font-medium text-right">Profit</th></tr></thead>
               <tbody>
                 {topItems.map((t) => (

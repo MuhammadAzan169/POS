@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { StatusPill } from "@/components/Stat";
+import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { Plus } from "lucide-react";
 import { Confirm } from "@/components/Confirm";
 import { toast } from "sonner";
@@ -63,7 +64,44 @@ function UsersPage() {
         </Dialog>
       } />
       <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
+        <MobileCards
+          items={users}
+          keyOf={(u) => u.id}
+          empty="No users yet."
+          render={(u) => (
+            <ListCard
+              title={
+                <span className="flex items-center gap-2">
+                  <span className="h-7 w-7 shrink-0 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold">
+                    {u.name.charAt(0)}
+                  </span>
+                  {u.name}
+                </span>
+              }
+              subtitle={u.email}
+              badges={
+                <>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${u.role === "admin" ? "bg-primary/15 text-primary" : "bg-accent/20 text-accent-strong"}`}>{u.role}</span>
+                  <StatusPill status={u.active ? "Active" : "Disabled"} />
+                </>
+              }
+              fields={[
+                { label: "Shop", value: u.shopId ? shops.find((s) => s.id === u.shopId)?.name ?? "—" : "—" },
+                { label: "Last login", value: u.lastLogin ?? "—" },
+              ]}
+              actions={
+                <Confirm
+                  title="Send a password reset?"
+                  description={<>A reset link will be emailed to <strong>{u.email}</strong> and their current password will stop working.</>}
+                  confirmLabel="Send reset link"
+                  onConfirm={() => toast.success(`Password reset link sent to ${u.email}`)}
+                  trigger={<Button variant="outline" size="sm">Reset password</Button>}
+                />
+              }
+            />
+          )}
+        />
+        <TableWrap>
           <table className="w-full text-sm">
             <thead className="bg-muted/50"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
               <th className="px-4 py-3 font-medium">Name</th>
@@ -102,7 +140,7 @@ function UsersPage() {
               ))}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
       </Card>
     </div>
   );

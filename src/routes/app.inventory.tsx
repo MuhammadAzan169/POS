@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useStore, todayISO, daysAgoISO, stockAsOf } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { StatusPill } from "@/components/Stat";
+import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,8 +104,8 @@ function InventoryPage() {
         actions={<Button variant="outline" onClick={exportCsv}><Download className="h-4 w-4 mr-1.5" />Export CSV</Button>}
       />
 
-      <Card className="p-4 mb-4 space-y-4">
-        <div className="flex flex-wrap gap-3 items-end">
+      <Card className="p-3 sm:p-4 mb-4 space-y-4">
+        <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-end">
           <div className="space-y-1.5">
             <Label className="text-xs">Search</Label>
             <Input placeholder="Product name or barcode…" value={q} onChange={(e) => setQ(e.target.value)} className="w-full sm:w-64" />
@@ -113,7 +114,7 @@ function InventoryPage() {
             <div className="space-y-1.5">
               <Label className="text-xs">Shop</Label>
               <Select value={shop} onValueChange={setShop}>
-                <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All shops</SelectItem>
                   {shops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
@@ -123,7 +124,7 @@ function InventoryPage() {
           )}
           <div className="space-y-1.5">
             <Label className="text-xs">Stock as of</Label>
-            <Input type="date" max={today} value={asOf} onChange={(e) => setAsOf(e.target.value || today)} className="w-44" />
+            <Input type="date" max={today} value={asOf} onChange={(e) => setAsOf(e.target.value || today)} className="w-full sm:w-44" />
           </div>
           {isHistorical && (
             <Button variant="ghost" size="sm" onClick={() => setAsOf(today)}>
@@ -132,14 +133,14 @@ function InventoryPage() {
           )}
         </div>
 
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-3 px-3 sm:mx-0 sm:px-0 sm:flex-wrap sm:overflow-visible">
           {PRESETS.map((p) => {
             const value = daysAgoISO(p.days);
             return (
               <button
                 key={p.label}
                 onClick={() => setAsOf(value)}
-                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                className={`shrink-0 text-xs px-3 py-1.5 rounded-full border transition-colors ${
                   asOf === value ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"
                 }`}
               >
@@ -160,7 +161,7 @@ function InventoryPage() {
         )}
       </Card>
 
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4 mb-4">
         <Card className="p-4">
           <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Rows</div>
           <div className="text-2xl font-bold mt-1">{rows.length}</div>
@@ -184,7 +185,41 @@ function InventoryPage() {
       </div>
 
       <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
+        <MobileCards
+          items={rows}
+          keyOf={(r) => `${r.productId}-${r.shopId}`}
+          empty={q ? `No stock rows match “${q}”.` : "No stock records for this selection."}
+          render={(r) => {
+            const status = statusOf(r.qty, r.product.lowAlert);
+            return (
+              <ListCard
+                title={r.product.name}
+                subtitle={<span className="font-mono">{r.product.barcode || "No barcode"}</span>}
+                right={r.qty}
+                rightSub="in stock"
+                badges={<StatusPill status={status} />}
+                fields={[
+                  { label: "Shop", value: r.shop.name },
+                  { label: "Low alert", value: r.product.lowAlert },
+                ]}
+                actions={
+                  isAdmin ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isHistorical}
+                      title={isHistorical ? "Switch back to today to reorder" : "Reorder this item"}
+                      onClick={() => restock(r.productId, r.shopId, r.qty, r.product.lowAlert)}
+                    >
+                      <PackagePlus className="h-3.5 w-3.5 mr-1.5" />Restock
+                    </Button>
+                  ) : undefined
+                }
+              />
+            );
+          }}
+        />
+        <TableWrap>
           <table className="w-full text-sm">
             <thead className="bg-muted/50 sticky top-0 z-10"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
               <th className="px-4 py-3 font-medium">Product</th>
@@ -229,7 +264,7 @@ function InventoryPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
       </Card>
     </div>
   );

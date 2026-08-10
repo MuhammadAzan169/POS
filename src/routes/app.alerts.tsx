@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { StatusPill } from "@/components/Stat";
+import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -114,7 +115,7 @@ function AlertsPage() {
         actions={<Button variant="outline" onClick={exportCsv}><Download className="h-4 w-4 mr-1.5" />Export CSV</Button>}
       />
 
-      <Card className="p-4 mb-4 flex flex-wrap gap-3 items-end">
+      <Card className="p-3 sm:p-4 mb-4 grid gap-3 sm:flex sm:flex-wrap sm:items-end">
         <div className="space-y-1.5">
           <Label className="text-xs">Search</Label>
           <div className="relative">
@@ -124,7 +125,7 @@ function AlertsPage() {
         </div>
         <button
           onClick={() => setOnlyBreached((v) => !v)}
-          className={`text-xs px-3 py-2 rounded-md border transition-colors ${
+          className={`min-h-10 text-xs px-3 py-2 rounded-md border transition-colors sm:min-h-9 ${
             onlyBreached ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"
           }`}
         >
@@ -135,22 +136,24 @@ function AlertsPage() {
           <Label className="text-xs">Default for new products</Label>
           <Input
             type="number"
+            inputMode="numeric"
             min={0}
             value={settings.lowStockDefault}
             onChange={(e) => updateSettings({ lowStockDefault: Math.max(0, Number(e.target.value) || 0) })}
-            className="w-32"
+            className="w-full sm:w-32"
           />
         </div>
-        <div className="ml-auto flex items-end gap-2">
-          <div className="space-y-1.5">
+        <div className="flex items-end gap-2 sm:ml-auto">
+          <div className="space-y-1.5 flex-1 sm:flex-none">
             <Label className="text-xs">Set all listed to</Label>
             <Input
               type="number"
+              inputMode="numeric"
               min={0}
               value={bulk}
               onChange={(e) => setBulk(e.target.value)}
               placeholder={String(settings.lowStockDefault)}
-              className="w-28"
+              className="w-full sm:w-28"
             />
           </div>
           <Confirm
@@ -166,7 +169,64 @@ function AlertsPage() {
       </Card>
 
       <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
+        <MobileCards
+          items={rows}
+          keyOf={(r) => r.product.id}
+          empty={onlyBreached ? "No product is below its alert level." : `No products match “${q}”.`}
+          render={(r) => (
+            <ListCard
+              title={r.product.name}
+              subtitle={<span className="font-mono">{r.product.barcode || "No barcode"}</span>}
+              right={r.total}
+              rightSub="total stock"
+              badges={
+                r.breachedCount > 0 ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs text-warning-strong">
+                    <BellRing className="h-3.5 w-3.5" />
+                    {r.breachedCount} shop{r.breachedCount === 1 ? "" : "s"} low
+                  </span>
+                ) : (
+                  <StatusPill status="OK" />
+                )
+              }
+              // One field per shop, so the per-shop columns survive the move to
+              // a card without needing a sideways scroll.
+              fields={[
+                { label: "Category", value: r.product.category },
+                ...r.perShop.map((x) => ({
+                  label: x.shop.name,
+                  value: x.qty,
+                  className:
+                    x.qty === 0 ? "text-destructive font-medium"
+                      : x.qty <= r.product.lowAlert ? "text-warning-strong font-medium"
+                        : undefined,
+                })),
+              ]}
+              actions={
+                <>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs whitespace-nowrap">Alert at</Label>
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      aria-label={`Low-stock alert for ${r.product.name}`}
+                      value={drafts[r.product.id] ?? String(r.product.lowAlert)}
+                      onChange={(e) => setDrafts((d) => ({ ...d, [r.product.id]: e.target.value }))}
+                      onBlur={(e) => commit(r.product.id, e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                      className="w-20 text-right"
+                    />
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => restock(r.product.id, r.perShop, r.product.lowAlert)}>
+                    <PackagePlus className="h-3.5 w-3.5 mr-1.5" />Restock
+                  </Button>
+                </>
+              }
+            />
+          )}
+        />
+        <TableWrap>
           <table className="w-full text-sm">
             <thead className="bg-muted/50 sticky top-0 z-10">
               <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
@@ -236,7 +296,7 @@ function AlertsPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
       </Card>
     </div>
   );

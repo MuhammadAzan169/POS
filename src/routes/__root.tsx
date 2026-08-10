@@ -78,7 +78,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      // viewport-fit=cover is what makes env(safe-area-inset-*) resolve to a
+      // real value on notched phones — the bottom nav and sheets rely on it.
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
       { title: "A-POS — Retail Point of Sale" },
       { name: "description", content: "Multi-shop retail POS: inventory, sales, purchases and profit reporting." },
       { name: "theme-color", content: "#1a1a2e" },

@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { useStore, formatRs } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { StatCard, StatusPill } from "@/components/Stat";
+import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -174,12 +175,30 @@ function Dashboard() {
         </Card>
       </div>
 
-      <Card className="mt-6 p-5">
+      <Card className="mt-6 p-4 sm:p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold">Recent activity</h3>
           <Link to="/app/sales" className="text-xs text-primary hover:underline">All sales →</Link>
         </div>
-        <div className="overflow-x-auto -mx-5 px-0">
+        {/* -mx-4 lets the cards run to the card's own edges, matching the table. */}
+        <div className="-mx-4 -mb-4 border-t md:hidden">
+          <MobileCards
+            items={recent}
+            keyOf={(s) => s.id}
+            empty="No sales recorded yet."
+            render={(s) => (
+              <ListCard
+                title={<span className="font-mono">{s.invoice}</span>}
+                subtitle={shops.find((sh) => sh.id === s.shopId)?.name}
+                right={formatRs(s.total)}
+                rightSub={isAdmin ? <span className="text-success-strong">{formatRs(s.profit)} profit</span> : undefined}
+                badges={<StatusPill status={s.status} />}
+                fields={[{ label: "Customer", value: s.customer }]}
+              />
+            )}
+          />
+        </div>
+        <TableWrap className="-mx-5 px-0">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b">
@@ -207,7 +226,7 @@ function Dashboard() {
               )}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
       </Card>
     </div>
   );

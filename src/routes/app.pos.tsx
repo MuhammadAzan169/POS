@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Plus, Minus, X, ScanLine, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Confirm } from "@/components/Confirm";
 import { PaymentPicker } from "@/components/PaymentPicker";
 
@@ -27,6 +28,9 @@ function POS() {
   const [tendered, setTendered] = useState(0);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [lastSale, setLastSale] = useState<ReceiptData | null>(null);
+  // Below lg the checkout panel is a bottom sheet reached from the sticky total
+  // bar, rather than a column the cashier has to scroll past the catalogue for.
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { searchRef.current?.focus(); }, []);
@@ -102,6 +106,7 @@ function POS() {
       lines: cart.map((l) => ({ name: l.product.name, qty: l.qty, price: l.product.price, barcode: l.product.barcode })),
     });
     setReceiptOpen(true);
+    setCheckoutOpen(false);
     setCart([]);
     setTendered(0);
     setCustomer("Walk-in");
@@ -120,23 +125,68 @@ function POS() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // The checkout form is identical in the desktop column and the mobile sheet.
+  const checkoutFields = (
+    <div className="space-y-3">
+      <div className="space-y-1.5">
+        <label className="text-xs text-muted-foreground">Customer</label>
+        <Input value={customer} onChange={(e) => setCustomer(e.target.value)} />
+      </div>
+      <div className="space-y-1.5">
+        <label className="text-xs text-muted-foreground">Payment</label>
+        <PaymentPicker value={payment} onChange={setPayment} />
+      </div>
+      {payment === "Cash" && (
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground">Tendered</label>
+          <Input type="number" inputMode="decimal" value={tendered} onChange={(e) => setTendered(Number(e.target.value))} />
+        </div>
+      )}
+    </div>
+  );
+
+  const totals = (
+    <div className="space-y-2 text-sm">
+      <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatRs(subtotal)}</span></div>
+      {discounts.enabled && discount > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span>− {formatRs(discount)}</span></div>}
+      <div className="flex justify-between text-xl font-bold pt-2 border-t"><span>Total</span><span>{formatRs(total)}</span></div>
+      {payment === "Cash" && tendered > 0 && (
+        <div className="flex justify-between text-success-strong font-medium"><span>Change due</span><span>{formatRs(change)}</span></div>
+      )}
+    </div>
+  );
+
   return (
-    <div>
+    // pb clears the sticky total bar on phones/tablets, which sits above the app's
+    // own bottom nav.
+    <div className="pb-28 lg:pb-0">
       <PageHeader title="New sale" subtitle="Scan a barcode or search to add items. F9 to complete." />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_400px]">
         {/* Left: catalog + cart */}
         <div className="space-y-4 min-w-0">
-          <Card className="p-4">
+          <Card className="p-3 sm:p-4">
             <div className="relative">
               <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <Input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onSearchKeyDown} placeholder="Scan barcode or search product…" className="pl-10 h-12 text-base" />
+              <Input
+                ref={searchRef}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={onSearchKeyDown}
+                placeholder="Scan barcode or search product…"
+                // enterKeyHint labels the on-screen keyboard's action key "Go",
+                // which is what pressing it actually does here.
+                enterKeyHint="go"
+                autoCapitalize="off"
+                autoCorrect="off"
+                className="pl-10 h-12 text-base"
+              />
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-4">
               {filtered.map((p) => {
                 const s = stockFor(p.id);
                 return (
-                  <button key={p.id} onClick={() => addToCart(p)} className="text-left p-3 border rounded-lg hover:border-primary hover:bg-muted/40 transition-colors disabled:opacity-50" disabled={s === 0}>
+                  <button key={p.id} onClick={() => addToCart(p)} className="text-left p-3 min-h-20 border rounded-lg hover:border-primary hover:bg-muted/40 active:bg-muted transition-colors disabled:opacity-50" disabled={s === 0}>
                     <div className="text-xs text-muted-foreground">{p.category}</div>
                     <div className="font-medium text-sm line-clamp-2 mt-0.5">{p.name}</div>
                     <div className="flex justify-between items-end mt-2">
@@ -169,19 +219,43 @@ function POS() {
               <div className="p-10 text-center text-sm text-muted-foreground">Cart is empty.</div>
             ) : (
               <div className="divide-y">
+                {/*
+                  Name, stepper, line total and remove used to share one row.
+                  At 360px that gave the product name about 90px and squeezed
+                  the stepper into a target you couldn't hit. On phones the row
+                  becomes two lines: name over controls; from sm it's one line
+                  again.
+                */}
                 {cart.map((l, i) => (
-                  <div key={i} className="p-3 flex items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{l.product.name}</div>
-                      <div className="text-xs text-muted-foreground">{formatRs(l.product.price)} × {l.qty}</div>
+                  <div key={i} className="p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                    <div className="flex items-start justify-between gap-2 sm:flex-1 sm:min-w-0 sm:items-center">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium break-words sm:truncate">{l.product.name}</div>
+                        <div className="text-xs text-muted-foreground">{formatRs(l.product.price)} × {l.qty}</div>
+                      </div>
+                      <button
+                        onClick={() => setCart((prev) => prev.filter((_, j) => j !== i))}
+                        aria-label={`Remove ${l.product.name}`}
+                        className="sm:hidden h-9 w-9 shrink-0 -mr-1 -mt-1 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCart((prev) => prev.map((x, j) => j === i ? { ...x, qty: Math.max(1, x.qty - 1) } : x))}><Minus className="h-3.5 w-3.5" /></Button>
-                      <div className="w-10 text-center font-medium">{l.qty}</div>
-                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCart((prev) => prev.map((x, j) => j === i ? { ...x, qty: Math.min(stockFor(x.product.id), x.qty + 1) } : x))}><Plus className="h-3.5 w-3.5" /></Button>
+                    <div className="flex items-center justify-between gap-3 sm:justify-start">
+                      <div className="flex items-center gap-1">
+                        <Button variant="outline" size="icon" aria-label="Decrease quantity" className="h-9 w-9 sm:h-8 sm:w-8" onClick={() => setCart((prev) => prev.map((x, j) => j === i ? { ...x, qty: Math.max(1, x.qty - 1) } : x))}><Minus className="h-3.5 w-3.5" /></Button>
+                        <div className="w-10 text-center font-medium">{l.qty}</div>
+                        <Button variant="outline" size="icon" aria-label="Increase quantity" className="h-9 w-9 sm:h-8 sm:w-8" onClick={() => setCart((prev) => prev.map((x, j) => j === i ? { ...x, qty: Math.min(stockFor(x.product.id), x.qty + 1) } : x))}><Plus className="h-3.5 w-3.5" /></Button>
+                      </div>
+                      <div className="font-semibold sm:w-24 sm:text-right">{formatRs(l.qty * l.product.price - l.discount)}</div>
+                      <button
+                        onClick={() => setCart((prev) => prev.filter((_, j) => j !== i))}
+                        aria-label={`Remove ${l.product.name}`}
+                        className="hidden sm:block text-muted-foreground hover:text-destructive"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
                     </div>
-                    <div className="w-24 text-right font-semibold">{formatRs(l.qty * l.product.price - l.discount)}</div>
-                    <button onClick={() => setCart((prev) => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive"><X className="h-4 w-4" /></button>
                   </div>
                 ))}
               </div>
@@ -189,33 +263,11 @@ function POS() {
           </Card>
         </div>
 
-        {/* Right: checkout */}
-        <Card className="p-5 h-fit lg:sticky lg:top-0">
+        {/* Right: checkout — a real column only where there's room for one. */}
+        <Card className="hidden lg:block p-5 h-fit lg:sticky lg:top-0">
           <h3 className="font-semibold mb-4">Checkout</h3>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Customer</label>
-              <Input value={customer} onChange={(e) => setCustomer(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Payment</label>
-              <PaymentPicker value={payment} onChange={setPayment} />
-            </div>
-            {payment === "Cash" && (
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground">Tendered</label>
-                <Input type="number" value={tendered} onChange={(e) => setTendered(Number(e.target.value))} />
-              </div>
-            )}
-          </div>
-          <div className="mt-5 pt-4 border-t space-y-2 text-sm">
-            <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatRs(subtotal)}</span></div>
-            {discounts.enabled && discount > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span>− {formatRs(discount)}</span></div>}
-            <div className="flex justify-between text-xl font-bold pt-2 border-t"><span>Total</span><span>{formatRs(total)}</span></div>
-            {payment === "Cash" && tendered > 0 && (
-              <div className="flex justify-between text-success-strong font-medium"><span>Change due</span><span>{formatRs(change)}</span></div>
-            )}
-          </div>
+          {checkoutFields}
+          <div className="mt-5 pt-4 border-t">{totals}</div>
           <Button className="w-full mt-5 h-12 text-base" onClick={complete}>
             <CheckCircle2 className="h-5 w-5 mr-2" /> Complete sale
           </Button>
@@ -223,15 +275,50 @@ function POS() {
         </Card>
       </div>
 
+      {/*
+        Mobile / tablet checkout: a sticky bar showing the running total with one
+        button into a bottom sheet. Sitting the checkout panel under a 12-tile
+        catalogue meant the cashier scrolled the length of the page for every
+        single sale.
+      */}
+      <div
+        data-print="hide"
+        className="lg:hidden fixed inset-x-0 z-30 border-t bg-card/95 backdrop-blur px-safe above-bottom-nav"
+      >
+        <div className="flex items-center gap-3 p-3">
+          <div className="min-w-0">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              {cart.length} item{cart.length === 1 ? "" : "s"}
+            </div>
+            <div className="text-lg font-bold leading-tight">{formatRs(total)}</div>
+          </div>
+          <Button className="ml-auto h-12 px-6 text-base" disabled={cart.length === 0} onClick={() => setCheckoutOpen(true)}>
+            <CheckCircle2 className="h-5 w-5 mr-2" /> Charge
+          </Button>
+        </div>
+      </div>
+
+      <Sheet open={checkoutOpen} onOpenChange={setCheckoutOpen}>
+        <SheetContent side="bottom" className="space-y-4">
+          <SheetHeader><SheetTitle>Checkout</SheetTitle></SheetHeader>
+          {checkoutFields}
+          <div className="pt-4 border-t">{totals}</div>
+          <Button className="w-full h-12 text-base" onClick={complete}>
+            <CheckCircle2 className="h-5 w-5 mr-2" /> Complete sale
+          </Button>
+          <p className="text-xs text-muted-foreground text-center">Selling price only. No cost or profit shown here.</p>
+        </SheetContent>
+      </Sheet>
+
       <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader data-print="hide"><DialogTitle>Sale complete</DialogTitle></DialogHeader>
           {lastSale && (
-            <div data-print="only" className="max-h-[60vh] overflow-y-auto">
+            <div data-print="only" className="max-h-[55dvh] overflow-y-auto">
               <ReceiptView data={lastSale} settings={settings} />
             </div>
           )}
-          <DialogFooter data-print="hide" className="!justify-between">
+          <DialogFooter data-print="hide" className="flex-col-reverse gap-2 sm:flex-row sm:!justify-between">
             <Button variant="outline" onClick={() => setReceiptOpen(false)}>New sale</Button>
             <Button onClick={() => { window.print(); }}>Print receipt</Button>
           </DialogFooter>

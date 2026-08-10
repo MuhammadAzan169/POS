@@ -78,6 +78,11 @@
   --color-accent-strong: var(--accent-strong);
   --font-display: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
   --font-sans: "Inter", system-ui, sans-serif;
+  /*
+   * Small-phone breakpoint. The narrowest phones still in use are 320-360px
+   * wide; `xs` is the line above which a three-across grid stops cramping.
+   */
+  --breakpoint-xs: 25rem;
 }
 
 :root {
@@ -176,11 +181,51 @@
     border-color: var(--color-border);
   }
 
+  html {
+    /*
+     * Stops iOS Safari inflating text when the phone is turned to landscape,
+     * which silently broke every fixed-width layout on rotation.
+     */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    /* A rubber-band scroll on the body drags the whole fixed app shell around. */
+    overscroll-behavior-y: none;
+  }
+
+  /*
+   * Touch behaviour.
+   *
+   * `manipulation` removes the 300ms tap delay and, more importantly, the
+   * double-tap-to-zoom gesture that made a rapid two-tap on a POS product tile
+   * zoom the page instead of adding two units.
+   */
+  button,
+  [role="button"],
+  a,
+  label,
+  summary {
+    touch-action: manipulation;
+  }
+
+  /*
+   * iOS zooms the viewport whenever a focused field's text is under 16px, and
+   * never zooms back out. Every control that can take focus therefore stays at
+   * 16px on phones and drops to the compact 14px from `sm` up, where the zoom
+   * behaviour doesn't exist.
+   */
+  @media (max-width: 639px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px;
+    }
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -249,15 +294,64 @@
 /*
  * Small screens: let wide data tables scroll sideways rather than wrap.
  *
- * Without this an invoice number breaks mid-word ("INV-S1-
-000102") and every
- * row grows to three lines. The tables already sit in an .overflow-x-auto
- * wrapper, so nowrap simply uses the scroll that is already there.
+ * The main list screens now swap to card layouts below `md` (see DataList.tsx),
+ * so this only catches the narrow tables that live inside sheets and dialogs —
+ * without it an invoice number breaks mid-word ("INV-S1-\A000102") and every row
+ * grows to three lines. Those tables already sit in an .overflow-x-auto wrapper,
+ * so nowrap simply uses the scroll that is already there.
  */
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .overflow-x-auto > table th,
   .overflow-x-auto > table td {
     white-space: nowrap;
+  }
+}
+
+/*
+ * A horizontal strip that scrolls but shouldn't show a scrollbar eating 10px of
+ * a phone's height (the tab rails and filter chip rows).
+ */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/*
+ * Notch / home-indicator insets. `env()` resolves to 0 everywhere that has no
+ * inset, so these are safe to apply unconditionally.
+ */
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility px-safe {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/*
+ * Anchors a sticky action bar (the POS running total) directly above the phone
+ * bottom nav — 3.5rem tall plus the home-indicator inset. From md up the bottom
+ * nav isn't rendered, so the bar sits on the viewport edge instead.
+ *
+ * A named utility rather than an arbitrary `bottom-[calc(3.5rem+env(...))]`:
+ * Tailwind can't disambiguate a bare `+` inside an arbitrary value, so that
+ * class was silently dropped from the bundle. It also keeps the md override
+ * next to the value it overrides.
+ */
+@utility above-bottom-nav {
+  bottom: calc(3.5rem + env(safe-area-inset-bottom));
+
+  @media (width >= 48rem) {
+    bottom: 0;
   }
 }
 

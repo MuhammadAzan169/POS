@@ -12,7 +12,14 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
+      /*
+       * "Needs restock (12) / All items (430) / Purchase history (18)" is far
+       * wider than a phone. As an inline-flex the rail simply overflowed the
+       * card and was unreachable, so on phones it becomes a full-width strip
+       * that scrolls horizontally (chrome hidden), and goes back to a snug
+       * inline pill from `sm` up where it fits.
+       */
+      "flex h-10 w-full max-w-full items-center justify-start gap-1 overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground no-scrollbar sm:inline-flex sm:h-9 sm:w-auto sm:justify-center",
       className,
     )}
     {...props}
@@ -27,7 +34,9 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow",
+      // shrink-0 so a trigger keeps its full label inside the scrolling rail
+      // instead of being squashed to fit.
+      "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ring-offset-background cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow sm:py-1",
       className,
     )}
     {...props}

@@ -5,6 +5,7 @@ import { SaleEditDialog } from "@/components/SaleEditDialog";
 import { Receipt as ReceiptView, type ReceiptData } from "@/components/Receipt";
 import { PageHeader } from "@/components/AppLayout";
 import { StatusPill } from "@/components/Stat";
+import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -132,17 +133,22 @@ function SalesPage() {
         }
       />
 
-      <Card className="p-4 mb-4 space-y-3">
-        <div className="flex flex-wrap gap-3 items-end">
-          <div className="space-y-1.5">
+      <Card className="p-3 sm:p-4 mb-4 space-y-3">
+        {/*
+          A `flex flex-wrap` bar of fixed-width controls (w-56, w-44, two w-40s)
+          left ragged half-empty rows on a phone. A two-column grid that unfolds
+          into the flex bar at sm keeps every control full-width and aligned.
+        */}
+        <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-end">
+          <div className="space-y-1.5 col-span-2 sm:col-auto">
             <Label className="text-xs">Search</Label>
             <Input placeholder="Invoice or customer…" value={q} onChange={(e) => setQ(e.target.value)} className="w-full sm:w-56" />
           </div>
           {isAdmin && (
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 col-span-2 sm:col-auto">
               <Label className="text-xs">Shop</Label>
               <Select value={shopFilter} onValueChange={setShopFilter}>
-                <SelectTrigger className="w-44"><SelectValue placeholder="All shops" /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder="All shops" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All shops</SelectItem>
                   {shops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
@@ -152,22 +158,23 @@ function SalesPage() {
           )}
           <div className="space-y-1.5">
             <Label className="text-xs">From</Label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" />
+            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-full sm:w-40" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">To</Label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" />
+            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-full sm:w-40" />
           </div>
           {(q || from || to || shopFilter !== "all") && (
-            <Button variant="ghost" size="sm" onClick={() => { setQ(""); setFrom(""); setTo(""); setShopFilter("all"); }}>
+            <Button variant="ghost" size="sm" className="col-span-2 sm:col-auto" onClick={() => { setQ(""); setFrom(""); setTo(""); setShopFilter("all"); }}>
               <RotateCcw className="h-3.5 w-3.5 mr-1.5" />Clear
             </Button>
           )}
-          <div className="text-xs text-muted-foreground ml-auto">
+          <div className="col-span-2 text-xs text-muted-foreground sm:col-auto sm:ml-auto">
             {rows.length} invoices · {formatRs(rows.reduce((a, s) => a + s.total, 0), settings.currency)}
           </div>
         </div>
-        <div className="flex flex-wrap gap-1.5">
+        {/* The date presets scroll rather than wrap into three stacked lines. */}
+        <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-3 px-3 sm:mx-0 sm:px-0 sm:flex-wrap sm:overflow-visible">
           {DATE_PRESETS.map((p) => {
             const range = p.range();
             const active = from === range.from && to === range.to;
@@ -175,7 +182,7 @@ function SalesPage() {
               <button
                 key={p.label}
                 onClick={() => { setFrom(range.from); setTo(range.to); }}
-                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                className={`shrink-0 text-xs px-3 py-1.5 rounded-full border transition-colors ${
                   active ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"
                 }`}
               >
@@ -187,7 +194,55 @@ function SalesPage() {
       </Card>
 
       <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
+        <MobileCards
+          items={rows}
+          keyOf={(s) => s.id}
+          empty="No sales match these filters."
+          render={(s) => (
+            <ListCard
+              onClick={() => setOpen(s.id)}
+              title={<span className="font-mono">{s.invoice}</span>}
+              subtitle={`${new Date(s.date).toLocaleDateString()}${isAdmin ? ` · ${shops.find((sh) => sh.id === s.shopId)?.name ?? ""}` : ""}`}
+              right={formatRs(s.total)}
+              rightSub={isAdmin ? <span className="text-success-strong">{formatRs(s.profit)} profit</span> : undefined}
+              badges={
+                <>
+                  <StatusPill status={s.status} />
+                  <StatusPill status={s.synced ? "Synced" : "Pending"} />
+                </>
+              }
+              fields={[
+                { label: "Customer", value: s.customer },
+                { label: "Items", value: s.lines.reduce((a, l) => a + l.qty, 0) },
+              ]}
+              actions={
+                <>
+                  <Button size="sm" variant="outline" onClick={() => setEditing(s)} disabled={s.status === "Returned"}>
+                    <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
+                  </Button>
+                  <Confirm
+                    title={`Delete ${s.invoice}?`}
+                    description={
+                      <>
+                        The invoice is removed from all sales figures{s.status === "Returned" ? "" : " and its items go back into stock"}.
+                        This can't be undone.
+                      </>
+                    }
+                    confirmLabel="Delete sale"
+                    destructive
+                    onConfirm={() => { deleteSale(s.id); toast.success(`${s.invoice} deleted`); }}
+                    trigger={
+                      <Button size="sm" variant="outline" className="text-muted-foreground hover:text-destructive">
+                        <Trash2 className="h-3.5 w-3.5 mr-1.5" />Delete
+                      </Button>
+                    }
+                  />
+                </>
+              }
+            />
+          )}
+        />
+        <TableWrap>
           <table className="w-full text-sm">
             <thead className="bg-muted/50 sticky top-0 z-10">
               <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
@@ -247,7 +302,7 @@ function SalesPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
       </Card>
 
       <Sheet open={!!open} onOpenChange={(o) => !o && setOpen(null)}>

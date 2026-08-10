@@ -137,7 +137,7 @@ function AIPage() {
       )}
 
       {/* Locally computed snapshot: useful even if the AI is unavailable. */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-4 shrink-0">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4 mb-4 shrink-0">
         <Card className="p-4">
           <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Last 7 days</div>
           <div className="text-2xl font-bold mt-1">{money(insights.salesByPeriod.last7Days.revenue)}</div>
@@ -174,7 +174,7 @@ function AIPage() {
           )}
         </div>
 
-        <div data-chat-scroll className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+        <div data-chat-scroll className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-4 space-y-4">
           {messages.length === 0 && (
             <div className="text-center py-6">
               <div className="inline-flex h-12 w-12 rounded-full bg-muted items-center justify-center mb-3">
@@ -249,10 +249,11 @@ function AIPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void ask(input); } }}
-              placeholder="e.g. Which shop made the most profit this week?"
+              placeholder="Ask about your business…"
+              enterKeyHint="send"
               disabled={busy}
             />
-            <Button onClick={() => void ask(input)} disabled={busy || !input.trim()}>
+            <Button size="icon" className="shrink-0" aria-label="Send" onClick={() => void ask(input)} disabled={busy || !input.trim()}>
               <Send className="h-4 w-4" />
             </Button>
           </div>

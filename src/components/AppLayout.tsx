@@ -24,11 +24,15 @@ import {
   RefreshCw,
   Search,
   User as UserIcon,
+  Menu,
+  MoreHorizontal,
+  X,
 } from "lucide-react";
 import { useStore, formatRs } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Confirm } from "@/components/Confirm";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { toast } from "sonner";
 
 type NavItem = { to: string; label: string; icon: ReactNode };
@@ -62,11 +66,19 @@ const SHOP_NAV: NavItem[] = [
 ];
 
 /**
+ * The four destinations that get a permanent home on the phone's bottom bar.
+ * Everything else lives one tap away behind "More", which opens the same drawer
+ * as the header's hamburger.
+ */
+const ADMIN_BOTTOM = ["/app/dashboard", "/app/sales", "/app/products", "/app/inventory"];
+const SHOP_BOTTOM = ["/app/dashboard", "/app/pos", "/app/sales", "/app/inventory"];
+
+/**
  * The header search box used to be a plain <input> wired to nothing — typing in
  * it did absolutely nothing. It now searches products and invoices and routes to
  * the matching page with the query pre-applied.
  */
-function GlobalSearch() {
+function GlobalSearch({ autoFocus, onDone }: { autoFocus?: boolean; onDone?: () => void }) {
   const { user, products, sales } = useStore();
   const navigate = useNavigate();
   const [q, setQ] = useState("");
@@ -102,26 +114,29 @@ function GlobalSearch() {
   const go = (to: "/app/products" | "/app/sales", term: string) => {
     setOpen(false);
     setQ("");
+    onDone?.();
     navigate({ to, search: { q: term } });
   };
 
   return (
-    <div ref={boxRef} className="hidden md:block flex-1 max-w-md relative">
+    <div ref={boxRef} className="relative w-full">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
       <input
         type="text"
+        autoFocus={autoFocus}
         value={q}
         onChange={(e) => { setQ(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
         onKeyDown={(e) => {
-          if (e.key === "Escape") { setOpen(false); return; }
+          if (e.key === "Escape") { setOpen(false); onDone?.(); return; }
           if (e.key !== "Enter" || !q.trim()) return;
           if (results.products.length) go("/app/products", q.trim());
           else if (results.sales.length) go("/app/sales", q.trim());
           else toast.info(`Nothing matches “${q.trim()}”`);
         }}
         placeholder="Search products, invoices, customers…"
-        className="w-full pl-9 pr-3 py-2 text-sm bg-muted/60 border border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:bg-background"
+        // text-base below sm stops iOS zooming the whole shell on focus.
+        className="w-full h-10 sm:h-9 pl-9 pr-3 text-base sm:text-sm bg-muted/60 border border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:bg-background"
       />
       {open && q.trim() && (
         <div className="absolute left-0 right-0 top-full mt-1.5 rounded-md border bg-popover text-popover-foreground shadow-lg overflow-hidden z-50">
@@ -133,7 +148,7 @@ function GlobalSearch() {
                 <button
                   key={p.id}
                   onClick={() => go("/app/products", p.name)}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between gap-3"
+                  className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted flex items-center justify-between gap-3"
                 >
                   <span className="truncate">{p.name}</span>
                   <span className="text-xs text-muted-foreground shrink-0">{formatRs(p.price)}</span>
@@ -148,7 +163,7 @@ function GlobalSearch() {
                 <button
                   key={s.id}
                   onClick={() => go("/app/sales", s.invoice)}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between gap-3"
+                  className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted flex items-center justify-between gap-3"
                 >
                   <span className="font-mono text-xs truncate">{s.invoice}</span>
                   <span className="text-xs text-muted-foreground shrink-0 truncate">{s.customer}</span>
@@ -175,7 +190,7 @@ function DataSourceBadge() {
     <span
       title={title}
       className={cn(
-        "hidden lg:inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full border shrink-0",
+        "hidden xl:inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full border shrink-0",
         dbError
           ? "bg-destructive/10 text-destructive border-destructive/30"
           : "bg-warning/15 text-warning-strong border-warning/40",
@@ -187,10 +202,48 @@ function DataSourceBadge() {
   );
 }
 
+/** The nav list, shared by the desktop sidebar and the mobile drawer. */
+function NavLinks({
+  nav,
+  isActive,
+  onNavigate,
+}: {
+  nav: NavItem[];
+  isActive: (to: string) => boolean;
+  onNavigate?: () => void;
+}) {
+  return (
+    <>
+      {nav.map((item) => {
+        const active = isActive(item.to);
+        return (
+          <Link
+            key={item.to}
+            to={item.to}
+            onClick={onNavigate}
+            className={cn(
+              // min-h-11 gives every drawer row a comfortable touch target.
+              "flex min-h-11 items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+              active
+                ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+            )}
+          >
+            {item.icon}
+            <span>{item.label}</span>
+          </Link>
+        );
+      })}
+    </>
+  );
+}
+
 export function AppLayout({ children }: { children: ReactNode }) {
   const { user, ready, logout, online, setOnline, shops } = useStore();
   const navigate = useNavigate();
   const location = useLocation();
+  const [drawer, setDrawer] = useState(false);
+  const [mobileSearch, setMobileSearch] = useState(false);
 
   // The session is restored in an effect, so `user` is null for the first render
   // of any hard load. Redirecting on that null sent every deep link and every
@@ -199,6 +252,25 @@ export function AppLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (ready && !user) navigate({ to: "/" });
   }, [ready, user, navigate]);
+
+  // A route change closes both overlays, so tapping a drawer link (or a search
+  // result) never leaves them hanging over the page you just landed on.
+  useEffect(() => {
+    setDrawer(false);
+    setMobileSearch(false);
+  }, [location.pathname]);
+
+  // Growing past the lg breakpoint brings the permanent sidebar back. Hiding the
+  // drawer with a `lg:hidden` class alone would leave its full-screen overlay
+  // behind, swallowing every click on a page that looks perfectly normal — so
+  // the drawer is actually closed instead.
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const sync = () => { if (mq.matches) setDrawer(false); };
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   if (!ready) {
     return (
@@ -211,151 +283,161 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const nav = user.role === "admin" ? ADMIN_NAV : SHOP_NAV;
   const shop = user.shopId ? shops.find((s) => s.id === user.shopId) : null;
-  // Shared by the sidebar and the mobile strip so a sub-route highlights the
-  // same item in both — the mobile strip used to only match the exact path.
+  // Shared by the sidebar, drawer and bottom bar so a sub-route highlights the
+  // same item everywhere — the old mobile strip only matched the exact path.
   const isActive = (to: string) =>
     location.pathname === to || (to !== "/app/dashboard" && location.pathname.startsWith(`${to}/`));
 
+  const bottomPaths = user.role === "admin" ? ADMIN_BOTTOM : SHOP_BOTTOM;
+  const bottomNav = bottomPaths
+    .map((p) => nav.find((n) => n.to === p))
+    .filter((n): n is NavItem => Boolean(n));
+
+  const signOut = (
+    <Confirm
+      title="Sign out?"
+      description="You'll be returned to the sign-in screen. Any sale still in the cart will be lost."
+      confirmLabel="Sign out"
+      onConfirm={() => { logout(); navigate({ to: "/" }); }}
+      trigger={
+        <button className="w-full flex min-h-11 items-center gap-3 px-3 py-2 rounded-md text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground transition-colors">
+          <LogOut className="h-4 w-4" />
+          <span>Sign out</span>
+        </button>
+      }
+    />
+  );
+
+  const brand = (
+    <div className="flex items-center gap-2">
+      <div className="h-9 w-9 rounded-lg bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bold">
+        A
+      </div>
+      <div>
+        <div className="font-display font-bold text-lg leading-none">A-POS</div>
+        <div className="text-xs text-sidebar-foreground/60 mt-1">Retail Suite</div>
+      </div>
+    </div>
+  );
+
   return (
     <div data-app-shell className="flex h-dvh overflow-hidden bg-background">
-      {/* Sidebar */}
-      <aside data-print="hide" className="hidden md:flex w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
-        <div className="px-5 py-5 border-b border-sidebar-border">
-          <div className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-lg bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bold">
-              A
-            </div>
-            <div>
-              <div className="font-display font-bold text-lg leading-none">A-POS</div>
-              <div className="text-xs text-sidebar-foreground/60 mt-1">Retail Suite</div>
+      {/*
+        Sidebar. Shown from lg (1024px) rather than md: at 768px a fixed 256px
+        rail left barely 500px for a data screen, so tablets get the drawer too.
+      */}
+      <aside data-print="hide" className="hidden lg:flex w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
+        <div className="px-5 py-5 border-b border-sidebar-border">{brand}</div>
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+          <NavLinks nav={nav} isActive={isActive} />
+        </nav>
+        <div className="p-3 border-t border-sidebar-border">{signOut}</div>
+      </aside>
+
+      {/* Mobile / tablet drawer — the same nav, one tap from the hamburger. */}
+      <Sheet open={drawer} onOpenChange={setDrawer}>
+        <SheetContent
+          side="left"
+          data-print="hide"
+          className="w-[min(19rem,85vw)] max-w-none p-0 bg-sidebar text-sidebar-foreground border-sidebar-border flex flex-col [&>button]:text-sidebar-foreground [&>button]:bg-transparent [&>button]:hover:bg-sidebar-accent"
+        >
+          <div className="px-5 py-5 border-b border-sidebar-border">{brand}</div>
+          <div className="px-5 py-3 border-b border-sidebar-border">
+            <div className="text-sm font-medium">{user.name}</div>
+            <div className="text-xs text-sidebar-foreground/60">
+              {user.role === "admin" ? "Administrator" : shop?.name ?? "Shop"}
             </div>
           </div>
-        </div>
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {nav.map((item) => {
-            const active = isActive(item.to);
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
-                  active
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-                )}
-              >
-                {item.icon}
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-        <div className="p-3 border-t border-sidebar-border">
-          <Confirm
-            title="Sign out?"
-            description="You'll be returned to the sign-in screen. Any sale still in the cart will be lost."
-            confirmLabel="Sign out"
-            onConfirm={() => { logout(); navigate({ to: "/" }); }}
-            trigger={
-              <button
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground transition-colors"
-              >
-                <LogOut className="h-4 w-4" />
-                <span>Sign out</span>
-              </button>
-            }
-          />
-        </div>
-      </aside>
+          <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto overscroll-contain">
+            <NavLinks nav={nav} isActive={isActive} onNavigate={() => setDrawer(false)} />
+          </nav>
+          <div className="p-3 border-t border-sidebar-border">{signOut}</div>
+        </SheetContent>
+      </Sheet>
 
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header data-print="hide" className="h-16 shrink-0 border-b bg-card flex items-center px-4 md:px-6 gap-3 md:gap-4 z-20">
-          <div className="md:hidden">
-            <div className="h-8 w-8 rounded-md bg-primary text-primary-foreground flex items-center justify-center font-bold">A</div>
-          </div>
-          <GlobalSearch />
-          <DataSourceBadge />
-          <button
-            onClick={() => setOnline(!online)}
-            className={cn(
-              // ml-auto anchors this whole trailing cluster to the right edge. The
-              // search box is capped at max-w-md, so without it everything after
-              // the search sits bunched beside it with dead space to the right.
-              "ml-auto flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full border transition-colors shrink-0",
-              online
-                ? "bg-success/10 text-success-strong border-success/30"
-                : "bg-warning/15 text-warning-strong border-warning/40",
-            )}
-            title="Toggle online/offline (demo)"
-          >
-            {online ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-            <span>{online ? "Online" : "Offline"}</span>
-          </button>
-          <button
-            onClick={() =>
-              online
-                ? toast.success("All data is up to date")
-                : toast.warning("Offline — changes will sync when reconnected")
-            }
-            className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            <span>{online ? "Synced" : "Pending"}</span>
-          </button>
-          <ThemeToggle />
-          <div className="flex items-center gap-2 pl-3 border-l shrink-0">
-            <div className="h-8 w-8 shrink-0 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
-              {user.name.charAt(0)}
+        <header data-print="hide" className="shrink-0 border-b bg-card z-20 px-safe">
+          <div className="h-14 sm:h-16 flex items-center px-3 sm:px-4 md:px-6 gap-2 sm:gap-3 md:gap-4">
+            <button
+              onClick={() => setDrawer(true)}
+              aria-label="Open menu"
+              className="lg:hidden h-10 w-10 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+
+            <div className="lg:hidden h-8 w-8 shrink-0 rounded-md bg-primary text-primary-foreground flex items-center justify-center font-bold">
+              A
             </div>
-            <div className="hidden sm:block leading-tight">
-              <div className="text-sm font-medium">{user.name}</div>
-              <div className="text-xs text-muted-foreground">
-                {user.role === "admin" ? "Administrator" : shop?.name ?? "Shop"}
+
+            {/* Full search inline from md; a toggle button below that. */}
+            <div className="hidden md:block flex-1 max-w-md">
+              <GlobalSearch />
+            </div>
+
+            <button
+              onClick={() => setMobileSearch((v) => !v)}
+              aria-label={mobileSearch ? "Close search" : "Search"}
+              aria-expanded={mobileSearch}
+              className="md:hidden ml-auto h-10 w-10 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              {mobileSearch ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
+            </button>
+
+            <DataSourceBadge />
+
+            <button
+              onClick={() => setOnline(!online)}
+              className={cn(
+                // ml-auto anchors this trailing cluster to the right edge from md
+                // up, where the capped search box would otherwise leave a gap.
+                "md:ml-auto flex items-center gap-1.5 text-xs font-medium px-2 sm:px-2.5 py-1.5 rounded-full border transition-colors shrink-0",
+                online
+                  ? "bg-success/10 text-success-strong border-success/30"
+                  : "bg-warning/15 text-warning-strong border-warning/40",
+              )}
+              title="Toggle online/offline (demo)"
+            >
+              {online ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
+              {/* The label costs more than it's worth on a 360px header. */}
+              <span className="hidden xs:inline">{online ? "Online" : "Offline"}</span>
+            </button>
+
+            <button
+              onClick={() =>
+                online
+                  ? toast.success("All data is up to date")
+                  : toast.warning("Offline — changes will sync when reconnected")
+              }
+              className="hidden lg:flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              <span>{online ? "Synced" : "Pending"}</span>
+            </button>
+
+            <ThemeToggle />
+
+            {/* The drawer carries the name, shop and sign-out on small screens. */}
+            <div className="hidden lg:flex items-center gap-2 pl-3 border-l shrink-0">
+              <div className="h-8 w-8 shrink-0 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
+                {user.name.charAt(0)}
+              </div>
+              <div className="leading-tight">
+                <div className="text-sm font-medium">{user.name}</div>
+                <div className="text-xs text-muted-foreground">
+                  {user.role === "admin" ? "Administrator" : shop?.name ?? "Shop"}
+                </div>
               </div>
             </div>
           </div>
-          {/* The sidebar (and its sign-out) is hidden below md, which left mobile
-              users with no way to sign out at all. */}
-          <Confirm
-            title="Sign out?"
-            description="You'll be returned to the sign-in screen. Any sale still in the cart will be lost."
-            confirmLabel="Sign out"
-            onConfirm={() => { logout(); navigate({ to: "/" }); }}
-            trigger={
-              <button
-                aria-label="Sign out"
-                title="Sign out"
-                className="md:hidden h-9 w-9 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
-            }
-          />
-        </header>
 
-        {/* Mobile nav */}
-        <div data-print="hide" className="md:hidden shrink-0 border-b bg-card overflow-x-auto">
-          <div className="flex gap-1 p-2">
-            {nav.map((item) => {
-              const active = isActive(item.to);
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs whitespace-nowrap",
-                    active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
-                  )}
-                >
-                  {item.icon}
-                  {item.label}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
+          {mobileSearch && (
+            <div className="md:hidden px-3 pb-3">
+              <GlobalSearch autoFocus onDone={() => setMobileSearch(false)} />
+            </div>
+          )}
+        </header>
 
         {/*
           h-full, not min-h-full: a minimum lets the container grow with its
@@ -363,9 +445,50 @@ export function AppLayout({ children }: { children: ReactNode }) {
           and expanded past the viewport. A definite height gives flex-1 a real
           limit; longer pages simply overflow and <main> scrolls as before.
         */}
-        <main data-app-main className="flex-1 overflow-y-auto">
-          <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] w-full mx-auto h-full flex flex-col">{children}</div>
+        <main data-app-main className="flex-1 overflow-y-auto overscroll-contain px-safe">
+          {/* pb-24 on phones clears the fixed bottom bar; md+ has no bar. */}
+          <div className="p-4 pb-24 md:p-6 md:pb-6 lg:p-8 max-w-[1600px] w-full mx-auto h-full flex flex-col">
+            {children}
+          </div>
         </main>
+
+        {/*
+          Bottom tab bar (phones only). The old mobile nav was a horizontally
+          scrolling strip of up to 15 chips pinned under the header — you had to
+          scroll it to reach half the app, and it ate vertical space on every
+          page. Four thumb-reachable destinations plus "More" replaces it.
+        */}
+        <nav
+          data-print="hide"
+          className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t bg-card/95 backdrop-blur pb-safe px-safe"
+        >
+          <div className="flex items-stretch">
+            {bottomNav.map((item) => {
+              const active = isActive(item.to);
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={cn(
+                    "flex-1 flex flex-col items-center justify-center gap-1 py-2 min-h-14 text-[11px] transition-colors",
+                    active ? "text-primary font-medium" : "text-muted-foreground",
+                  )}
+                >
+                  {item.icon}
+                  <span className="truncate max-w-full px-0.5">{item.label}</span>
+                </Link>
+              );
+            })}
+            <button
+              onClick={() => setDrawer(true)}
+              aria-label="More"
+              className="flex-1 flex flex-col items-center justify-center gap-1 py-2 min-h-14 text-[11px] text-muted-foreground"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+              <span>More</span>
+            </button>
+          </div>
+        </nav>
       </div>
     </div>
   );
@@ -373,12 +496,21 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">{title}</h1>
-        {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
+    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4 sm:mb-6">
+      <div className="min-w-0">
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">{title}</h1>
+        {subtitle && <p className="text-xs sm:text-sm text-muted-foreground mt-1">{subtitle}</p>}
       </div>
-      {actions && <div data-print="hide" className="flex flex-wrap gap-2">{actions}</div>}
+      {/*
+        On a phone the actions become a full-width row of equal buttons rather
+        than wrapping into ragged half-lines — [&>*]:flex-1 makes "Export CSV"
+        and "Add supplier" share the width evenly.
+      */}
+      {actions && (
+        <div data-print="hide" className="flex flex-wrap gap-2 shrink-0 [&>*]:flex-1 sm:[&>*]:flex-none">
+          {actions}
+        </div>
+      )}
     </div>
   );
 }
