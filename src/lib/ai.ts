@@ -99,6 +99,25 @@ function buildMessages(input: AskInput) {
   ];
 }
 
+/**
+ * The site URL sent to OpenRouter for attribution.
+ *
+ * Hardcoding localhost in .env would report every production request as coming
+ * from a dev machine, so hosts that expose their own URL are preferred. Vercel
+ * sets VERCEL_PROJECT_PRODUCTION_URL (stable domain) and VERCEL_URL (this
+ * specific deployment), neither with a protocol.
+ */
+function appUrl(): string {
+  const explicit = process.env.OPENROUTER_APP_URL?.trim();
+  const isLocal = !explicit || /localhost|127\.0\.0\.1/.test(explicit);
+  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
+
+  // An explicit non-local value always wins; otherwise fall back to the host.
+  if (explicit && !isLocal) return explicit;
+  if (vercel) return `https://${vercel}`;
+  return explicit || "http://localhost:8080";
+}
+
 async function callOpenRouter(model: string, apiKey: string, input: AskInput): Promise<string> {
   const controller = new AbortController();
   // Free models can hang; fail over rather than leaving the user waiting.
@@ -111,8 +130,9 @@ async function callOpenRouter(model: string, apiKey: string, input: AskInput): P
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        // OpenRouter uses these for its rankings; both are optional.
-        "HTTP-Referer": process.env.OPENROUTER_APP_URL ?? "http://localhost:8080",
+        // Attribution only — OpenRouter uses these for its public rankings.
+        // Neither affects whether a request succeeds.
+        "HTTP-Referer": appUrl(),
         "X-Title": process.env.OPENROUTER_APP_NAME ?? "A-POS",
       },
       body: JSON.stringify({
