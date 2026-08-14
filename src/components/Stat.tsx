@@ -58,7 +58,12 @@ export function StatusPill({ status }: { status: string }) {
     Disabled: "bg-muted text-muted-foreground border-border",
     Trade: "bg-accent/15 text-accent-strong border-accent/30",
     Retail: "bg-muted text-muted-foreground border-border",
+    // Payment methods. Credit is the only one that means money is still owed,
+    // so it's the only one tinted — the rest are settled and unremarkable.
     Credit: "bg-warning/20 text-warning-strong border-warning/40",
+    Cash: "bg-muted text-muted-foreground border-border",
+    Card: "bg-muted text-muted-foreground border-border",
+    Online: "bg-muted text-muted-foreground border-border",
   };
   return (
     <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border", map[status] ?? "bg-muted text-muted-foreground border-border")}>

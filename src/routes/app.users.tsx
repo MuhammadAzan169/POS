@@ -10,16 +10,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { StatusPill } from "@/components/Stat";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
-import { Plus } from "lucide-react";
+import { Plus, Pencil } from "lucide-react";
 import { Confirm } from "@/components/Confirm";
 import { toast } from "sonner";
+import type { User } from "@/lib/store";
 
 export const Route = createFileRoute("/app/users")({ component: UsersPage });
 
 function UsersPage() {
-  const { user, users, shops, addUser } = useStore();
+  const { user, users, shops, addUser, updateUser } = useStore();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", shopId: shops[0]?.id ?? "" });
+  const [editing, setEditing] = useState<User | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", email: "", shopId: "" });
 
   if (user?.role !== "admin") {
     return (
@@ -38,6 +41,65 @@ function UsersPage() {
     setOpen(false);
     setForm({ name: "", email: "", shopId: shops[0]?.id ?? "" });
   };
+
+  const openEdit = (u: User) => {
+    setEditing(u);
+    setEditForm({ name: u.name, email: u.email, shopId: u.shopId ?? "" });
+  };
+
+  const saveEdit = () => {
+    if (!editing) return;
+    const name = editForm.name.trim();
+    const email = editForm.email.trim();
+    if (!name || !email) { toast.error("Name and email required"); return; }
+    if (users.some((u) => u.email.toLowerCase() === email.toLowerCase() && u.id !== editing.id)) {
+      toast.error("That email is already used by another login");
+      return;
+    }
+    updateUser({ ...editing, name, email, shopId: editing.role === "admin" ? undefined : editForm.shopId });
+    toast.success("Login updated");
+    setEditing(null);
+  };
+
+  /**
+   * Deactivating is the closest thing to deleting a login: their sales history
+   * has to stay attached to a real user, so the account is disabled rather than
+   * removed. The owner's own account is excluded — locking yourself out of the
+   * only admin login is not a recoverable mistake.
+   */
+  const toggleActive = (u: User) => {
+    updateUser({ ...u, active: !u.active });
+    toast.success(u.active ? `${u.name} deactivated` : `${u.name} reactivated`);
+  };
+
+  const userActions = (u: User) => (
+    <>
+      <Button variant="outline" size="sm" onClick={() => openEdit(u)}>
+        <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
+      </Button>
+      {u.id === user.id ? (
+        <Button variant="outline" size="sm" disabled title="You can't deactivate the account you're signed in with">
+          Your account
+        </Button>
+      ) : u.active ? (
+        <Confirm
+          title={`Deactivate ${u.name}?`}
+          description={
+            <>
+              <strong>{u.email}</strong> will no longer be able to sign in. Their sales history is kept and
+              you can reactivate the login at any time.
+            </>
+          }
+          confirmLabel="Deactivate"
+          destructive
+          onConfirm={() => toggleActive(u)}
+          trigger={<Button variant="outline" size="sm">Deactivate</Button>}
+        />
+      ) : (
+        <Button variant="outline" size="sm" onClick={() => toggleActive(u)}>Reactivate</Button>
+      )}
+    </>
+  );
 
   return (
     <div>
@@ -89,15 +151,7 @@ function UsersPage() {
                 { label: "Shop", value: u.shopId ? shops.find((s) => s.id === u.shopId)?.name ?? "—" : "—" },
                 { label: "Last login", value: u.lastLogin ?? "—" },
               ]}
-              actions={
-                <Confirm
-                  title="Send a password reset?"
-                  description={<>A reset link will be emailed to <strong>{u.email}</strong> and their current password will stop working.</>}
-                  confirmLabel="Send reset link"
-                  onConfirm={() => toast.success(`Password reset link sent to ${u.email}`)}
-                  trigger={<Button variant="outline" size="sm">Reset password</Button>}
-                />
-              }
+              actions={userActions(u)}
             />
           )}
         />
@@ -114,7 +168,7 @@ function UsersPage() {
             </tr></thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.id} className="border-t hover:bg-muted/40">
+                <tr key={u.id} className={`border-t hover:bg-muted/40 ${u.active ? "" : "opacity-60"}`}>
                   <td className="px-4 py-3 font-medium">
                     <div className="flex items-center gap-2">
                       <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold">{u.name.charAt(0)}</div>
@@ -127,14 +181,8 @@ function UsersPage() {
                   <td className="px-4 py-3 text-muted-foreground text-xs">{u.lastLogin ?? "—"}</td>
                   {/* Was "OK"/"OUT" — stock-level wording on a user account. */}
                   <td className="px-4 py-3"><StatusPill status={u.active ? "Active" : "Disabled"} /></td>
-                  <td className="px-4 py-3 text-right">
-                    <Confirm
-                      title="Send a password reset?"
-                      description={<>A reset link will be emailed to <strong>{u.email}</strong> and their current password will stop working.</>}
-                      confirmLabel="Send reset link"
-                      onConfirm={() => toast.success(`Password reset link sent to ${u.email}`)}
-                      trigger={<Button variant="ghost" size="sm">Reset password</Button>}
-                    />
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <div className="flex gap-2 justify-end">{userActions(u)}</div>
                   </td>
                 </tr>
               ))}
@@ -142,6 +190,41 @@ function UsersPage() {
           </table>
         </TableWrap>
       </Card>
+
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit login</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Name</Label>
+              <Input autoFocus value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email</Label>
+              <Input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+            </div>
+            {/* The owner isn't tied to one shop, so the picker only applies to
+                shop logins — showing it for an admin would imply otherwise. */}
+            {editing?.role === "shop" && (
+              <div className="space-y-1.5">
+                <Label>Shop</Label>
+                <Select value={editForm.shopId} onValueChange={(v) => setEditForm({ ...editForm, shopId: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{shops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Moving a cashier to another shop changes which till and stock they see. Sales they already
+                  rang up stay with the shop they were sold at.
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button onClick={saveEdit}>Save changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

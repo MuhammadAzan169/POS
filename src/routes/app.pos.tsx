@@ -19,7 +19,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Minus, X, ScanLine, CheckCircle2, Sunrise, Warehouse } from "lucide-react";
+import { Plus, Minus, X, ScanLine, CheckCircle2, Sunrise, Warehouse, ShoppingCart, Trash2, PackageSearch } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -65,6 +66,7 @@ function POS() {
   /** A wholesale counter sells at trade rates; a retail shop at the shelf price. */
   const unitPrice = (p: Product) => priceFor(p, kind);
   const [q, setQ] = useState("");
+  const [category, setCategory] = useState("all");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customer, setCustomer] = useState("Walk-in");
   /** Set when the buyer was picked from the saved list rather than typed. */
@@ -81,13 +83,31 @@ function POS() {
 
   useEffect(() => { searchRef.current?.focus(); }, []);
 
-  const filtered = useMemo(() => {
-    if (!q) return products.slice(0, 12);
-    const lo = q.toLowerCase();
-    return products.filter((p) => p.name.toLowerCase().includes(lo) || p.barcode.includes(q)).slice(0, 12);
-  }, [products, q]);
-
+  // Declared before `filtered`, which calls it during render — a const arrow
+  // defined below would be in its temporal dead zone and throw.
   const stockFor = (pid: string) => inventory.find((r) => r.productId === pid && r.shopId === shopId)?.qty ?? 0;
+
+  /** Category chips, in the order the catalogue happens to list them. */
+  const categories = useMemo(
+    () => Array.from(new Set(products.map((p) => p.category).filter(Boolean))).sort(),
+    [products],
+  );
+
+  const filtered = useMemo(() => {
+    const lo = q.trim().toLowerCase();
+    return products
+      .filter((p) => p.active !== false)
+      .filter((p) => (category === "all" ? true : p.category === category))
+      .filter((p) => (lo ? p.name.toLowerCase().includes(lo) || p.barcode.includes(q.trim()) : true))
+      // Out-of-stock sinks to the bottom rather than occupying prime grid space
+      // that a cashier's thumb is aiming for.
+      .sort((a, b) => {
+        const sa = stockFor(a.id) === 0 ? 1 : 0;
+        const sb = stockFor(b.id) === 0 ? 1 : 0;
+        return sa - sb || a.name.localeCompare(b.name);
+      })
+      .slice(0, 40);
+  }, [products, q, category, inventory, shopId]);
 
   const addToCart = (p: Product) => {
     const stock = stockFor(p.id);
@@ -119,6 +139,7 @@ function POS() {
     else toast.error(`No product matches “${term}”`);
   };
 
+  const cartUnits = cart.reduce((a, l) => a + l.qty, 0);
   const subtotal = cart.reduce((a, l) => a + l.qty * unitPrice(l.product), 0);
   // Discounts come from the Discounts tab: a product's own rate, else the overall rate.
   const discount = cart.reduce((a, l) => a + discountAmountFor(l.product.id, unitPrice(l.product), l.qty, discounts), 0);
@@ -362,8 +383,37 @@ function POS() {
 
       {payment === "Cash" && (
         <div className="space-y-1.5">
-          <label className="text-xs text-muted-foreground">Tendered</label>
-          <Input type="number" inputMode="decimal" value={tendered} onChange={(e) => setTendered(Number(e.target.value))} />
+          <label className="text-xs text-muted-foreground">Cash received</label>
+          <Input
+            type="number"
+            inputMode="decimal"
+            value={tendered || ""}
+            placeholder="0"
+            onChange={(e) => setTendered(Number(e.target.value) || 0)}
+            className="text-lg font-semibold tabular-nums h-11"
+          />
+          {/* Counting out change from a note is the commonest thing that happens
+              at a till, so the common notes are one tap instead of typing. */}
+          <div className="grid grid-cols-4 gap-1.5">
+            <button
+              type="button"
+              onClick={() => setTendered(total)}
+              disabled={total <= 0}
+              className="text-xs py-1.5 rounded-md border hover:bg-muted disabled:opacity-40 transition-colors"
+            >
+              Exact
+            </button>
+            {[500, 1000, 5000].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setTendered((t) => t + n)}
+                className="text-xs py-1.5 rounded-md border hover:bg-muted transition-colors tabular-nums"
+              >
+                +{n.toLocaleString()}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -381,11 +431,44 @@ function POS() {
 
   const totals = (
     <div className="space-y-2 text-sm">
-      <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatRs(subtotal)}</span></div>
-      {discounts.enabled && discount > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span>− {formatRs(discount)}</span></div>}
-      <div className="flex justify-between text-xl font-bold pt-2 border-t"><span>Total</span><span>{formatRs(total)}</span></div>
+      <div className="flex justify-between">
+        <span className="text-muted-foreground">Subtotal</span>
+        <span className="tabular-nums">{formatRs(subtotal, settings.currency)}</span>
+      </div>
+      {discounts.enabled && discount > 0 && (
+        <div className="flex justify-between text-success-strong">
+          <span>Discount</span>
+          <span className="tabular-nums">− {formatRs(discount, settings.currency)}</span>
+        </div>
+      )}
+      {cartUnits > 0 && (
+        <div className="flex justify-between text-xs text-muted-foreground">
+          <span>Items</span>
+          <span className="tabular-nums">{cartUnits}</span>
+        </div>
+      )}
+      {/*
+        The total is the one number the cashier and the customer both look at,
+        so it gets its own band rather than being one more row in a list.
+      */}
+      <div className="flex items-baseline justify-between gap-3 mt-3 pt-3 border-t">
+        <span className="text-sm font-medium text-muted-foreground">Total</span>
+        <span className="font-display text-3xl font-bold tabular-nums leading-none">
+          {formatRs(total, settings.currency)}
+        </span>
+      </div>
       {payment === "Cash" && tendered > 0 && (
-        <div className="flex justify-between text-success-strong font-medium"><span>Change due</span><span>{formatRs(change)}</span></div>
+        <div
+          className={cn(
+            "flex justify-between items-baseline rounded-lg px-3 py-2 mt-2 font-medium",
+            tendered >= total ? "bg-success/10 text-success-strong" : "bg-destructive/10 text-destructive",
+          )}
+        >
+          <span className="text-sm">{tendered >= total ? "Change due" : "Short by"}</span>
+          <span className="text-lg tabular-nums">
+            {formatRs(tendered >= total ? change : total - tendered, settings.currency)}
+          </span>
+        </div>
       )}
     </div>
   );
@@ -449,53 +532,142 @@ function POS() {
                 enterKeyHint="go"
                 autoCapitalize="off"
                 autoCorrect="off"
-                className="pl-10 h-12 text-base"
+                className="pl-11 h-12 text-base rounded-xl"
               />
+              {q && (
+                <button
+                  onClick={() => { setQ(""); searchRef.current?.focus(); }}
+                  aria-label="Clear search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-4">
+            {/* Category chips: on a busy till, tapping "Cosmetics" beats typing.
+                Scrolls sideways on a phone rather than wrapping into three rows. */}
+            {categories.length > 1 && (
+              <div className="flex gap-1.5 overflow-x-auto no-scrollbar mt-3 -mx-3 px-3 sm:mx-0 sm:px-0 sm:flex-wrap sm:overflow-visible">
+                {["all", ...categories].map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setCategory(c)}
+                    className={cn(
+                      "shrink-0 text-xs px-3 py-1.5 rounded-full border transition-colors",
+                      category === c
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "hover:bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {c === "all" ? "All items" : c}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5 mt-4">
               {filtered.map((p) => {
                 const s = stockFor(p.id);
+                const out = s === 0;
+                const low = !out && s <= p.lowAlert;
                 return (
-                  <button key={p.id} onClick={() => addToCart(p)} className="text-left p-3 min-h-20 border rounded-lg hover:border-primary hover:bg-muted/40 active:bg-muted transition-colors disabled:opacity-50" disabled={s === 0}>
-                    <div className="text-xs text-muted-foreground">{p.category}</div>
-                    <div className="font-medium text-sm line-clamp-2 mt-0.5">{p.name}</div>
-                    <div className="flex justify-between items-end mt-2">
-                      <div className="font-semibold">
+                  <button
+                    key={p.id}
+                    onClick={() => addToCart(p)}
+                    disabled={out}
+                    className={cn(
+                      "group relative text-left p-3 min-h-[6.5rem] rounded-xl border bg-card flex flex-col",
+                      "transition-all duration-150",
+                      out
+                        ? "opacity-55 cursor-not-allowed"
+                        : "hover:border-primary hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:shadow-sm",
+                    )}
+                  >
+                    {/* Stock sits top-right as a badge rather than competing with
+                        the price on the bottom line, which is what the cashier
+                        is actually reading. */}
+                    <span
+                      className={cn(
+                        "absolute top-2 right-2 text-[10px] font-medium px-1.5 py-0.5 rounded-full border tabular-nums",
+                        out
+                          ? "bg-destructive/10 text-destructive border-destructive/30"
+                          : low
+                            ? "bg-warning/15 text-warning-strong border-warning/40"
+                            : "bg-muted text-muted-foreground border-transparent",
+                      )}
+                    >
+                      {out ? "Out" : s}
+                    </span>
+
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground pr-10">
+                      {p.category || "—"}
+                    </div>
+                    <div className="font-medium text-sm leading-snug line-clamp-2 mt-1 pr-2">{p.name}</div>
+
+                    <div className="mt-auto pt-2 flex items-baseline gap-1.5">
+                      <span className="font-display text-lg font-bold tabular-nums">
                         {formatRs(unitPrice(p), settings.currency)}
-                        {/* Showing the retail price struck through makes it obvious
-                            the trade rate is in force, not a mispriced product. */}
-                        {isWholesale && unitPrice(p) !== p.price && (
-                          <span className="ml-1.5 text-xs font-normal text-muted-foreground line-through">
-                            {formatRs(p.price, settings.currency)}
-                          </span>
-                        )}
-                      </div>
-                      <div className={`text-xs ${s === 0 ? "text-destructive" : s <= p.lowAlert ? "text-warning-strong" : "text-muted-foreground"}`}>
-                        {s === 0 ? "Out" : `${s} left`}
-                      </div>
+                      </span>
+                      {/* Retail price struck through makes it obvious the trade
+                          rate is in force, not a mispriced product. */}
+                      {isWholesale && unitPrice(p) !== p.price && (
+                        <span className="text-xs text-muted-foreground line-through tabular-nums">
+                          {formatRs(p.price, settings.currency)}
+                        </span>
+                      )}
                     </div>
                   </button>
                 );
               })}
+
+              {filtered.length === 0 && (
+                <div className="col-span-full py-12 text-center">
+                  <PackageSearch className="h-6 w-6 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm font-medium">No products found</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {q ? `Nothing matches “${q}”.` : "This category is empty."}
+                  </p>
+                </div>
+              )}
             </div>
           </Card>
 
           <Card>
-            <div className="p-4 border-b flex items-center justify-between">
-              <h3 className="font-semibold">Cart ({cart.length})</h3>
+            <div className="p-4 border-b flex items-center justify-between gap-3">
+              <h3 className="font-semibold flex items-center gap-2">
+                <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                Cart
+                {cartUnits > 0 && (
+                  <span className="text-xs font-normal text-muted-foreground tabular-nums">
+                    {cartUnits} item{cartUnits === 1 ? "" : "s"}
+                  </span>
+                )}
+              </h3>
               {cart.length > 0 && (
                 <Confirm
                   title="Clear the cart?"
-                  description={`All ${cart.length} item${cart.length === 1 ? "" : "s"} will be removed. This can't be undone.`}
+                  description={`All ${cart.length} line${cart.length === 1 ? "" : "s"} will be removed. This can't be undone.`}
                   confirmLabel="Clear cart"
                   destructive
                   onConfirm={() => { setCart([]); toast.success("Cart cleared"); }}
-                  trigger={<Button variant="ghost" size="sm">Clear</Button>}
+                  trigger={
+                    <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">
+                      <Trash2 className="h-3.5 w-3.5 mr-1.5" />Clear
+                    </Button>
+                  }
                 />
               )}
             </div>
             {cart.length === 0 ? (
-              <div className="p-10 text-center text-sm text-muted-foreground">Cart is empty.</div>
+              <div className="px-6 py-12 text-center">
+                <div className="mx-auto h-11 w-11 rounded-full bg-muted flex items-center justify-center mb-3">
+                  <ScanLine className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <p className="text-sm font-medium">Nothing in the cart yet</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Scan a barcode, or tap a product above to add it.
+                </p>
+              </div>
             ) : (
               <div className="divide-y">
                 {/*
@@ -510,7 +682,14 @@ function POS() {
                     <div className="flex items-start justify-between gap-2 sm:flex-1 sm:min-w-0 sm:items-center">
                       <div className="min-w-0">
                         <div className="text-sm font-medium break-words sm:truncate">{l.product.name}</div>
-                        <div className="text-xs text-muted-foreground">{formatRs(unitPrice(l.product), settings.currency)} × {l.qty}</div>
+                        <div className="text-xs text-muted-foreground tabular-nums">
+                          {formatRs(unitPrice(l.product), settings.currency)} × {l.qty}
+                          {l.discount > 0 && (
+                            <span className="ml-1.5 text-success-strong">
+                              − {formatRs(l.discount, settings.currency)}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <button
                         onClick={() => setCart((prev) => prev.filter((_, j) => j !== i))}
@@ -526,7 +705,7 @@ function POS() {
                         <div className="w-10 text-center font-medium">{l.qty}</div>
                         <Button variant="outline" size="icon" aria-label="Increase quantity" className="h-9 w-9 sm:h-8 sm:w-8" onClick={() => setCart((prev) => prev.map((x, j) => j === i ? { ...x, qty: Math.min(stockFor(x.product.id), x.qty + 1) } : x))}><Plus className="h-3.5 w-3.5" /></Button>
                       </div>
-                      <div className="font-semibold sm:w-24 sm:text-right">{formatRs(l.qty * unitPrice(l.product) - l.discount, settings.currency)}</div>
+                      <div className="font-semibold tabular-nums sm:w-24 sm:text-right">{formatRs(l.qty * unitPrice(l.product) - l.discount, settings.currency)}</div>
                       <button
                         onClick={() => setCart((prev) => prev.filter((_, j) => j !== i))}
                         aria-label={`Remove ${l.product.name}`}
@@ -543,14 +722,24 @@ function POS() {
         </div>
 
         {/* Right: checkout — a real column only where there's room for one. */}
-        <Card className="hidden lg:block p-5 h-fit lg:sticky lg:top-0">
-          <h3 className="font-semibold mb-4">Checkout</h3>
-          {checkoutFields}
-          <div className="mt-5 pt-4 border-t">{totals}</div>
-          <Button className="w-full mt-5 h-12 text-base" onClick={complete}>
-            <CheckCircle2 className="h-5 w-5 mr-2" /> Complete sale
+        <Card className="hidden lg:flex flex-col p-5 h-fit lg:sticky lg:top-0 max-h-[calc(100dvh-3rem)]">
+          <h3 className="font-semibold mb-4 shrink-0">Checkout</h3>
+          {/* The fields scroll; the total and the action stay put, so the button
+              never drifts below the fold on a long cart. */}
+          <div className="flex-1 min-h-0 overflow-y-auto -mx-1 px-1">{checkoutFields}</div>
+          <div className="mt-5 pt-4 border-t shrink-0">{totals}</div>
+          <Button
+            className="w-full mt-4 h-12 text-base shrink-0"
+            onClick={complete}
+            disabled={cart.length === 0}
+          >
+            <CheckCircle2 className="h-5 w-5 mr-2" />
+            {cart.length === 0 ? "Add items to sell" : "Complete sale"}
           </Button>
-          <p className="text-xs text-muted-foreground text-center mt-3">Selling price only. No cost or profit shown here.</p>
+          <p className="text-xs text-muted-foreground text-center mt-3 shrink-0">
+            Press <kbd className="px-1 py-0.5 rounded border bg-muted font-mono text-[10px]">F9</kbd> to complete ·
+            selling price only
+          </p>
         </Card>
       </div>
 
@@ -566,10 +755,12 @@ function POS() {
       >
         <div className="flex items-center gap-3 p-3">
           <div className="min-w-0">
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              {cart.length} item{cart.length === 1 ? "" : "s"}
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground tabular-nums">
+              {cartUnits} item{cartUnits === 1 ? "" : "s"}
             </div>
-            <div className="text-lg font-bold leading-tight">{formatRs(total)}</div>
+            <div className="font-display text-xl font-bold leading-tight tabular-nums">
+              {formatRs(total, settings.currency)}
+            </div>
           </div>
           <Button className="ml-auto h-12 px-6 text-base" disabled={cart.length === 0} onClick={() => setCheckoutOpen(true)}>
             <CheckCircle2 className="h-5 w-5 mr-2" /> Charge
@@ -582,7 +773,7 @@ function POS() {
           <SheetHeader><SheetTitle>Checkout</SheetTitle></SheetHeader>
           {checkoutFields}
           <div className="pt-4 border-t">{totals}</div>
-          <Button className="w-full h-12 text-base" onClick={complete}>
+          <Button className="w-full h-12 text-base" onClick={complete} disabled={cart.length === 0}>
             <CheckCircle2 className="h-5 w-5 mr-2" /> Complete sale
           </Button>
           <p className="text-xs text-muted-foreground text-center">Selling price only. No cost or profit shown here.</p>

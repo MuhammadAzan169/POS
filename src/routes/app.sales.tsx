@@ -12,8 +12,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Download, Printer, Undo2, Pencil, Trash2, RotateCcw } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Download, Printer, Undo2, Pencil, Trash2, RotateCcw, ReceiptText } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
+import { cn } from "@/lib/utils";
 import { Confirm } from "@/components/Confirm";
 import { toast } from "sonner";
 
@@ -53,7 +55,7 @@ function useSaleToReceipt() {
 }
 
 function SalesPage() {
-  const { user, sales, shops, addReturn, deleteSale, settings } = useStore();
+  const { user, sales, shops, products, addReturn, deleteSale, settings } = useStore();
   const navigate = useNavigate();
   const { q: searchParam } = Route.useSearch();
   const saleToReceipt = useSaleToReceipt();
@@ -88,21 +90,92 @@ function SalesPage() {
 
   const selected = open ? sales.find((s) => s.id === open) : null;
 
+  /** Headline figures for whatever the filters currently select. */
+  const stats = useMemo(() => {
+    const live = rows.filter((s) => s.status !== "Returned");
+    const revenue = live.reduce((a, s) => a + s.total, 0);
+    const returned = rows.filter((s) => s.status === "Returned");
+    return {
+      invoices: live.length,
+      revenue,
+      profit: live.reduce((a, s) => a + s.profit, 0),
+      items: live.reduce((a, s) => a + s.lines.reduce((b, l) => b + l.qty, 0), 0),
+      // Average basket is the number that tells you whether people are buying
+      // more per visit; a revenue total on its own never does.
+      average: live.length > 0 ? Math.round(revenue / live.length) : 0,
+      returned: returned.length,
+      returnedValue: returned.reduce((a, s) => a + s.total, 0),
+    };
+  }, [rows]);
+
+  const hasFilters = Boolean(q || from || to || shopFilter !== "all");
+  const clearFilters = () => { setQ(""); setFrom(""); setTo(""); setShopFilter("all"); };
+
+  /**
+   * The same filtered sales, rolled up per product.
+   *
+   * The invoice list answers "what did this customer buy"; this answers "what is
+   * actually selling", which is the question you ask when deciding what to
+   * reorder. Both read from `rows`, so they can never disagree about the period.
+   */
+  const productRows = useMemo(() => {
+    const map = new Map<string, { name: string; barcode: string; qty: number; revenue: number; profit: number; invoices: number }>();
+    rows
+      .filter((s) => s.status !== "Returned")
+      .forEach((s) =>
+        s.lines.forEach((l) => {
+          const cur = map.get(l.productId) ?? {
+            name: l.name,
+            barcode: products.find((p) => p.id === l.productId)?.barcode ?? "",
+            qty: 0, revenue: 0, profit: 0, invoices: 0,
+          };
+          cur.qty += l.qty;
+          cur.revenue += l.qty * l.price - l.discount;
+          cur.profit += l.qty * (l.price - l.cost) - l.discount;
+          cur.invoices += 1;
+          map.set(l.productId, cur);
+        }),
+      );
+    return [...map.values()].sort((a, b) => b.revenue - a.revenue);
+  }, [rows, products]);
+
+  const productTotals = useMemo(
+    () => ({
+      qty: productRows.reduce((a, r) => a + r.qty, 0),
+      revenue: productRows.reduce((a, r) => a + r.revenue, 0),
+      profit: productRows.reduce((a, r) => a + r.profit, 0),
+    }),
+    [productRows],
+  );
+
+  const exportProducts = () => {
+    if (productRows.length === 0) { toast.error("Nothing to export"); return; }
+    downloadCsv(
+      `products-sold-${todayISO()}.csv`,
+      ["Product", "Barcode", "Qty sold", "Revenue", ...(isAdmin ? ["Profit"] : []), "Times sold"],
+      [
+        ...productRows.map((r) => [r.name, r.barcode, r.qty, r.revenue, ...(isAdmin ? [r.profit] : []), r.invoices]),
+        ["TOTAL", "", productTotals.qty, productTotals.revenue, ...(isAdmin ? [productTotals.profit] : []), ""],
+      ],
+    );
+    toast.success(`Exported ${productRows.length} products`);
+  };
+
   const exportCsv = () => {
     if (rows.length === 0) { toast.error("Nothing to export"); return; }
     downloadCsv(
       `sales-${new Date().toISOString().slice(0, 10)}.csv`,
-      ["Invoice", "Date", "Shop", "Customer", "Items", "Total", ...(isAdmin ? ["Profit"] : []), "Status", "Sync"],
+      ["Invoice", "Date", "Shop", "Customer", "Paid by", "Items", "Total", ...(isAdmin ? ["Profit"] : []), "Status"],
       rows.map((s) => [
         s.invoice,
-        new Date(s.date).toLocaleDateString(),
+        new Date(s.date).toLocaleString(),
         shops.find((sh) => sh.id === s.shopId)?.name ?? "",
         s.customer,
+        s.payment,
         s.lines.reduce((a, l) => a + l.qty, 0),
         s.total,
         ...(isAdmin ? [s.profit] : []),
         s.status,
-        s.synced ? "Synced" : "Pending",
       ]),
     );
     toast.success(`Exported ${rows.length} invoices`);
@@ -132,6 +205,36 @@ function SalesPage() {
           <Button variant="outline" onClick={exportCsv}><Download className="h-4 w-4 mr-1.5" />Export CSV</Button>
         }
       />
+
+      {/*
+        A summary strip rather than five StatCards: this sits directly above the
+        table it describes, so it reads as a header for the data instead of
+        competing with it. One bordered row, divided, numbers in tabular figures
+        so they stay aligned as the filters change.
+      */}
+      <Card className="mb-4 overflow-hidden">
+        <dl className="grid grid-cols-2 divide-x divide-y sm:grid-cols-3 lg:grid-cols-5 lg:divide-y-0">
+          <Metric label="Invoices" value={stats.invoices.toLocaleString()} />
+          <Metric label="Revenue" value={formatRs(stats.revenue, settings.currency)} emphasis />
+          <Metric label="Items sold" value={stats.items.toLocaleString()} />
+          <Metric label="Average sale" value={formatRs(stats.average, settings.currency)} />
+          {isAdmin ? (
+            <Metric label="Profit" value={formatRs(stats.profit, settings.currency)} tone="success" />
+          ) : (
+            <Metric
+              label="Returned"
+              value={stats.returned === 0 ? "—" : String(stats.returned)}
+              tone={stats.returned > 0 ? "destructive" : undefined}
+            />
+          )}
+        </dl>
+        {isAdmin && stats.returned > 0 && (
+          <div className="px-4 py-2 border-t bg-destructive/5 text-xs text-destructive">
+            {stats.returned} returned invoice{stats.returned === 1 ? "" : "s"} worth{" "}
+            {formatRs(stats.returnedValue, settings.currency)} excluded from the figures above.
+          </div>
+        )}
+      </Card>
 
       <Card className="p-3 sm:p-4 mb-4 space-y-3">
         {/*
@@ -164,13 +267,13 @@ function SalesPage() {
             <Label className="text-xs">To</Label>
             <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-full sm:w-40" />
           </div>
-          {(q || from || to || shopFilter !== "all") && (
-            <Button variant="ghost" size="sm" className="col-span-2 sm:col-auto" onClick={() => { setQ(""); setFrom(""); setTo(""); setShopFilter("all"); }}>
+          {hasFilters && (
+            <Button variant="ghost" size="sm" className="col-span-2 sm:col-auto" onClick={clearFilters}>
               <RotateCcw className="h-3.5 w-3.5 mr-1.5" />Clear
             </Button>
           )}
-          <div className="col-span-2 text-xs text-muted-foreground sm:col-auto sm:ml-auto">
-            {rows.length} invoices · {formatRs(rows.reduce((a, s) => a + s.total, 0), settings.currency)}
+          <div className="col-span-2 text-xs text-muted-foreground sm:col-auto sm:ml-auto tabular-nums">
+            Showing {rows.length.toLocaleString()} of {sales.length.toLocaleString()} invoices
           </div>
         </div>
         {/* The date presets scroll rather than wrap into three stacked lines. */}
@@ -193,22 +296,115 @@ function SalesPage() {
         </div>
       </Card>
 
+      <Tabs defaultValue="invoices">
+        <TabsList>
+          <TabsTrigger value="invoices">Invoices ({rows.length})</TabsTrigger>
+          <TabsTrigger value="products">Products sold ({productRows.length})</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="products" className="mt-4">
+          <Card className="p-3 sm:p-4 mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm">
+              <span className="font-semibold">{productTotals.qty.toLocaleString()} units</span>
+              <span className="text-muted-foreground"> · {formatRs(productTotals.revenue, settings.currency)}</span>
+              {isAdmin && (
+                <span className="text-success-strong"> · {formatRs(productTotals.profit, settings.currency)} profit</span>
+              )}
+            </div>
+            <Button variant="outline" size="sm" onClick={exportProducts}>
+              <Download className="h-4 w-4 mr-1.5" />Export
+            </Button>
+          </Card>
+
+          <Card className="overflow-hidden">
+            <MobileCards
+              items={productRows}
+              keyOf={(r) => r.name}
+              empty="No products sold in this period."
+              render={(r) => (
+                <ListCard
+                  title={r.name}
+                  subtitle={<span className="font-mono">{r.barcode || "No barcode"}</span>}
+                  right={formatRs(r.revenue, settings.currency)}
+                  rightSub={`${r.qty} sold`}
+                  fields={[
+                    { label: "Units", value: r.qty },
+                    ...(isAdmin
+                      ? [{ label: "Profit", value: formatRs(r.profit, settings.currency), className: "text-success-strong" }]
+                      : []),
+                    { label: "Invoices", value: r.invoices },
+                  ]}
+                />
+              )}
+            />
+            <TableWrap>
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 sticky top-0 z-10">
+                  <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+                    <th className="px-4 py-3 font-medium">Product</th>
+                    <th className="px-4 py-3 font-medium">Barcode</th>
+                    <th className="px-4 py-3 font-medium text-right">Qty sold</th>
+                    <th className="px-4 py-3 font-medium text-right">Revenue</th>
+                    {isAdmin && <th className="px-4 py-3 font-medium text-right">Profit</th>}
+                    <th className="px-4 py-3 font-medium text-right">Invoices</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {productRows.map((r) => (
+                    <tr key={r.name} className="border-t hover:bg-muted/40">
+                      <td className="px-4 py-3 font-medium">{r.name}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.barcode || "—"}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{r.qty}</td>
+                      <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatRs(r.revenue, settings.currency)}</td>
+                      {isAdmin && <td className="px-4 py-3 text-right tabular-nums text-success-strong">{formatRs(r.profit, settings.currency)}</td>}
+                      <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{r.invoices}</td>
+                    </tr>
+                  ))}
+                  {productRows.length === 0 && (
+                    <tr>
+                      <td colSpan={isAdmin ? 6 : 5} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                        No products sold in this period.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+                {productRows.length > 0 && (
+                  <tfoot>
+                    <tr className="border-t-2 bg-muted/30 font-semibold">
+                      <td className="px-4 py-3" colSpan={2}>Total</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{productTotals.qty.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{formatRs(productTotals.revenue, settings.currency)}</td>
+                      {isAdmin && <td className="px-4 py-3 text-right tabular-nums text-success-strong">{formatRs(productTotals.profit, settings.currency)}</td>}
+                      <td className="px-4 py-3" />
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </TableWrap>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="invoices" className="mt-4">
       <Card className="overflow-hidden">
         <MobileCards
           items={rows}
           keyOf={(s) => s.id}
-          empty="No sales match these filters."
+          empty={<EmptyState hasFilters={hasFilters} onClear={clearFilters} />}
           render={(s) => (
             <ListCard
               onClick={() => setOpen(s.id)}
               title={<span className="font-mono">{s.invoice}</span>}
-              subtitle={`${new Date(s.date).toLocaleDateString()}${isAdmin ? ` · ${shops.find((sh) => sh.id === s.shopId)?.name ?? ""}` : ""}`}
-              right={formatRs(s.total)}
-              rightSub={isAdmin ? <span className="text-success-strong">{formatRs(s.profit)} profit</span> : undefined}
+              subtitle={`${new Date(s.date).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}${isAdmin ? ` · ${shops.find((sh) => sh.id === s.shopId)?.name ?? ""}` : ""}`}
+              right={<span className="tabular-nums">{formatRs(s.total, settings.currency)}</span>}
+              rightSub={
+                isAdmin && s.status !== "Returned" ? (
+                  <span className="text-success-strong tabular-nums">{formatRs(s.profit, settings.currency)} profit</span>
+                ) : undefined
+              }
               badges={
                 <>
                   <StatusPill status={s.status} />
-                  <StatusPill status={s.synced ? "Synced" : "Pending"} />
+                  <StatusPill status={s.payment} />
                 </>
               }
               fields={[
@@ -250,26 +446,53 @@ function SalesPage() {
                 <th className="px-4 py-3 font-medium">Date</th>
                 {isAdmin && <th className="px-4 py-3 font-medium">Shop</th>}
                 <th className="px-4 py-3 font-medium">Customer</th>
+                <th className="px-4 py-3 font-medium">Paid by</th>
                 <th className="px-4 py-3 font-medium text-right">Items</th>
                 <th className="px-4 py-3 font-medium text-right">Total</th>
                 {isAdmin && <th className="px-4 py-3 font-medium text-right">Profit</th>}
                 <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Sync</th>
                 <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((s) => (
-                <tr key={s.id} className="border-t hover:bg-muted/40 cursor-pointer" onClick={() => setOpen(s.id)}>
+                <tr
+                  key={s.id}
+                  onClick={() => setOpen(s.id)}
+                  className={`border-t cursor-pointer transition-colors hover:bg-muted/40 ${
+                    // A returned invoice still shows, but reads as struck from
+                    // the figures rather than sitting there looking like income.
+                    s.status === "Returned" ? "text-muted-foreground" : ""
+                  }`}
+                >
                   <td className="px-4 py-3 font-mono text-xs">{s.invoice}</td>
-                  <td className="px-4 py-3">{new Date(s.date).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 whitespace-nowrap tabular-nums">
+                    {new Date(s.date).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}
+                    <span className="block text-xs text-muted-foreground">
+                      {new Date(s.date).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+                    </span>
+                  </td>
                   {isAdmin && <td className="px-4 py-3">{shops.find((sh) => sh.id === s.shopId)?.name}</td>}
-                  <td className="px-4 py-3">{s.customer}</td>
-                  <td className="px-4 py-3 text-right">{s.lines.reduce((a, l) => a + l.qty, 0)}</td>
-                  <td className="px-4 py-3 text-right font-medium">{formatRs(s.total)}</td>
-                  {isAdmin && <td className="px-4 py-3 text-right text-success-strong font-medium">{formatRs(s.profit)}</td>}
+                  <td className="px-4 py-3 max-w-[14rem] truncate">{s.customer}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-xs px-2 py-0.5 rounded-full border ${
+                      s.payment === "Credit"
+                        ? "bg-warning/15 text-warning-strong border-warning/40"
+                        : "bg-muted text-muted-foreground border-border"
+                    }`}>
+                      {s.payment}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums">{s.lines.reduce((a, l) => a + l.qty, 0)}</td>
+                  {/* tabular-nums keeps the rupee columns aligned digit-for-digit;
+                      proportional figures made every row's total sit differently. */}
+                  <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatRs(s.total, settings.currency)}</td>
+                  {isAdmin && (
+                    <td className="px-4 py-3 text-right font-medium tabular-nums text-success-strong">
+                      {s.status === "Returned" ? "—" : formatRs(s.profit, settings.currency)}
+                    </td>
+                  )}
                   <td className="px-4 py-3"><StatusPill status={s.status} /></td>
-                  <td className="px-4 py-3"><StatusPill status={s.synced ? "Synced" : "Pending"} /></td>
                   {/* stopPropagation so acting on a row doesn't also open the detail sheet. */}
                   <td className="px-4 py-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                     <Button size="sm" variant="ghost" onClick={() => setEditing(s)} disabled={s.status === "Returned"}>
@@ -295,15 +518,41 @@ function SalesPage() {
                   </td>
                 </tr>
               ))}
-              {/* Shop users see 7 columns, not 9 — a fixed colSpan left the empty
-                  row overhanging the table and breaking the bottom border. */}
+              {/* Shop users see fewer columns than admins — a fixed colSpan left
+                  the empty row overhanging and breaking the bottom border. */}
               {rows.length === 0 && (
-                <tr><td colSpan={isAdmin ? 10 : 8} className="px-4 py-12 text-center text-sm text-muted-foreground">No sales match these filters.</td></tr>
+                <tr>
+                  <td colSpan={isAdmin ? 9 : 7} className="px-4 py-16">
+                    <EmptyState hasFilters={hasFilters} onClear={clearFilters} />
+                  </td>
+                </tr>
               )}
             </tbody>
+            {rows.length > 0 && (
+              <tfoot>
+                <tr className="border-t-2 bg-muted/30 font-semibold">
+                  <td className="px-4 py-3" colSpan={isAdmin ? 5 : 4}>
+                    Total
+                    <span className="ml-2 font-normal text-xs text-muted-foreground">
+                      {stats.invoices} invoice{stats.invoices === 1 ? "" : "s"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums">{stats.items.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">{formatRs(stats.revenue, settings.currency)}</td>
+                  {isAdmin && (
+                    <td className="px-4 py-3 text-right tabular-nums text-success-strong">
+                      {formatRs(stats.profit, settings.currency)}
+                    </td>
+                  )}
+                  <td className="px-4 py-3" colSpan={2} />
+                </tr>
+              </tfoot>
+            )}
           </table>
         </TableWrap>
       </Card>
+        </TabsContent>
+      </Tabs>
 
       <Sheet open={!!open} onOpenChange={(o) => !o && setOpen(null)}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
@@ -391,6 +640,69 @@ function SalesPage() {
       )}
 
       <SaleEditDialog sale={editing} onClose={() => setEditing(null)} />
+    </div>
+  );
+}
+
+/**
+ * One figure in the summary strip.
+ *
+ * `tabular-nums` matters more here than it looks: without it the digits are
+ * proportionally spaced, so the numbers visibly jump sideways every time the
+ * filters change. Fixed-width figures keep them planted.
+ */
+function Metric({
+  label,
+  value,
+  emphasis,
+  tone,
+}: {
+  label: string;
+  value: string;
+  emphasis?: boolean;
+  tone?: "success" | "destructive";
+}) {
+  return (
+    <div className="px-4 py-3 sm:px-5 sm:py-4 min-w-0">
+      <dt className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{label}</dt>
+      <dd
+        className={cn(
+          "mt-1 font-semibold tabular-nums break-words",
+          emphasis ? "text-xl sm:text-2xl font-display" : "text-base sm:text-lg",
+          tone === "success" && "text-success-strong",
+          tone === "destructive" && "text-destructive",
+        )}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+/**
+ * Shown when the list comes back empty.
+ *
+ * "No sales match these filters" alone leaves you guessing whether the shop had
+ * a quiet day or you narrowed the range too far. Naming which of the two it is —
+ * and offering the way out — is the difference.
+ */
+function EmptyState({ hasFilters, onClear }: { hasFilters: boolean; onClear: () => void }) {
+  return (
+    <div className="text-center">
+      <div className="mx-auto h-11 w-11 rounded-full bg-muted flex items-center justify-center mb-3">
+        <ReceiptText className="h-5 w-5 text-muted-foreground" />
+      </div>
+      <p className="text-sm font-medium">{hasFilters ? "No sales match these filters" : "No sales recorded yet"}</p>
+      <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
+        {hasFilters
+          ? "Try widening the date range, or clear the filters to see everything."
+          : "Invoices appear here as soon as the first sale is rung up at the till."}
+      </p>
+      {hasFilters && (
+        <Button variant="outline" size="sm" className="mt-4" onClick={onClear}>
+          <RotateCcw className="h-3.5 w-3.5 mr-1.5" />Clear filters
+        </Button>
+      )}
     </div>
   );
 }

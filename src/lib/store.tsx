@@ -81,6 +81,7 @@ interface StoreState {
   addShop: (s: Omit<Shop, "id">) => void;
   updateShop: (s: Shop) => void;
   addUser: (u: Omit<User, "id">) => void;
+  updateUser: (u: User) => void;
   updateSettings: (s: Partial<Settings>) => void;
   updateReceiptDesign: (r: Partial<ReceiptDesign>) => void;
   updateDiscounts: (d: Partial<DiscountRules>) => void;
@@ -467,6 +468,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const created: User = { ...u, id: `u-${Date.now()}` };
         setUsers((prev) => [...prev, created]);
         persist("the user", () => db.upsertUser(created));
+      },
+      updateUser: (u) => {
+        setUsers((prev) => prev.map((x) => (x.id === u.id ? u : x)));
+        persist("the user", () => db.upsertUser(u));
+        // The signed-in user is held separately (and mirrored to localStorage),
+        // so editing your own account has to refresh that copy too — otherwise
+        // the header keeps showing the old name until the next sign-in.
+        setUser((cur) => {
+          if (cur?.id !== u.id) return cur;
+          try { window.localStorage.setItem(LS_USER, JSON.stringify(u)); } catch { /* private mode */ }
+          return u;
+        });
       },
       updateSettings: (s) => {
         setSettings((prev) => {

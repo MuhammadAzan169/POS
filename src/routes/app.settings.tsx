@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Download, Save, Receipt as ReceiptIcon } from "lucide-react";
+import { Download, Check, Receipt as ReceiptIcon } from "lucide-react";
 import { toast } from "sonner";
 import { downloadJson } from "@/lib/export";
 
@@ -93,11 +93,23 @@ function SettingsPage() {
   const isAdmin = user?.role === "admin";
   const d = settings.receipt;
 
+  /**
+   * A backup that omits a table is worse than no backup — you only find out
+   * what was missing when you try to restore from it. This one silently left
+   * out suppliers, and later grew to also miss day sessions, transfers,
+   * customers and the money they owe. Every dataset the store holds now goes in.
+   */
   const exportBackup = () => {
-    const { shops, users, products, inventory, sales, purchases, expenses, returns, discounts } = store;
+    const {
+      shops, users, products, inventory, sales, purchases, suppliers, expenses, returns,
+      daySessions, transfers, customers, customerPayments, discounts,
+    } = store;
     downloadJson(`apos-backup-${new Date().toISOString().slice(0, 10)}.json`, {
       exportedAt: new Date().toISOString(),
-      settings, discounts, shops, users, products, inventory, sales, purchases, expenses, returns,
+      version: 3,
+      settings, discounts,
+      shops, users, products, inventory, sales, purchases, suppliers, expenses, returns,
+      daySessions, transfers, customers, customerPayments,
     });
     toast.success("Backup downloaded");
   };
@@ -135,8 +147,17 @@ function SettingsPage() {
         subtitle="Business details and receipt design. Stock alerts and discounts have their own tabs."
         actions={
           <>
+            {/*
+              There was a "Save changes" button here that only fired a toast.
+              Every field on this page already writes through updateSettings on
+              change, so the button saved nothing — and implied that edits would
+              be LOST without it, which was the opposite of the truth.
+            */}
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground px-2.5 py-1.5">
+              <Check className="h-3.5 w-3.5 text-success-strong" />
+              Changes save as you type
+            </span>
             <Button variant="outline" onClick={exportBackup}><Download className="h-4 w-4 mr-1.5" />Export backup</Button>
-            <Button onClick={() => toast.success("Settings saved")}><Save className="h-4 w-4 mr-1.5" />Save changes</Button>
           </>
         }
       />
