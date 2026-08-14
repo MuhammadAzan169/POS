@@ -1,0 +1,546 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import {
+  useStore,
+  formatRs,
+  todayISO,
+  customerBalance,
+  totalOutstanding,
+  businessDayOf,
+  shortDay,
+  type Customer,
+  type SettledMethod,
+} from "@/lib/store";
+import { PageHeader } from "@/components/AppLayout";
+import { StatCard, StatusPill } from "@/components/Stat";
+import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Plus, Search, Download, Users, Wallet, HandCoins, Pencil, Phone, AlertTriangle } from "lucide-react";
+import { downloadCsv } from "@/lib/export";
+import { toast } from "sonner";
+
+export const Route = createFileRoute("/app/customers")({ component: CustomersPage });
+
+const EMPTY = {
+  name: "", contact: "", phone: "", address: "", notes: "",
+  kind: "wholesale" as Customer["kind"], creditLimit: 0,
+};
+
+function CustomersPage() {
+  const {
+    user, customers, customerPayments, sales, shops, settings, pendingMigration,
+    addCustomer, updateCustomer, addCustomerPayment,
+  } = useStore();
+  const isAdmin = user?.role === "admin";
+  const currency = settings.currency;
+
+  /**
+   * Without the tables, a customer added here would exist in this browser only —
+   * and any credit recorded against them would disappear on reload, losing the
+   * record of a real debt. Refusing up front beats losing the money.
+   */
+  const cannotSave = Boolean(pendingMigration?.includes("customers"));
+
+  const [q, setQ] = useState("");
+  const [filter, setFilter] = useState<"all" | "owing" | "wholesale">("all");
+  const [form, setForm] = useState(EMPTY);
+  const [editing, setEditing] = useState<Customer | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [detail, setDetail] = useState<string | null>(null);
+  const [payFor, setPayFor] = useState<Customer | null>(null);
+  const [pay, setPay] = useState({ amount: 0, method: "Cash" as SettledMethod, note: "", shopId: "" });
+
+  const ledger = useMemo(() => ({ sales, customerPayments }), [sales, customerPayments]);
+
+  const rows = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return customers
+      .map((c) => ({ customer: c, balance: customerBalance(c, ledger) }))
+      .filter((r) =>
+        term
+          ? r.customer.name.toLowerCase().includes(term) ||
+            r.customer.contact.toLowerCase().includes(term) ||
+            r.customer.phone.includes(term)
+          : true,
+      )
+      .filter((r) =>
+        filter === "owing" ? r.balance.outstanding > 0
+        : filter === "wholesale" ? r.customer.kind === "wholesale"
+        : true,
+      )
+      // Whoever owes the most comes first — that's the list you act on.
+      .sort((a, b) => b.balance.outstanding - a.balance.outstanding || a.customer.name.localeCompare(b.customer.name));
+  }, [customers, ledger, q, filter]);
+
+  const owed = useMemo(() => totalOutstanding(customers, ledger), [customers, ledger]);
+  const owingCount = rows.filter((r) => r.balance.outstanding > 0).length;
+  const overLimit = useMemo(
+    () => customers.filter((c) => customerBalance(c, ledger).overLimit).length,
+    [customers, ledger],
+  );
+
+  const selected = detail ? customers.find((c) => c.id === detail) : null;
+  const selectedBalance = selected ? customerBalance(selected, ledger) : null;
+  const history = useMemo(() => {
+    if (!selected) return { orders: [], payments: [] };
+    return {
+      orders: sales.filter((s) => s.customerId === selected.id).sort((a, b) => b.date.localeCompare(a.date)),
+      payments: customerPayments.filter((p) => p.customerId === selected.id).sort((a, b) => b.date.localeCompare(a.date)),
+    };
+  }, [selected, sales, customerPayments]);
+
+  const openAdd = () => { setEditing(null); setForm(EMPTY); setFormOpen(true); };
+  const openEdit = (c: Customer) => {
+    setEditing(c);
+    setForm({ name: c.name, contact: c.contact, phone: c.phone, address: c.address, notes: c.notes, kind: c.kind, creditLimit: c.creditLimit });
+    setFormOpen(true);
+  };
+
+  const save = () => {
+    const name = form.name.trim();
+    if (!name) { toast.error("Customer name required"); return; }
+    if (customers.some((c) => c.name.toLowerCase() === name.toLowerCase() && c.id !== editing?.id)) {
+      toast.error(`“${name}” already exists`);
+      return;
+    }
+    if (form.creditLimit < 0) { toast.error("Credit limit can't be negative"); return; }
+    if (editing) {
+      updateCustomer({ ...editing, ...form, name });
+      toast.success("Customer updated");
+    } else {
+      addCustomer({ ...form, name, active: true });
+      toast.success(`${name} added`);
+    }
+    setFormOpen(false);
+  };
+
+  const openPayment = (c: Customer) => {
+    const balance = customerBalance(c, ledger);
+    if (balance.outstanding <= 0) { toast.info(`${c.name} has nothing outstanding`); return; }
+    setPayFor(c);
+    // Default to settling the lot; part-payments are the edit, not the norm.
+    setPay({ amount: balance.outstanding, method: "Cash", note: "", shopId: user?.shopId ?? shops[0]?.id ?? "" });
+  };
+
+  const savePayment = () => {
+    if (!payFor) return;
+    const balance = customerBalance(payFor, ledger);
+    if (pay.amount <= 0) { toast.error("Enter an amount"); return; }
+    // Accepting more than is owed would leave a negative balance that reads as
+    // the business owing the customer, which is not a thing this app models.
+    if (pay.amount > balance.outstanding) {
+      toast.error(`That's more than the ${formatRs(balance.outstanding, currency)} outstanding`);
+      return;
+    }
+    if (!pay.shopId) { toast.error("Pick which shop received the money"); return; }
+    addCustomerPayment({
+      customerId: payFor.id,
+      date: todayISO(),
+      amount: pay.amount,
+      method: pay.method,
+      shopId: pay.shopId,
+      note: pay.note.trim(),
+      receivedBy: user?.name ?? "Unknown",
+    });
+    toast.success(`${formatRs(pay.amount, currency)} received from ${payFor.name}`);
+    setPayFor(null);
+  };
+
+  const exportCsv = () => {
+    if (rows.length === 0) { toast.error("Nothing to export"); return; }
+    downloadCsv(
+      `customers-${todayISO()}.csv`,
+      ["Customer", "Contact", "Phone", "Type", "Orders", "Lifetime value", "On account", "Paid", "Outstanding", "Credit limit", "Last purchase"],
+      rows.map(({ customer: c, balance: b }) => [
+        c.name, c.contact, c.phone, c.kind, b.orders, b.lifetime, b.creditSales, b.paid, b.outstanding,
+        c.creditLimit || "none", b.lastPurchase ? businessDayOf({ date: b.lastPurchase }) : "",
+      ]),
+    );
+    toast.success("Customers exported");
+  };
+
+  return (
+    <div>
+      <PageHeader
+        title="Customers"
+        subtitle="Buyers you deal with by name — mostly trade customers who buy in bulk and settle later."
+        actions={
+          <>
+            <Button variant="outline" onClick={exportCsv}><Download className="h-4 w-4 mr-1.5" />Export</Button>
+            <Button onClick={openAdd} disabled={cannotSave}><Plus className="h-4 w-4 mr-1.5" />Add customer</Button>
+          </>
+        }
+      />
+
+      {cannotSave && (
+        <Card className="p-4 mb-4 border-warning/40 bg-warning/10 flex items-start gap-3">
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-warning-strong" />
+          <div className="text-sm">
+            <div className="font-medium text-warning-strong">Customers are read-only until the database is updated</div>
+            <p className="text-muted-foreground mt-1">
+              Adding a customer or recording a payment now would keep it in this browser only, and any credit
+              owed would be lost on reload. Run{" "}
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-xs break-all">
+                supabase/migrations/003_customers_and_credit.sql
+              </code>{" "}
+              in the Supabase SQL Editor, then reload.
+            </p>
+          </div>
+        </Card>
+      )}
+
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4 mb-4">
+        <StatCard label="Customers" value={String(customers.length)} sub={`${customers.filter((c) => c.kind === "wholesale").length} trade buyers`} icon={<Users className="h-5 w-5" />} tone="primary" />
+        <StatCard label="Total outstanding" value={formatRs(owed, currency)} sub={`${owingCount} owing`} icon={<Wallet className="h-5 w-5" />} tone="warning" />
+        <StatCard label="At credit limit" value={String(overLimit)} sub={overLimit > 0 ? "no more credit" : "all within limit"} icon={<AlertTriangle className="h-5 w-5" />} tone={overLimit > 0 ? "warning" : "default"} />
+        {isAdmin && (
+          <StatCard
+            label="Collected"
+            value={formatRs(customerPayments.reduce((a, p) => a + p.amount, 0), currency)}
+            sub="all time"
+            icon={<HandCoins className="h-5 w-5" />}
+            tone="success"
+          />
+        )}
+      </div>
+
+      <Card className="p-3 sm:p-4 mb-4 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-end">
+        <div className="space-y-1.5 col-span-2 sm:col-auto">
+          <Label className="text-xs">Search</Label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input placeholder="Name, contact or phone…" value={q} onChange={(e) => setQ(e.target.value)} className="pl-9 w-full sm:w-64" />
+          </div>
+        </div>
+        <div className="space-y-1.5 col-span-2 sm:col-auto">
+          <Label className="text-xs">Show</Label>
+          <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
+            <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All customers</SelectItem>
+              <SelectItem value="owing">Owing money</SelectItem>
+              <SelectItem value="wholesale">Trade buyers</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <p className="col-span-2 text-xs text-muted-foreground sm:ml-auto">
+          Tap a customer for their full history.
+        </p>
+      </Card>
+
+      <Card className="overflow-hidden">
+        <MobileCards
+          items={rows}
+          keyOf={(r) => r.customer.id}
+          empty="No customers match."
+          render={({ customer: c, balance: b }) => (
+            <ListCard
+              onClick={() => setDetail(c.id)}
+              title={c.name}
+              subtitle={c.contact || c.phone}
+              right={b.outstanding > 0 ? formatRs(b.outstanding, currency) : "—"}
+              rightSub={b.outstanding > 0 ? "outstanding" : "settled"}
+              badges={
+                <>
+                  <StatusPill status={c.kind === "wholesale" ? "Trade" : "Retail"} />
+                  {b.overLimit && <StatusPill status="OUT" />}
+                </>
+              }
+              fields={[
+                { label: "Orders", value: b.orders },
+                { label: "Lifetime", value: formatRs(b.lifetime, currency) },
+                { label: "Limit", value: c.creditLimit ? formatRs(c.creditLimit, currency) : "none" },
+              ]}
+              actions={
+                <>
+                  <Button size="sm" variant="outline" disabled={b.outstanding <= 0} onClick={() => openPayment(c)}>
+                    <HandCoins className="h-3.5 w-3.5 mr-1.5" />Receive
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => openEdit(c)}>
+                    <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
+                  </Button>
+                </>
+              }
+            />
+          )}
+        />
+        <TableWrap>
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 sticky top-0 z-10">
+              <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+                <th className="px-4 py-3 font-medium">Customer</th>
+                <th className="px-4 py-3 font-medium">Contact</th>
+                <th className="px-4 py-3 font-medium">Type</th>
+                <th className="px-4 py-3 font-medium text-right">Orders</th>
+                <th className="px-4 py-3 font-medium text-right">Lifetime</th>
+                <th className="px-4 py-3 font-medium text-right">Outstanding</th>
+                <th className="px-4 py-3 font-medium text-right">Limit</th>
+                <th className="px-4 py-3 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(({ customer: c, balance: b }) => (
+                <tr key={c.id} className="border-t hover:bg-muted/40 cursor-pointer" onClick={() => setDetail(c.id)}>
+                  <td className="px-4 py-3 font-medium">
+                    {c.name}
+                    {b.overLimit && (
+                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-destructive/10 text-destructive border border-destructive/30">
+                        at limit
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    <div>{c.contact || "—"}</div>
+                    {c.phone && <div className="text-xs font-mono">{c.phone}</div>}
+                  </td>
+                  <td className="px-4 py-3"><StatusPill status={c.kind === "wholesale" ? "Trade" : "Retail"} /></td>
+                  <td className="px-4 py-3 text-right">{b.orders}</td>
+                  <td className="px-4 py-3 text-right">{formatRs(b.lifetime, currency)}</td>
+                  <td className={`px-4 py-3 text-right font-semibold ${b.outstanding > 0 ? "text-warning-strong" : "text-muted-foreground"}`}>
+                    {b.outstanding > 0 ? formatRs(b.outstanding, currency) : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right text-muted-foreground">
+                    {c.creditLimit ? formatRs(c.creditLimit, currency) : "none"}
+                  </td>
+                  <td className="px-4 py-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    <Button size="sm" variant="ghost" disabled={b.outstanding <= 0} onClick={() => openPayment(c)}>
+                      <HandCoins className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(c)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">No customers match.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </TableWrap>
+      </Card>
+
+      {/* ------------------------------------------------- add / edit dialog */}
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>{editing ? "Edit customer" : "Add customer"}</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Name</Label>
+              <Input autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Bilal Traders" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Contact person</Label>
+              <Input value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Phone</Label>
+              <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Type</Label>
+              <Select value={form.kind} onValueChange={(v) => setForm({ ...form, kind: v as Customer["kind"] })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="wholesale">Trade buyer (bulk)</SelectItem>
+                  <SelectItem value="retail">Retail customer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Credit limit ({currency})</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.creditLimit || ""}
+                placeholder="0 = no limit"
+                onChange={(e) => setForm({ ...form, creditLimit: Math.max(0, Number(e.target.value) || 0) })}
+              />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Address</Label>
+              <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Notes</Label>
+              <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="e.g. Buys every Monday, pays within a week" />
+            </div>
+            <p className="sm:col-span-2 text-xs text-muted-foreground">
+              A credit limit stops the till putting more on this customer's account once they reach it.
+              Leave it at 0 if you don't want a cap.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>
+            <Button onClick={save}>{editing ? "Save changes" : "Add customer"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ----------------------------------------------- receive payment */}
+      <Dialog open={!!payFor} onOpenChange={(o) => !o && setPayFor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Receive payment</DialogTitle>
+            <DialogDescription>
+              {payFor && `${payFor.name} owes ${formatRs(customerBalance(payFor, ledger).outstanding, currency)}.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Amount ({currency})</Label>
+              <Input
+                type="number"
+                min={0}
+                autoFocus
+                value={pay.amount || ""}
+                onChange={(e) => setPay({ ...pay, amount: Math.max(0, Number(e.target.value) || 0) })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Method</Label>
+              <Select value={pay.method} onValueChange={(v) => setPay({ ...pay, method: v as SettledMethod })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">Cash</SelectItem>
+                  <SelectItem value="Card">Card</SelectItem>
+                  <SelectItem value="Online">Online</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Received at</Label>
+              <Select value={pay.shopId} onValueChange={(v) => setPay({ ...pay, shopId: v })} disabled={!isAdmin}>
+                <SelectTrigger><SelectValue placeholder="Which shop took the money?" /></SelectTrigger>
+                <SelectContent>
+                  {(isAdmin ? shops : shops.filter((s) => s.id === user?.shopId)).map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Note (optional)</Label>
+              <Input value={pay.note} onChange={(e) => setPay({ ...pay, note: e.target.value })} placeholder="e.g. Part payment against last week's bill" />
+            </div>
+            {pay.method === "Cash" && (
+              <p className="sm:col-span-2 text-xs text-muted-foreground">
+                Cash goes into that shop's drawer, so tonight's cash count will expect it.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPayFor(null)}>Cancel</Button>
+            <Button onClick={savePayment}><HandCoins className="h-4 w-4 mr-1.5" />Record payment</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --------------------------------------------------- detail sheet */}
+      <Sheet open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+          {selected && selectedBalance && (
+            <>
+              <SheetHeader>
+                <SheetTitle>{selected.name}</SheetTitle>
+                <SheetDescription>
+                  {[selected.contact, selected.phone, selected.address].filter(Boolean).join(" · ") || "No contact details"}
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="mt-6 space-y-5">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg border p-3">
+                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Outstanding</div>
+                    <div className={`font-semibold text-lg mt-1 ${selectedBalance.outstanding > 0 ? "text-warning-strong" : ""}`}>
+                      {formatRs(selectedBalance.outstanding, currency)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Lifetime value</div>
+                    <div className="font-semibold text-lg mt-1">{formatRs(selectedBalance.lifetime, currency)}</div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border p-3 space-y-2 text-sm">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Put on account</span><span>{formatRs(selectedBalance.creditSales, currency)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Paid back</span><span>− {formatRs(selectedBalance.paid, currency)}</span></div>
+                  <div className="flex justify-between border-t pt-2 font-semibold"><span>Still owed</span><span>{formatRs(selectedBalance.outstanding, currency)}</span></div>
+                  {selected.creditLimit > 0 && (
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Credit limit</span>
+                      <span>{formatRs(selected.creditLimit, currency)}{selectedBalance.overLimit ? " — reached" : ""}</span>
+                    </div>
+                  )}
+                </div>
+
+                {selected.notes && (
+                  <p className="text-sm text-muted-foreground italic">{selected.notes}</p>
+                )}
+
+                <div className="flex gap-2">
+                  <Button className="flex-1" disabled={selectedBalance.outstanding <= 0} onClick={() => { setDetail(null); openPayment(selected); }}>
+                    <HandCoins className="h-4 w-4 mr-1.5" />Receive payment
+                  </Button>
+                  {selected.phone && (
+                    <Button variant="outline" asChild>
+                      <a href={`tel:${selected.phone}`}><Phone className="h-4 w-4" /></a>
+                    </Button>
+                  )}
+                </div>
+
+                <div>
+                  <h4 className="font-semibold text-sm mb-2">Orders ({history.orders.length})</h4>
+                  <div className="border rounded-lg divide-y max-h-64 overflow-y-auto">
+                    {history.orders.map((s) => (
+                      <div key={s.id} className="p-3 flex items-start justify-between gap-3 text-sm">
+                        <div className="min-w-0">
+                          <div className="font-mono text-xs">{s.invoice}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {shortDay(businessDayOf(s))} · {s.payment}
+                            {s.status === "Returned" && " · returned"}
+                          </div>
+                        </div>
+                        <div className="font-medium shrink-0">{formatRs(s.total, currency)}</div>
+                      </div>
+                    ))}
+                    {history.orders.length === 0 && (
+                      <div className="p-6 text-center text-sm text-muted-foreground">No orders yet.</div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="font-semibold text-sm mb-2">Payments ({history.payments.length})</h4>
+                  <div className="border rounded-lg divide-y max-h-64 overflow-y-auto">
+                    {history.payments.map((p) => (
+                      <div key={p.id} className="p-3 flex items-start justify-between gap-3 text-sm">
+                        <div className="min-w-0">
+                          <div>{shortDay(p.date)} · {p.method}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                            {shops.find((s) => s.id === p.shopId)?.name}
+                            {p.note ? ` · ${p.note}` : ""}
+                          </div>
+                        </div>
+                        <div className="font-medium text-success-strong shrink-0">{formatRs(p.amount, currency)}</div>
+                      </div>
+                    ))}
+                    {history.payments.length === 0 && (
+                      <div className="p-6 text-center text-sm text-muted-foreground">No payments recorded.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}

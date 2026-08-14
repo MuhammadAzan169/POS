@@ -27,8 +27,13 @@ import {
   Menu,
   MoreHorizontal,
   X,
+  Sunrise,
+  Moon,
+  ArrowLeftRight,
+  CalendarClock,
+  Contact,
 } from "lucide-react";
-import { useStore, formatRs } from "@/lib/store";
+import { useStore, formatRs, openSessionFor, shortDay } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Confirm } from "@/components/Confirm";
@@ -39,9 +44,12 @@ type NavItem = { to: string; label: string; icon: ReactNode };
 
 const ADMIN_NAV: NavItem[] = [
   { to: "/app/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
+  { to: "/app/daybook", label: "Day Book", icon: <CalendarClock className="h-4 w-4" /> },
   { to: "/app/ai", label: "AI Assistant", icon: <Sparkles className="h-4 w-4" /> },
   { to: "/app/sales", label: "Sales", icon: <Receipt className="h-4 w-4" /> },
   { to: "/app/purchases", label: "Purchases", icon: <Package className="h-4 w-4" /> },
+  { to: "/app/transfers", label: "Transfers", icon: <ArrowLeftRight className="h-4 w-4" /> },
+  { to: "/app/customers", label: "Customers", icon: <Contact className="h-4 w-4" /> },
   { to: "/app/suppliers", label: "Suppliers", icon: <Truck className="h-4 w-4" /> },
   { to: "/app/products", label: "Products", icon: <ScanLine className="h-4 w-4" /> },
   { to: "/app/inventory", label: "Inventory", icon: <Boxes className="h-4 w-4" /> },
@@ -55,10 +63,16 @@ const ADMIN_NAV: NavItem[] = [
   { to: "/app/settings", label: "Settings", icon: <SettingsIcon className="h-4 w-4" /> },
 ];
 
+// Shopkeepers now get Day Book (start/end their trading day), Purchases (buying
+// stock in for their own shop) and Transfers (stock moving in from wholesale).
 const SHOP_NAV: NavItem[] = [
   { to: "/app/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
+  { to: "/app/daybook", label: "Day Book", icon: <CalendarClock className="h-4 w-4" /> },
   { to: "/app/pos", label: "New Sale", icon: <ShoppingCart className="h-4 w-4" /> },
   { to: "/app/sales", label: "Sales", icon: <Receipt className="h-4 w-4" /> },
+  { to: "/app/customers", label: "Customers", icon: <Contact className="h-4 w-4" /> },
+  { to: "/app/purchases", label: "Purchases", icon: <Package className="h-4 w-4" /> },
+  { to: "/app/transfers", label: "Transfers", icon: <ArrowLeftRight className="h-4 w-4" /> },
   { to: "/app/returns", label: "Returns", icon: <Undo2 className="h-4 w-4" /> },
   { to: "/app/inventory", label: "Inventory", icon: <Boxes className="h-4 w-4" /> },
   { to: "/app/expenses", label: "Expenses", icon: <Wallet className="h-4 w-4" /> },
@@ -70,8 +84,8 @@ const SHOP_NAV: NavItem[] = [
  * Everything else lives one tap away behind "More", which opens the same drawer
  * as the header's hamburger.
  */
-const ADMIN_BOTTOM = ["/app/dashboard", "/app/sales", "/app/products", "/app/inventory"];
-const SHOP_BOTTOM = ["/app/dashboard", "/app/pos", "/app/sales", "/app/inventory"];
+const ADMIN_BOTTOM = ["/app/dashboard", "/app/daybook", "/app/sales", "/app/inventory"];
+const SHOP_BOTTOM = ["/app/dashboard", "/app/pos", "/app/daybook", "/app/sales"];
 
 /**
  * The header search box used to be a plain <input> wired to nothing — typing in
@@ -177,6 +191,46 @@ function GlobalSearch({ autoFocus, onDone }: { autoFocus?: boolean; onDone?: () 
   );
 }
 
+/**
+ * Whether this shop's trading day is open, always visible in the header.
+ *
+ * A shopkeeper who forgets to start the day finds the till blocked; one who
+ * forgets to END it silently books tomorrow's sales onto today. Both mistakes
+ * are cheap to make and expensive to unpick, so the state is never more than a
+ * glance away — and the pill is a link straight to the day book.
+ */
+function DayStatusPill() {
+  const { user, daySessions, shops } = useStore();
+
+  // Admins aren't tied to one till; their per-shop view is on the dashboard.
+  if (!user || user.role === "admin" || !user.shopId) return null;
+
+  const session = openSessionFor(daySessions, user.shopId);
+  const shop = shops.find((s) => s.id === user.shopId);
+
+  return (
+    <Link
+      to="/app/daybook"
+      title={
+        session
+          ? `Trading day of ${shortDay(session.businessDate)} is open at ${shop?.name ?? "your shop"}`
+          : "No day is open — start the day before selling"
+      }
+      className={cn(
+        "flex items-center gap-1.5 text-xs font-medium px-2 sm:px-2.5 py-1.5 rounded-full border transition-colors shrink-0",
+        session
+          ? "bg-success/10 text-success-strong border-success/30 hover:bg-success/20"
+          : "bg-warning/15 text-warning-strong border-warning/40 hover:bg-warning/25",
+      )}
+    >
+      {session ? <Sunrise className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+      <span className="hidden xs:inline">
+        {session ? shortDay(session.businessDate) : "Day closed"}
+      </span>
+    </Link>
+  );
+}
+
 /** Tells you at a glance whether data is coming from Supabase or the demo set. */
 function DataSourceBadge() {
   const { usingSupabase, dbError } = useStore();
@@ -190,15 +244,62 @@ function DataSourceBadge() {
     <span
       title={title}
       className={cn(
-        "hidden xl:inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full border shrink-0",
+        // Shown at every width: a database problem is not a detail to hide on
+        // small screens, which is exactly where a shopkeeper is working.
+        "inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full border shrink-0",
         dbError
           ? "bg-destructive/10 text-destructive border-destructive/30"
           : "bg-warning/15 text-warning-strong border-warning/40",
       )}
     >
       <Database className="h-3.5 w-3.5" />
-      <span>{dbError ? "Database error" : "Demo data"}</span>
+      <span className="hidden sm:inline">{dbError ? "Database error" : "Demo data"}</span>
     </span>
+  );
+}
+
+/**
+ * The banner shown when the database is reachable but out of date.
+ *
+ * A tooltip on a small red pill was the only clue about what had gone wrong,
+ * and it named a Postgres relation rather than the one command that fixes it.
+ * This states the remedy in full and can be dismissed for the session.
+ */
+function MigrationNotice() {
+  const { pendingMigration } = useStore();
+  const [hidden, setHidden] = useState(false);
+
+  if (!pendingMigration || pendingMigration.length === 0 || hidden) return null;
+
+  return (
+    <div
+      data-print="hide"
+      className="mb-4 rounded-lg border border-warning/40 bg-warning/10 p-3 sm:p-4 flex items-start gap-3"
+    >
+      <Database className="h-4 w-4 mt-0.5 shrink-0 text-warning-strong" />
+      <div className="min-w-0 flex-1 text-sm">
+        <div className="font-medium text-warning-strong">Your database needs one update</div>
+        <p className="text-muted-foreground mt-1">
+          Everything else is working on your real data, but{" "}
+          <span className="text-foreground">{pendingMigration.join(", ")}</span>{" "}
+          {pendingMigration.length === 1 ? "is" : "are"} missing, so the day book and stock transfers
+          can't save yet. In the Supabase dashboard open{" "}
+          <span className="font-medium text-foreground">SQL Editor → New query</span>, paste the
+          contents of{" "}
+          <code className="px-1 py-0.5 rounded bg-muted font-mono text-xs break-all">
+            supabase/migrations/002_day_book_and_wholesale.sql
+          </code>{" "}
+          and run it, then reload this page.
+        </p>
+      </div>
+      <button
+        onClick={() => setHidden(true)}
+        aria-label="Dismiss"
+        className="h-8 w-8 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
   );
 }
 
@@ -387,12 +488,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
             <DataSourceBadge />
 
+            {/* ml-auto here rather than on the online pill: on a phone the day
+                status is the first item in the trailing cluster. */}
+            <div className="md:ml-auto flex items-center gap-2 shrink-0">
+              <DayStatusPill />
+            </div>
+
             <button
               onClick={() => setOnline(!online)}
               className={cn(
-                // ml-auto anchors this trailing cluster to the right edge from md
-                // up, where the capped search box would otherwise leave a gap.
-                "md:ml-auto flex items-center gap-1.5 text-xs font-medium px-2 sm:px-2.5 py-1.5 rounded-full border transition-colors shrink-0",
+                "flex items-center gap-1.5 text-xs font-medium px-2 sm:px-2.5 py-1.5 rounded-full border transition-colors shrink-0",
                 online
                   ? "bg-success/10 text-success-strong border-success/30"
                   : "bg-warning/15 text-warning-strong border-warning/40",
@@ -448,6 +553,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <main data-app-main className="flex-1 overflow-y-auto overscroll-contain px-safe">
           {/* pb-24 on phones clears the fixed bottom bar; md+ has no bar. */}
           <div className="p-4 pb-24 md:p-6 md:pb-6 lg:p-8 max-w-[1600px] w-full mx-auto h-full flex flex-col">
+            <MigrationNotice />
             {children}
           </div>
         </main>

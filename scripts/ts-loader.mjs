@@ -1,12 +1,18 @@
 /**
- * Minimal TypeScript loader for the seed generator.
+ * TypeScript loader for the seed generator.
  *
- * seed-data.ts contains only data plus `import type` statements, so stripping
- * the type-only imports and the annotations esbuild would normally remove is
- * enough — no full compiler needed. Used solely by scripts/gen-seed-sql.mjs.
+ * Used solely by scripts/gen-seed-sql.mjs, which imports src/lib/seed-data.ts
+ * so the SQL it writes is generated from exactly the data the app shows.
+ *
+ * This used to strip types with a pile of regexes. That worked only for as long
+ * as seed-data.ts stayed pure data — the first typed helper function it pulled
+ * in broke the build with a parse error. TypeScript is already a devDependency,
+ * so it does the transpiling now: types are erased properly, and nothing here
+ * needs touching when the source grows a syntax the regexes never anticipated.
  */
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 export async function resolve(specifier, context, next) {
   if (specifier.endsWith(".ts")) {
@@ -22,30 +28,20 @@ export async function resolve(specifier, context, next) {
 export async function load(url, context, next) {
   if (!url.endsWith(".ts")) return next(url, context);
 
-  let src = await readFile(fileURLToPath(url), "utf8");
+  const path = fileURLToPath(url);
+  const src = await readFile(path, "utf8");
 
-  // Interfaces and type aliases vanish at runtime — remove them so Node can parse
-  // the file. Interface bodies always close with `}` at column 0 in this codebase.
-  // \r?\n throughout: this repo's files use CRLF endings.
-  src = src.replace(/^export interface [\s\S]*?^\}\r?\n/gm, "");
-  src = src.replace(/^export type [^=]+=[^;]+;\r?\n/gm, "");
-
-  // Drop `import type { ... } from "..."` blocks entirely.
-  src = src.replace(/import\s+type\s*\{[\s\S]*?\}\s*from\s*["'][^"']+["'];?/g, "");
-  // Drop type-only members from mixed imports: `import { a, type B } from "x"`.
-  src = src.replace(/import\s*\{([\s\S]*?)\}\s*from\s*(["'][^"']+["'])/g, (m, names, from) => {
-    const kept = names
-      .split(",")
-      .map((n) => n.trim())
-      .filter((n) => n && !n.startsWith("type "));
-    return kept.length ? `import { ${kept.join(", ")} } from ${from}` : "";
+  const { outputText } = ts.transpileModule(src, {
+    fileName: path,
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+      // Type-only imports must be dropped outright: Node would otherwise try to
+      // resolve a runtime module for something that only exists at compile time.
+      verbatimModuleSyntax: false,
+      isolatedModules: true,
+    },
   });
-  // Strip annotations on exported consts and function return types.
-  src = src.replace(/export const (\w+)\s*:\s*[^=]+=/g, "export const $1 =");
-  src = src.replace(/export function (\w+)\(\)\s*:\s*[^{]+\{/g, "export function $1() {");
-  // Strip inline annotations on local declarations and `as X` casts.
-  src = src.replace(/const (\w+)\s*:\s*[A-Za-z_$][\w<>\[\]., |]*\s*=/g, "const $1 =");
-  src = src.replace(/\s+as\s+[A-Za-z_$][\w<>\[\].|]*/g, "");
 
-  return { format: "module", source: src, shortCircuit: true };
+  return { format: "module", source: outputText, shortCircuit: true };
 }

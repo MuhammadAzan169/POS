@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppUsersRouteImport } from './routes/app.users'
+import { Route as AppTransfersRouteImport } from './routes/app.transfers'
 import { Route as AppSuppliersRouteImport } from './routes/app.suppliers'
 import { Route as AppShopsRouteImport } from './routes/app.shops'
 import { Route as AppSettingsRouteImport } from './routes/app.settings'
@@ -24,7 +25,9 @@ import { Route as AppPosRouteImport } from './routes/app.pos'
 import { Route as AppInventoryRouteImport } from './routes/app.inventory'
 import { Route as AppExpensesRouteImport } from './routes/app.expenses'
 import { Route as AppDiscountsRouteImport } from './routes/app.discounts'
+import { Route as AppDaybookRouteImport } from './routes/app.daybook'
 import { Route as AppDashboardRouteImport } from './routes/app.dashboard'
+import { Route as AppCustomersRouteImport } from './routes/app.customers'
 import { Route as AppAlertsRouteImport } from './routes/app.alerts'
 import { Route as AppAiRouteImport } from './routes/app.ai'
 import { Route as AppAccountRouteImport } from './routes/app.account'
@@ -42,6 +45,11 @@ const IndexRoute = IndexRouteImport.update({
 const AppUsersRoute = AppUsersRouteImport.update({
   id: '/users',
   path: '/users',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTransfersRoute = AppTransfersRouteImport.update({
+  id: '/transfers',
+  path: '/transfers',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSuppliersRoute = AppSuppliersRouteImport.update({
@@ -104,9 +112,19 @@ const AppDiscountsRoute = AppDiscountsRouteImport.update({
   path: '/discounts',
   getParentRoute: () => AppRoute,
 } as any)
+const AppDaybookRoute = AppDaybookRouteImport.update({
+  id: '/daybook',
+  path: '/daybook',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCustomersRoute = AppCustomersRouteImport.update({
+  id: '/customers',
+  path: '/customers',
   getParentRoute: () => AppRoute,
 } as any)
 const AppAlertsRoute = AppAlertsRouteImport.update({
@@ -131,7 +149,9 @@ export interface FileRoutesByFullPath {
   '/app/account': typeof AppAccountRoute
   '/app/ai': typeof AppAiRoute
   '/app/alerts': typeof AppAlertsRoute
+  '/app/customers': typeof AppCustomersRoute
   '/app/dashboard': typeof AppDashboardRoute
+  '/app/daybook': typeof AppDaybookRoute
   '/app/discounts': typeof AppDiscountsRoute
   '/app/expenses': typeof AppExpensesRoute
   '/app/inventory': typeof AppInventoryRoute
@@ -144,6 +164,7 @@ export interface FileRoutesByFullPath {
   '/app/settings': typeof AppSettingsRoute
   '/app/shops': typeof AppShopsRoute
   '/app/suppliers': typeof AppSuppliersRoute
+  '/app/transfers': typeof AppTransfersRoute
   '/app/users': typeof AppUsersRoute
 }
 export interface FileRoutesByTo {
@@ -152,7 +173,9 @@ export interface FileRoutesByTo {
   '/app/account': typeof AppAccountRoute
   '/app/ai': typeof AppAiRoute
   '/app/alerts': typeof AppAlertsRoute
+  '/app/customers': typeof AppCustomersRoute
   '/app/dashboard': typeof AppDashboardRoute
+  '/app/daybook': typeof AppDaybookRoute
   '/app/discounts': typeof AppDiscountsRoute
   '/app/expenses': typeof AppExpensesRoute
   '/app/inventory': typeof AppInventoryRoute
@@ -165,6 +188,7 @@ export interface FileRoutesByTo {
   '/app/settings': typeof AppSettingsRoute
   '/app/shops': typeof AppShopsRoute
   '/app/suppliers': typeof AppSuppliersRoute
+  '/app/transfers': typeof AppTransfersRoute
   '/app/users': typeof AppUsersRoute
 }
 export interface FileRoutesById {
@@ -174,7 +198,9 @@ export interface FileRoutesById {
   '/app/account': typeof AppAccountRoute
   '/app/ai': typeof AppAiRoute
   '/app/alerts': typeof AppAlertsRoute
+  '/app/customers': typeof AppCustomersRoute
   '/app/dashboard': typeof AppDashboardRoute
+  '/app/daybook': typeof AppDaybookRoute
   '/app/discounts': typeof AppDiscountsRoute
   '/app/expenses': typeof AppExpensesRoute
   '/app/inventory': typeof AppInventoryRoute
@@ -187,6 +213,7 @@ export interface FileRoutesById {
   '/app/settings': typeof AppSettingsRoute
   '/app/shops': typeof AppShopsRoute
   '/app/suppliers': typeof AppSuppliersRoute
+  '/app/transfers': typeof AppTransfersRoute
   '/app/users': typeof AppUsersRoute
 }
 export interface FileRouteTypes {
@@ -197,7 +224,9 @@ export interface FileRouteTypes {
     | '/app/account'
     | '/app/ai'
     | '/app/alerts'
+    | '/app/customers'
     | '/app/dashboard'
+    | '/app/daybook'
     | '/app/discounts'
     | '/app/expenses'
     | '/app/inventory'
@@ -210,6 +239,7 @@ export interface FileRouteTypes {
     | '/app/settings'
     | '/app/shops'
     | '/app/suppliers'
+    | '/app/transfers'
     | '/app/users'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -218,7 +248,9 @@ export interface FileRouteTypes {
     | '/app/account'
     | '/app/ai'
     | '/app/alerts'
+    | '/app/customers'
     | '/app/dashboard'
+    | '/app/daybook'
     | '/app/discounts'
     | '/app/expenses'
     | '/app/inventory'
@@ -231,6 +263,7 @@ export interface FileRouteTypes {
     | '/app/settings'
     | '/app/shops'
     | '/app/suppliers'
+    | '/app/transfers'
     | '/app/users'
   id:
     | '__root__'
@@ -239,7 +272,9 @@ export interface FileRouteTypes {
     | '/app/account'
     | '/app/ai'
     | '/app/alerts'
+    | '/app/customers'
     | '/app/dashboard'
+    | '/app/daybook'
     | '/app/discounts'
     | '/app/expenses'
     | '/app/inventory'
@@ -252,6 +287,7 @@ export interface FileRouteTypes {
     | '/app/settings'
     | '/app/shops'
     | '/app/suppliers'
+    | '/app/transfers'
     | '/app/users'
   fileRoutesById: FileRoutesById
 }
@@ -281,6 +317,13 @@ declare module '@tanstack/react-router' {
       path: '/users'
       fullPath: '/app/users'
       preLoaderRoute: typeof AppUsersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/transfers': {
+      id: '/app/transfers'
+      path: '/transfers'
+      fullPath: '/app/transfers'
+      preLoaderRoute: typeof AppTransfersRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/suppliers': {
@@ -367,11 +410,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDiscountsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/daybook': {
+      id: '/app/daybook'
+      path: '/daybook'
+      fullPath: '/app/daybook'
+      preLoaderRoute: typeof AppDaybookRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/dashboard': {
       id: '/app/dashboard'
       path: '/dashboard'
       fullPath: '/app/dashboard'
       preLoaderRoute: typeof AppDashboardRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/customers': {
+      id: '/app/customers'
+      path: '/customers'
+      fullPath: '/app/customers'
+      preLoaderRoute: typeof AppCustomersRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/alerts': {
@@ -402,7 +459,9 @@ interface AppRouteChildren {
   AppAccountRoute: typeof AppAccountRoute
   AppAiRoute: typeof AppAiRoute
   AppAlertsRoute: typeof AppAlertsRoute
+  AppCustomersRoute: typeof AppCustomersRoute
   AppDashboardRoute: typeof AppDashboardRoute
+  AppDaybookRoute: typeof AppDaybookRoute
   AppDiscountsRoute: typeof AppDiscountsRoute
   AppExpensesRoute: typeof AppExpensesRoute
   AppInventoryRoute: typeof AppInventoryRoute
@@ -415,6 +474,7 @@ interface AppRouteChildren {
   AppSettingsRoute: typeof AppSettingsRoute
   AppShopsRoute: typeof AppShopsRoute
   AppSuppliersRoute: typeof AppSuppliersRoute
+  AppTransfersRoute: typeof AppTransfersRoute
   AppUsersRoute: typeof AppUsersRoute
 }
 
@@ -422,7 +482,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppAccountRoute: AppAccountRoute,
   AppAiRoute: AppAiRoute,
   AppAlertsRoute: AppAlertsRoute,
+  AppCustomersRoute: AppCustomersRoute,
   AppDashboardRoute: AppDashboardRoute,
+  AppDaybookRoute: AppDaybookRoute,
   AppDiscountsRoute: AppDiscountsRoute,
   AppExpensesRoute: AppExpensesRoute,
   AppInventoryRoute: AppInventoryRoute,
@@ -435,6 +497,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSettingsRoute: AppSettingsRoute,
   AppShopsRoute: AppShopsRoute,
   AppSuppliersRoute: AppSuppliersRoute,
+  AppTransfersRoute: AppTransfersRoute,
   AppUsersRoute: AppUsersRoute,
 }
 

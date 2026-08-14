@@ -29,8 +29,19 @@ export const Route = createFileRoute("/app/purchases")({
 type Line = { productId: string; shopId: string; qty: number; rate: number };
 
 function PurchasesPage() {
-  const { user, purchases, shops, products, inventory, suppliers, addPurchase, addSupplier } = useStore();
+  const { user, purchases, shops, products, inventory, suppliers, addPurchase, addSupplier, settings } = useStore();
   const isAdmin = user?.role === "admin";
+
+  /**
+   * Shopkeepers buy stock in for their own shop too, so this page is no longer
+   * admin-only. What changes for them is scope, not capability: they can only
+   * see and receive stock into their own shop, and never pick a destination.
+   */
+  const ownShopId = user?.shopId ?? "";
+  const visibleShops = useMemo(
+    () => (isAdmin ? shops : shops.filter((s) => s.id === ownShopId)),
+    [isAdmin, shops, ownShopId],
+  );
 
   const [open, setOpen] = useState(false);
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
@@ -39,10 +50,12 @@ function PurchasesPage() {
   const supplier = suppliers.find((x) => x.id === supplierId);
   const [billNo, setBillNo] = useState("");
   const [date, setDate] = useState(todayISO());
-  const emptyLine = (): Line => ({ productId: products[0]?.id ?? "", shopId: shops[0]?.id ?? "", qty: 10, rate: products[0]?.cost ?? 0 });
+  // A shopkeeper's lines always land in their own shop; only admins choose.
+  const defaultShopId = isAdmin ? shops[0]?.id ?? "" : ownShopId;
+  const emptyLine = (): Line => ({ productId: products[0]?.id ?? "", shopId: defaultShopId, qty: 10, rate: products[0]?.cost ?? 0 });
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [scan, setScan] = useState("");
-  const [shopFilter, setShopFilter] = useState("all");
+  const [shopFilter, setShopFilter] = useState(isAdmin ? "all" : ownShopId);
   const [allQ, setAllQ] = useState("");
   const { restock: restockParam, shop: shopParam, qty: qtyParam } = Route.useSearch();
   const navigate = useNavigate();
@@ -56,14 +69,17 @@ function PurchasesPage() {
         shop: shops.find((s) => s.id === row.shopId),
       }))
       .filter((r) => r.product && r.shop && row_needsRestock(r.row.qty, r.product!.lowAlert))
+      // Scope first, then the dropdown: a shopkeeper must never see another
+      // shop's shelves however the filter is set.
+      .filter((r) => (isAdmin ? true : r.row.shopId === ownShopId))
       .filter((r) => (shopFilter === "all" ? true : r.row.shopId === shopFilter))
       .sort((a, b) => a.row.qty - b.row.qty || a.product!.name.localeCompare(b.product!.name));
-  }, [inventory, products, shops, shopFilter]);
+  }, [inventory, products, shops, shopFilter, isAdmin, ownShopId]);
 
   // Every product x shop pair, so anything can be reordered at any time.
   const allRows = useMemo(() => {
     const term = allQ.trim().toLowerCase();
-    return shops
+    return visibleShops
       .flatMap((shop) =>
         products.map((product) => ({
           product,
@@ -74,7 +90,13 @@ function PurchasesPage() {
       .filter((r) => (shopFilter === "all" ? true : r.shop.id === shopFilter))
       .filter((r) => (term ? r.product.name.toLowerCase().includes(term) || r.product.barcode.includes(term) : true))
       .sort((a, b) => a.product.name.localeCompare(b.product.name) || a.shop.name.localeCompare(b.shop.name));
-  }, [products, shops, inventory, shopFilter, allQ]);
+  }, [products, visibleShops, inventory, shopFilter, allQ]);
+
+  /** Bills a shopkeeper is allowed to see: any that put stock into their shop. */
+  const visiblePurchases = useMemo(
+    () => (isAdmin ? purchases : purchases.filter((p) => p.lines.some((l) => l.shopId === ownShopId))),
+    [purchases, isAdmin, ownShopId],
+  );
 
   const total = lines.reduce((a, l) => a + l.qty * l.rate, 0);
 
@@ -156,7 +178,7 @@ function PurchasesPage() {
         next[i] = { ...next[i], qty: next[i].qty + 1 };
         return next;
       }
-      return [...prev, { productId: p.id, shopId: shops[0]?.id ?? "", qty: 1, rate: p.cost }];
+      return [...prev, { productId: p.id, shopId: defaultShopId, qty: 1, rate: p.cost }];
     });
     setScan("");
   };
@@ -169,12 +191,30 @@ function PurchasesPage() {
     if (lines.length === 0) { toast.error("Add at least one line item"); return; }
     if (lines.some((l) => !l.productId || !l.shopId)) { toast.error("Every line needs a product and a shop"); return; }
     if (lines.some((l) => l.qty <= 0)) { toast.error("Every line needs a quantity of at least 1"); return; }
+    // Belt and braces: the form gives shopkeepers no way to pick another shop,
+    // but a stale line from a prefilled restock link could still carry one.
+    if (!isAdmin && lines.some((l) => l.shopId !== ownShopId)) {
+      toast.error("You can only receive stock into your own shop");
+      return;
+    }
     if (purchases.some((p) => p.billNo.toLowerCase() === billNo.trim().toLowerCase())) {
       toast.error(`Bill ${billNo.trim()} already exists`);
       return;
     }
-    addPurchase({ supplier: supplier.name, supplierId: supplier.id, billNo: billNo.trim(), date, lines, total });
-    toast.success("Purchase saved and stock added to shops");
+    addPurchase({
+      supplier: supplier.name,
+      supplierId: supplier.id,
+      billNo: billNo.trim(),
+      date,
+      lines,
+      total,
+      createdBy: user?.name ?? "Unknown",
+      // Recorded only for shop-raised bills, so the owner can tell head-office
+      // buying apart from a shop restocking on its own account.
+      createdByShopId: isAdmin ? undefined : ownShopId,
+      paid: true,
+    });
+    toast.success(isAdmin ? "Purchase saved and stock added to shops" : "Purchase saved and stock added to your shop");
     setOpen(false);
     setBillNo("");
     setLines([emptyLine()]);
@@ -197,16 +237,16 @@ function PurchasesPage() {
   };
 
   const exportPurchases = () => {
-    if (purchases.length === 0) { toast.error("Nothing to export"); return; }
+    if (visiblePurchases.length === 0) { toast.error("Nothing to export"); return; }
     downloadCsv(
       `purchases-${todayISO()}.csv`,
-      ["Bill no", "Supplier", "Date", "Product", "Barcode", "Shop", "Qty", "Rate", "Line total"],
-      purchases.flatMap((p) =>
+      ["Bill no", "Supplier", "Date", "Product", "Barcode", "Shop", "Qty", "Rate", "Line total", "Recorded by"],
+      visiblePurchases.flatMap((p) =>
         p.lines.map((l) => {
           const prod = products.find((x) => x.id === l.productId);
           return [
             p.billNo, p.supplier, p.date, prod?.name ?? l.productId, prod?.barcode ?? "",
-            shops.find((s) => s.id === l.shopId)?.name ?? "", l.qty, l.rate, l.qty * l.rate,
+            shops.find((s) => s.id === l.shopId)?.name ?? "", l.qty, l.rate, l.qty * l.rate, p.createdBy ?? "",
           ];
         }),
       ),
@@ -214,20 +254,15 @@ function PurchasesPage() {
     toast.success("Purchases exported");
   };
 
-  if (!isAdmin) {
-    return (
-      <div>
-        <PageHeader title="Purchases" subtitle="Record wholesale bills and distribute stock to shops." />
-        <Card className="p-10 text-center text-sm text-muted-foreground">Admins only.</Card>
-      </div>
-    );
-  }
-
   return (
     <div>
       <PageHeader
         title="Purchases"
-        subtitle="Stock bought from wholesalers. Recording a bill adds that stock to the shop you assign it to."
+        subtitle={
+          isAdmin
+            ? "Stock bought from wholesalers. Recording a bill adds that stock to the shop you assign it to."
+            : "Stock you buy in for your shop. Recording a bill adds it straight to your own inventory."
+        }
         actions={<Button onClick={openBlank}><Plus className="h-4 w-4 mr-1.5" />New purchase</Button>}
       />
 
@@ -236,18 +271,18 @@ function PurchasesPage() {
         <TabsList>
           <TabsTrigger value="restock">Needs restock ({restockRows.length})</TabsTrigger>
           <TabsTrigger value="all">All items ({allRows.length})</TabsTrigger>
-          <TabsTrigger value="history">Purchase history ({purchases.length})</TabsTrigger>
+          <TabsTrigger value="history">Purchase history ({visiblePurchases.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="restock" className="mt-4">
           <Card className="p-3 sm:p-4 mb-4 grid gap-3 sm:flex sm:flex-wrap sm:items-end">
             <div className="space-y-1.5">
               <Label className="text-xs">Shop</Label>
-              <Select value={shopFilter} onValueChange={setShopFilter}>
+              <Select value={shopFilter} onValueChange={setShopFilter} disabled={!isAdmin}>
                 <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All shops</SelectItem>
-                  {shops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  {isAdmin && <SelectItem value="all">All shops</SelectItem>}
+                  {visibleShops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -338,11 +373,11 @@ function PurchasesPage() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Shop</Label>
-              <Select value={shopFilter} onValueChange={setShopFilter}>
+              <Select value={shopFilter} onValueChange={setShopFilter} disabled={!isAdmin}>
                 <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All shops</SelectItem>
-                  {shops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  {isAdmin && <SelectItem value="all">All shops</SelectItem>}
+                  {visibleShops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -422,20 +457,23 @@ function PurchasesPage() {
           </Card>
           <Card className="overflow-hidden">
             <MobileCards
-              items={purchases}
+              items={visiblePurchases}
               keyOf={(p) => p.id}
               empty="No purchases recorded yet."
               render={(p) => (
                 <ListCard
                   title={<span className="font-mono">{p.billNo}</span>}
                   subtitle={`${p.supplier} · ${p.date}`}
-                  right={formatRs(p.total)}
+                  right={formatRs(p.total, settings.currency)}
                   badges={Array.from(new Set(p.lines.map((l) => l.shopId))).map((sid) => (
                     <span key={sid} className="text-xs px-2 py-0.5 bg-muted rounded-full">
                       {shops.find((s) => s.id === sid)?.name}
                     </span>
                   ))}
-                  fields={[{ label: "Items", value: p.lines.reduce((a, l) => a + l.qty, 0) }]}
+                  fields={[
+                    { label: "Items", value: p.lines.reduce((a, l) => a + l.qty, 0) },
+                    { label: "Recorded by", value: p.createdBy || "—" },
+                  ]}
                 />
               )}
             />
@@ -447,10 +485,11 @@ function PurchasesPage() {
                   <th className="px-4 py-3 font-medium">Date</th>
                   <th className="px-4 py-3 font-medium text-right">Items</th>
                   <th className="px-4 py-3 font-medium">Destinations</th>
+                  <th className="px-4 py-3 font-medium">Recorded by</th>
                   <th className="px-4 py-3 font-medium text-right">Total</th>
                 </tr></thead>
                 <tbody>
-                  {purchases.map((p) => (
+                  {visiblePurchases.map((p) => (
                     <tr key={p.id} className="border-t hover:bg-muted/40">
                       <td className="px-4 py-3 font-mono text-xs">{p.billNo}</td>
                       <td className="px-4 py-3">{p.supplier}</td>
@@ -463,11 +502,17 @@ function PurchasesPage() {
                           ))}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right font-medium">{formatRs(p.total)}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {p.createdBy || "—"}
+                        {p.createdByShopId && (
+                          <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-muted rounded-full">shop</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium">{formatRs(p.total, settings.currency)}</td>
                     </tr>
                   ))}
-                  {purchases.length === 0 && (
-                    <tr><td colSpan={6} className="px-4 py-12 text-center text-sm text-muted-foreground">No purchases recorded yet.</td></tr>
+                  {visiblePurchases.length === 0 && (
+                    <tr><td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">No purchases recorded yet.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -578,12 +623,21 @@ function PurchasesPage() {
                         <SelectContent>{products.map((prod) => <SelectItem key={prod.id} value={prod.id}>{prod.name}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
+                    {/* A shopkeeper has exactly one possible destination, so the
+                        select becomes a read-only label rather than a one-option
+                        dropdown pretending to be a choice. */}
                     <div className="col-span-2 sm:col-span-3">
                       <Label className="text-xs sm:hidden">Shop</Label>
-                      <Select value={l.shopId} onValueChange={(v) => setLines((prev) => prev.map((x, j) => j === i ? { ...x, shopId: v } : x))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>{shops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-                      </Select>
+                      {isAdmin ? (
+                        <Select value={l.shopId} onValueChange={(v) => setLines((prev) => prev.map((x, j) => j === i ? { ...x, shopId: v } : x))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>{shops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="h-9 flex items-center px-3 rounded-md border bg-muted/50 text-sm truncate">
+                          {shops.find((s) => s.id === l.shopId)?.name ?? "Your shop"}
+                        </div>
+                      )}
                     </div>
                     <div className="sm:col-span-2">
                       <Label className="text-xs sm:hidden">Qty</Label>

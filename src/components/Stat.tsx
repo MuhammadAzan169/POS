@@ -11,7 +11,8 @@ export function StatCard({
 }: {
   label: string;
   value: string;
-  sub?: string;
+  /** ReactNode, not string, so a card can carry a "vs previous period" badge. */
+  sub?: ReactNode;
   icon?: ReactNode;
   tone?: "default" | "success" | "warning" | "accent" | "primary";
 }) {
@@ -55,6 +56,9 @@ export function StatusPill({ status }: { status: string }) {
     Pending: "bg-warning/20 text-warning-strong border-warning/40",
     Active: "bg-success/15 text-success-strong border-success/30",
     Disabled: "bg-muted text-muted-foreground border-border",
+    Trade: "bg-accent/15 text-accent-strong border-accent/30",
+    Retail: "bg-muted text-muted-foreground border-border",
+    Credit: "bg-warning/20 text-warning-strong border-warning/40",
   };
   return (
     <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border", map[status] ?? "bg-muted text-muted-foreground border-border")}>

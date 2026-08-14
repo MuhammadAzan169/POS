@@ -37,7 +37,7 @@ function ProductsPage() {
   // The ?? "" keeps the <Input> controlled when the param is absent.
   useEffect(() => { setQ(searchParam ?? ""); }, [searchParam]);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ barcode: "", name: "", category: "Cosmetics", brand: "", cost: 0, price: 0, lowAlert: 5 });
+  const [form, setForm] = useState({ barcode: "", name: "", category: "Cosmetics", brand: "", cost: 0, price: 0, wholesalePrice: 0, lowAlert: 5 });
 
   const rows = useMemo(() => {
     return products
@@ -53,10 +53,20 @@ function ProductsPage() {
       toast.error(`Barcode ${form.barcode.trim()} is already used`);
       return;
     }
-    addProduct({ ...form, name: form.name.trim(), barcode: form.barcode.trim(), active: true, size: "", color: "" });
+    addProduct({
+      ...form,
+      name: form.name.trim(),
+      barcode: form.barcode.trim(),
+      // 0 means "not set" here — the wholesale counter then falls back to the
+      // retail price rather than giving the stock away.
+      wholesalePrice: form.wholesalePrice > 0 ? form.wholesalePrice : undefined,
+      active: true,
+      size: "",
+      color: "",
+    });
     toast.success("Product added");
     setOpen(false);
-    setForm({ barcode: "", name: "", category: "Cosmetics", brand: "", cost: 0, price: 0, lowAlert: 5 });
+    setForm({ barcode: "", name: "", category: "Cosmetics", brand: "", cost: 0, price: 0, wholesalePrice: 0, lowAlert: 5 });
   };
 
   return (
@@ -79,7 +89,17 @@ function ProductsPage() {
                   <div className="space-y-1.5"><Label>Category</Label><Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} /></div>
                   <div className="space-y-1.5"><Label>Low-stock alert</Label><Input type="number" value={form.lowAlert} onChange={(e) => setForm({ ...form, lowAlert: Number(e.target.value) })} /></div>
                   <div className="space-y-1.5"><Label>Cost (Rs)</Label><Input type="number" value={form.cost} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })} /></div>
-                  <div className="space-y-1.5"><Label>Sell price (Rs)</Label><Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} /></div>
+                  <div className="space-y-1.5"><Label>Retail price (Rs)</Label><Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} /></div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label>Wholesale price (Rs)</Label>
+                    <Input
+                      type="number"
+                      value={form.wholesalePrice || ""}
+                      placeholder="Optional — defaults to the retail price"
+                      onChange={(e) => setForm({ ...form, wholesalePrice: Number(e.target.value) || 0 })}
+                    />
+                    <p className="text-xs text-muted-foreground">Used only at wholesale shops.</p>
+                  </div>
                   {form.cost > 0 && form.price > 0 && (
                     <div className={`sm:col-span-2 text-sm rounded-md p-2 ${form.price >= form.cost ? "text-success-strong bg-success/10" : "text-destructive bg-destructive/10"}`}>
                       Margin: {formatRs(form.price - form.cost)} ({margin(form.price, form.cost)})
@@ -116,6 +136,7 @@ function ProductsPage() {
                 { label: "Category", value: p.category || "—" },
                 { label: "Brand", value: p.brand || "—" },
                 { label: "Stock", value: p.totalStock },
+                { label: "Wholesale", value: p.wholesalePrice ? formatRs(p.wholesalePrice) : "—" },
                 ...(isAdmin
                   ? [{
                       label: "Margin",
@@ -142,7 +163,8 @@ function ProductsPage() {
               <th className="px-4 py-3 font-medium">Category</th>
               <th className="px-4 py-3 font-medium">Brand</th>
               {isAdmin && <th className="px-4 py-3 font-medium text-right">Cost</th>}
-              <th className="px-4 py-3 font-medium text-right">Price</th>
+              <th className="px-4 py-3 font-medium text-right">Retail</th>
+              <th className="px-4 py-3 font-medium text-right">Wholesale</th>
               {isAdmin && <th className="px-4 py-3 font-medium text-right">Margin</th>}
               <th className="px-4 py-3 font-medium text-right">Stock</th>
               {isAdmin && <th className="px-4 py-3 font-medium text-right">Edit</th>}
@@ -156,6 +178,11 @@ function ProductsPage() {
                   <td className="px-4 py-3">{p.brand}</td>
                   {isAdmin && <td className="px-4 py-3 text-right">{formatRs(p.cost)}</td>}
                   <td className="px-4 py-3 text-right font-medium">{formatRs(p.price)}</td>
+                  {/* A dash reads as "same as retail", which is exactly how the
+                      wholesale till treats an unset rate. */}
+                  <td className="px-4 py-3 text-right text-muted-foreground">
+                    {p.wholesalePrice ? formatRs(p.wholesalePrice) : "—"}
+                  </td>
                   {isAdmin && <td className={`px-4 py-3 text-right ${p.price >= p.cost ? "text-success-strong" : "text-destructive"}`}>{margin(p.price, p.cost)}</td>}
                   <td className="px-4 py-3 text-right">{p.totalStock}</td>
                   {isAdmin && (
@@ -168,7 +195,7 @@ function ProductsPage() {
                 </tr>
               ))}
               {rows.length === 0 && (
-                <tr><td colSpan={isAdmin ? 9 : 6} className="px-4 py-12 text-center text-sm text-muted-foreground">No products match “{q}”.</td></tr>
+                <tr><td colSpan={isAdmin ? 10 : 7} className="px-4 py-12 text-center text-sm text-muted-foreground">No products match “{q}”.</td></tr>
               )}
             </tbody>
           </table>

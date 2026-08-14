@@ -44,8 +44,8 @@ parts.push(`-- =================================================================
 -- =====================================================================
 `);
 
-parts.push(insert("shops", ["id", "name", "address", "phone", "active"], seed.SHOPS,
-  (s) => [q(s.id), q(s.name), q(s.address), q(s.phone), q(s.active)]));
+parts.push(insert("shops", ["id", "name", "kind", "address", "phone", "active"], seed.SHOPS,
+  (s) => [q(s.id), q(s.name), q(s.kind ?? "retail"), q(s.address), q(s.phone), q(s.active)]));
 
 parts.push(insert("users", ["id", "name", "email", "role", "shop_id", "active", "last_login"], seed.USERS,
   (u) => [q(u.id), q(u.name), q(u.email), q(u.role), q(u.shopId ?? null), q(u.active), q(u.lastLogin ?? null)]));
@@ -53,20 +53,36 @@ parts.push(insert("users", ["id", "name", "email", "role", "shop_id", "active", 
 parts.push(insert("suppliers", ["id", "name", "contact", "phone", "email", "address", "notes", "active"], seed.SUPPLIERS,
   (s) => [q(s.id), q(s.name), q(s.contact), q(s.phone), q(s.email), q(s.address), q(s.notes), q(s.active)]));
 
-parts.push(insert("products", ["id", "barcode", "name", "category", "brand", "size", "color", "cost", "price", "low_alert", "active"], seed.PRODUCTS,
-  (p) => [q(p.id), q(p.barcode), q(p.name), q(p.category), q(p.brand), q(p.size ?? null), q(p.color ?? null), q(p.cost), q(p.price), q(p.lowAlert), q(p.active)]));
+parts.push(insert("products", ["id", "barcode", "name", "category", "brand", "size", "color", "cost", "price", "wholesale_price", "low_alert", "active"], seed.PRODUCTS,
+  (p) => [q(p.id), q(p.barcode), q(p.name), q(p.category), q(p.brand), q(p.size ?? null), q(p.color ?? null), q(p.cost), q(p.price), q(p.wholesalePrice ?? null), q(p.lowAlert), q(p.active)]));
 
 parts.push(insert("inventory", ["product_id", "shop_id", "qty"], seed.genInventory(),
   (r) => [q(r.productId), q(r.shopId), q(r.qty)]));
 
-parts.push(insert("sales", ["id", "invoice", "shop_id", "date", "customer", "cashier", "lines", "subtotal", "discount", "total", "profit", "payment", "status", "synced"], seed.genSales(),
-  (s) => [q(s.id), q(s.invoice), q(s.shopId), q(s.date), q(s.customer), q(s.cashier), json(s.lines), q(s.subtotal), q(s.discount), q(s.total), q(s.profit), q(s.payment), q(s.status), q(s.synced)]));
+// Customers come before sales, which reference them.
+parts.push(insert("customers", ["id", "name", "contact", "phone", "address", "notes", "kind", "credit_limit", "active"], seed.CUSTOMERS,
+  (c) => [q(c.id), q(c.name), q(c.contact), q(c.phone), q(c.address), q(c.notes), q(c.kind), q(c.creditLimit), q(c.active)]));
 
-parts.push(insert("purchases", ["id", "bill_no", "supplier", "supplier_id", "date", "lines", "total"], seed.genPurchases(),
-  (p) => [q(p.id), q(p.billNo), q(p.supplier), q(p.supplierId ?? null), q(p.date), json(p.lines), q(p.total)]));
+// Day sessions come before sales and expenses, which reference them.
+parts.push(insert(
+  "day_sessions",
+  ["id", "shop_id", "business_date", "opened_at", "opened_by", "opening_cash", "status", "closed_at", "closed_by", "counted_cash", "cash_taken_by_owner", "cash_left_in_shop", "notes"],
+  seed.genDaySessions(),
+  (s) => [q(s.id), q(s.shopId), q(s.businessDate), q(s.openedAt), q(s.openedBy), q(s.openingCash), q(s.status),
+    q(s.closedAt ?? null), q(s.closedBy ?? null), q(s.countedCash ?? null), q(s.cashTakenByOwner ?? null),
+    q(s.cashLeftInShop ?? null), q(s.notes ?? null)]));
 
-parts.push(insert("expenses", ["id", "date", "shop_id", "category", "description", "amount", "added_by"], seed.genExpenses(),
-  (e) => [q(e.id), q(e.date), q(e.shopId), q(e.category), q(e.description), q(e.amount), q(e.addedBy)]));
+parts.push(insert("sales", ["id", "invoice", "shop_id", "date", "business_date", "session_id", "customer", "customer_id", "cashier", "lines", "subtotal", "discount", "total", "profit", "payment", "status", "synced"], seed.genSales(),
+  (s) => [q(s.id), q(s.invoice), q(s.shopId), q(s.date), q(s.businessDate ?? null), q(s.sessionId ?? null), q(s.customer), q(s.customerId ?? null), q(s.cashier), json(s.lines), q(s.subtotal), q(s.discount), q(s.total), q(s.profit), q(s.payment), q(s.status), q(s.synced)]));
+
+parts.push(insert("customer_payments", ["id", "customer_id", "date", "amount", "method", "shop_id", "session_id", "note", "received_by"], seed.genCustomerPayments(),
+  (p) => [q(p.id), q(p.customerId), q(p.date), q(p.amount), q(p.method), q(p.shopId), q(p.sessionId ?? null), q(p.note), q(p.receivedBy)]));
+
+parts.push(insert("purchases", ["id", "bill_no", "supplier", "supplier_id", "date", "lines", "total", "created_by", "created_by_shop_id", "paid"], seed.genPurchases(),
+  (p) => [q(p.id), q(p.billNo), q(p.supplier), q(p.supplierId ?? null), q(p.date), json(p.lines), q(p.total), q(p.createdBy ?? ""), q(p.createdByShopId ?? null), q(p.paid ?? true)]));
+
+parts.push(insert("expenses", ["id", "date", "shop_id", "category", "description", "amount", "added_by", "session_id"], seed.genExpenses(),
+  (e) => [q(e.id), q(e.date), q(e.shopId), q(e.category), q(e.description), q(e.amount), q(e.addedBy), q(e.sessionId ?? null)]));
 
 parts.push(`insert into app_state (id, settings, discounts) values
   ('singleton', ${json(seed.DEFAULT_SETTINGS)}, ${json({ enabled: true, overallPct: 0, maxPct: 20, perProduct: {} })})
@@ -82,7 +98,10 @@ const counts = {
   suppliers: seed.SUPPLIERS.length,
   products: seed.PRODUCTS.length,
   inventory: seed.genInventory().length,
+  customers: seed.CUSTOMERS.length,
+  day_sessions: seed.genDaySessions().length,
   sales: seed.genSales().length,
+  customer_payments: seed.genCustomerPayments().length,
   purchases: seed.genPurchases().length,
   expenses: seed.genExpenses().length,
 };

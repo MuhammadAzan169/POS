@@ -4,6 +4,9 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 // from "@/lib/store" continue to work unchanged.
 export * from "./store-types";
 import type {
+  Customer,
+  CustomerPayment,
+  DaySession,
   DiscountRules,
   Expense,
   InventoryRow,
@@ -18,11 +21,19 @@ import type {
   Settings,
   Shop,
   Supplier,
+  Transfer,
   User,
 } from "./store-types";
 import { DEFAULT_DISCOUNTS, DEFAULT_RECEIPT } from "./store-types";
+import { openSessionFor } from "./day-book";
+import { dayOf, todayISO } from "./dates";
 import { db, loadSnapshot } from "./db";
 import { isSupabaseConfigured } from "./supabase";
+
+// Calendar helpers moved to dates.ts so day-book.ts can share them; re-exported
+// here because every screen imports them from "@/lib/store".
+export * from "./dates";
+export * from "./day-book";
 
 interface StoreState {
   user: User | null;
@@ -32,6 +43,11 @@ interface StoreState {
   usingSupabase: boolean;
   /** Set when Supabase was configured but could not be reached. */
   dbError: string | null;
+  /**
+   * Tables/columns a migration should have added but hasn't. The app runs
+   * normally on real data; the affected features just can't save yet.
+   */
+  pendingMigration: string[] | null;
   online: boolean;
   shops: Shop[];
   users: User[];
@@ -42,6 +58,10 @@ interface StoreState {
   suppliers: Supplier[];
   expenses: Expense[];
   returns: ReturnRec[];
+  daySessions: DaySession[];
+  transfers: Transfer[];
+  customers: Customer[];
+  customerPayments: CustomerPayment[];
   settings: Settings;
   discounts: DiscountRules;
   login: (email: string, password: string) => User | null;
@@ -65,15 +85,40 @@ interface StoreState {
   updateReceiptDesign: (r: Partial<ReceiptDesign>) => void;
   updateDiscounts: (d: Partial<DiscountRules>) => void;
   setProductDiscount: (productId: string, pct: number | null) => void;
+
+  /* ------------------------------------------------------------- day book */
+  /** Opens the trading day for a shop. Returns null if one is already open. */
+  openDay: (input: { shopId: string; openingCash: number; openedBy: string }) => DaySession | null;
+  /** Closes the day and settles the cash: what was counted, taken, and left behind. */
+  closeDay: (input: {
+    sessionId: string;
+    countedCash: number;
+    cashTakenByOwner: number;
+    cashLeftInShop: number;
+    closedBy: string;
+    notes?: string;
+  }) => void;
+
+  /* ------------------------------------------------------ stock transfers */
+  addTransfer: (t: Omit<Transfer, "id" | "transferNo">) => void;
+
+  /* ------------------------------------------------- customers and credit */
+  addCustomer: (c: Omit<Customer, "id">) => Customer;
+  updateCustomer: (c: Customer) => void;
+  /** Records money received against a customer's outstanding balance. */
+  addCustomerPayment: (p: Omit<CustomerPayment, "id">) => void;
 }
 // The demo dataset now lives in seed-data.ts so the SQL seed generator can
 // emit exactly the same rows the UI shows.
 import {
+  CUSTOMERS,
   DEFAULT_SETTINGS,
   PRODUCTS,
   SHOPS,
   SUPPLIERS,
   USERS,
+  genCustomerPayments,
+  genDaySessions,
   genExpenses,
   genInventory,
   genPurchases,
@@ -89,6 +134,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [usingSupabase, setUsingSupabase] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
+  const [pendingMigration, setPendingMigration] = useState<string[] | null>(null);
   const [online, setOnline] = useState(true);
   const [shops, setShops] = useState<Shop[]>(SHOPS);
   const [users, setUsers] = useState<User[]>(USERS);
@@ -99,6 +145,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [suppliers, setSuppliers] = useState<Supplier[]>(SUPPLIERS);
   const [expenses, setExpenses] = useState<Expense[]>(() => genExpenses());
   const [returns, setReturns] = useState<ReturnRec[]>([]);
+  const [daySessions, setDaySessions] = useState<DaySession[]>(() => genDaySessions());
+  const [transfers, setTransfers] = useState<Transfer[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>(CUSTOMERS);
+  const [customerPayments, setCustomerPayments] = useState<CustomerPayment[]>(() => genCustomerPayments());
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [discounts, setDiscounts] = useState<DiscountRules>(DEFAULT_DISCOUNTS);
 
@@ -140,9 +190,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setSuppliers(snap.suppliers);
           setExpenses(snap.expenses);
           setReturns(snap.returns);
+          setDaySessions(snap.daySessions);
+          setTransfers(snap.transfers);
+          setCustomers(snap.customers);
+          setCustomerPayments(snap.customerPayments);
           setSettings(snap.settings);
           setDiscounts(snap.discounts);
           setUsingSupabase(true);
+          // A database still on the original schema is running fine on real
+          // data — it just can't record day sessions or transfers yet. That is
+          // an upgrade notice, not an error, so it never blocks the app.
+          setPendingMigration(snap.pendingMigration ?? null);
         }
       } catch (e) {
         // Fall back to demo data rather than leaving the till unusable.
@@ -176,6 +234,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ready,
       usingSupabase,
       dbError,
+      pendingMigration,
       online,
       shops,
       users,
@@ -186,6 +245,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       suppliers,
       expenses,
       returns,
+      daySessions,
+      transfers,
+      customers,
+      customerPayments,
       settings,
       discounts,
       login: (email, _password) => {
@@ -203,10 +266,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addSale: (s) => {
         const counter = sales.length + 200;
         const shopIdx = shops.findIndex((x) => x.id === s.shopId) + 1;
+        // The open session decides which trading day this sale counts towards.
+        // Past midnight that is still yesterday's date, which is the whole point
+        // of the day book — a shop open until 2am books into the day it opened.
+        const session = openSessionFor(daySessions, s.shopId);
         const sale: Sale = {
           ...s,
           id: `sale-${Date.now()}`,
           invoice: `${settings.invoicePrefix || "INV"}-S${shopIdx}-${String(counter).padStart(6, "0")}`,
+          businessDate: s.businessDate ?? session?.businessDate ?? dayOf(s.date),
+          sessionId: s.sessionId ?? session?.id,
           synced: online,
         };
         setSales((prev) => [sale, ...prev]);
@@ -325,7 +394,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setReturns((prev) => prev.map((r) => (r.supplierId === sup.id ? { ...r, supplier: sup.name } : r)));
       },
       addExpense: (e) => {
-        const expense: Expense = { ...e, id: `exp-${Date.now()}` };
+        // Money spent while the till is open comes OUT of the drawer, so the
+        // expense is tied to the session and subtracted at the evening count.
+        // A back-dated expense is bookkeeping, not a drawer movement, so it is
+        // deliberately left unattached.
+        const session = openSessionFor(daySessions, e.shopId);
+        const attach = session && dayOf(e.date) === session.businessDate ? session.id : undefined;
+        const expense: Expense = { ...e, id: `exp-${Date.now()}`, sessionId: e.sessionId ?? attach };
         setExpenses((prev) => [expense, ...prev]);
         persist("the expense", () => db.upsertExpense(expense));
       },
@@ -424,8 +499,119 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           persist("discounts", () => db.saveAppState(settings, next));
           return next;
         }),
+
+      /**
+       * Starts the trading day.
+       *
+       * The business date is today's LOCAL date at the moment of opening. A shop
+       * unlocking at 08:00 books to today; one that opened yesterday evening and
+       * never closed keeps its original date until someone ends the day.
+       */
+      openDay: ({ shopId, openingCash, openedBy }) => {
+        // Two open sessions at one shop would double-count every sale, so the
+        // guard lives here rather than only in the UI that calls it.
+        if (openSessionFor(daySessions, shopId)) return null;
+        const session: DaySession = {
+          id: `day-${Date.now()}`,
+          shopId,
+          businessDate: todayISO(),
+          openedAt: new Date().toISOString(),
+          openedBy,
+          openingCash: Math.max(0, openingCash),
+          status: "open",
+        };
+        setDaySessions((prev) => [session, ...prev]);
+        persist("the day open", () => db.upsertDaySession(session));
+        return session;
+      },
+
+      closeDay: ({ sessionId, countedCash, cashTakenByOwner, cashLeftInShop, closedBy, notes }) => {
+        setDaySessions((prev) => {
+          const next = prev.map((s) =>
+            s.id === sessionId
+              ? {
+                  ...s,
+                  status: "closed" as const,
+                  closedAt: new Date().toISOString(),
+                  closedBy,
+                  countedCash: Math.max(0, countedCash),
+                  cashTakenByOwner: Math.max(0, cashTakenByOwner),
+                  // What stays behind becomes the next session's opening float,
+                  // which is how yesterday's leftover cash shows up in tomorrow's
+                  // total instead of vanishing between the two days.
+                  cashLeftInShop: Math.max(0, cashLeftInShop),
+                  notes,
+                }
+              : s,
+          );
+          const closed = next.find((s) => s.id === sessionId);
+          if (closed) persist("the day close", () => db.upsertDaySession(closed));
+          return next;
+        });
+      },
+
+      addTransfer: (t) => {
+        const transfer: Transfer = {
+          ...t,
+          id: `trf-${Date.now()}`,
+          transferNo: `TRF-${1000 + transfers.length + 1}`,
+        };
+        setTransfers((prev) => [transfer, ...prev]);
+        persist("the transfer", () => db.upsertTransfer(transfer));
+
+        // One movement, two sides: the source loses the stock and the
+        // destination gains it, in a single state update so they cannot drift.
+        setInventory((prev) => {
+          const next = [...prev];
+          const bump = (productId: string, shopId: string, delta: number) => {
+            const i = next.findIndex((r) => r.productId === productId && r.shopId === shopId);
+            if (i >= 0) next[i] = { ...next[i], qty: Math.max(0, next[i].qty + delta) };
+            else if (delta > 0) next.push({ productId, shopId, qty: delta });
+          };
+          t.items.forEach((item) => {
+            bump(item.productId, t.fromShopId, -item.qty);
+            bump(item.productId, t.toShopId, item.qty);
+          });
+          persist("stock levels", () =>
+            db.upsertInventory(
+              next.filter(
+                (r) =>
+                  (r.shopId === t.fromShopId || r.shopId === t.toShopId) &&
+                  t.items.some((i) => i.productId === r.productId),
+              ),
+            ),
+          );
+          return next;
+        });
+      },
+
+      addCustomer: (c) => {
+        const created: Customer = { ...c, id: `cust-${Date.now()}` };
+        setCustomers((prev) => [...prev, created]);
+        persist("the customer", () => db.upsertCustomer(created));
+        return created;
+      },
+
+      updateCustomer: (c) => {
+        setCustomers((prev) => prev.map((x) => (x.id === c.id ? c : x)));
+        persist("the customer", () => db.upsertCustomer(c));
+        // Invoices print the name they were issued with, so a rename has to
+        // reach them too or old bills credit a customer who no longer exists.
+        setSales((prev) => prev.map((s) => (s.customerId === c.id ? { ...s, customer: c.name } : s)));
+      },
+
+      addCustomerPayment: (p) => {
+        // Collected while the till is open, so it's drawer cash and the evening
+        // count must expect it. Attached by session id rather than by date so a
+        // payment taken at 1am still belongs to the day that's still open.
+        const session = openSessionFor(daySessions, p.shopId);
+        const attach = session && dayOf(p.date) <= session.businessDate ? session.id : undefined;
+        const payment: CustomerPayment = { ...p, id: `pay-${Date.now()}`, sessionId: p.sessionId ?? attach };
+        setCustomerPayments((prev) => [payment, ...prev]);
+        persist("the payment", () => db.upsertCustomerPayment(payment));
+      },
     }),
-    [user, ready, usingSupabase, dbError, online, shops, users, products, inventory, sales, purchases, suppliers, expenses, returns, settings, discounts],
+    [user, ready, usingSupabase, dbError, pendingMigration, online, shops, users, products, inventory, sales, purchases, suppliers, expenses, returns, daySessions, transfers, customers, customerPayments, settings, discounts],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
@@ -439,30 +625,6 @@ export function useStore() {
 
 export function formatRs(n: number, currency = "Rs") {
   return `${currency} ${n.toLocaleString("en-PK", { maximumFractionDigits: 0 })}`;
-}
-
-/**
- * Calendar dates are computed in LOCAL time, not UTC.
- *
- * toISOString() returns the UTC date, so for a shop at UTC+5 every sale made
- * before 5am local — and "today" itself whenever the local clock is ahead of
- * midnight UTC — landed on the wrong calendar day. "Today's sales" has to mean
- * today in the shop's own timezone.
- */
-function localDay(d: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-export function todayISO() {
-  return localDay(new Date());
-}
-
-/** Today's date shifted by `n` days, in local time. */
-export function daysAgoISO(n: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return localDay(d);
 }
 
 /**
@@ -482,17 +644,6 @@ export function discountAmountFor(productId: string, unitPrice: number, qty: num
 }
 
 /**
- * YYYY-MM-DD for any stored date. Plain dates pass through; full timestamps are
- * converted to the LOCAL calendar day so they line up with todayISO() and with
- * the dates <input type="date"> produces.
- */
-export function dayOf(date: string) {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
-  const d = new Date(date);
-  return Number.isNaN(d.getTime()) ? date.slice(0, 10) : localDay(d);
-}
-
-/**
  * Rebuilds stock as it stood at the END of `asOf` (YYYY-MM-DD).
  *
  * There are no historical snapshots, so this rewinds today's quantities back
@@ -501,12 +652,19 @@ export function dayOf(date: string) {
  *   purchases after  → stock was lower then   (subtract)
  *   customer returns after → stock was lower then (subtract)
  *   supplier returns after → stock was higher then (add back)
+ *   transfers after  → the source held more and the destination held less
  *
  * Accurate only as far back as the recorded movements go.
  */
 export function stockAsOf(
   asOf: string,
-  data: { inventory: InventoryRow[]; sales: Sale[]; purchases: Purchase[]; returns: ReturnRec[] },
+  data: {
+    inventory: InventoryRow[];
+    sales: Sale[];
+    purchases: Purchase[];
+    returns: ReturnRec[];
+    transfers?: Transfer[];
+  },
 ): InventoryRow[] {
   const key = (productId: string, shopId: string) => `${productId}|${shopId}`;
   const map = new Map<string, InventoryRow>();
@@ -531,6 +689,16 @@ export function stockAsOf(
     .filter((r) => dayOf(r.date) > asOf)
     .forEach((r) =>
       r.items.forEach((i) => shift(i.productId, r.shopId, r.kind === "supplier" ? i.qty : -i.qty)),
+    );
+
+  // Rewinding a transfer puts the goods back where they came from.
+  (data.transfers ?? [])
+    .filter((t) => dayOf(t.date) > asOf)
+    .forEach((t) =>
+      t.items.forEach((i) => {
+        shift(i.productId, t.fromShopId, i.qty);
+        shift(i.productId, t.toShopId, -i.qty);
+      }),
     );
 
   return [...map.values()].map((r) => ({ ...r, qty: Math.max(0, r.qty) }));

@@ -21,11 +21,19 @@ export function ProductEditDialog({ product, onClose }: { product: Product | nul
   if (!form) return null;
 
   const margin = form.price > 0 ? Math.round(((form.price - form.cost) / form.price) * 100) : null;
+  const wholesaleMargin =
+    form.wholesalePrice && form.wholesalePrice > 0
+      ? Math.round(((form.wholesalePrice - form.cost) / form.wholesalePrice) * 100)
+      : null;
 
   const save = () => {
     if (!form.name.trim()) { toast.error("Name required"); return; }
-    if (form.price <= 0) { toast.error("Sell price must be greater than 0"); return; }
+    if (form.price <= 0) { toast.error("Retail price must be greater than 0"); return; }
     if (form.cost < 0 || form.lowAlert < 0) { toast.error("Cost and low-stock alert can't be negative"); return; }
+    if (form.wholesalePrice !== undefined && form.wholesalePrice < 0) {
+      toast.error("Wholesale price can't be negative");
+      return;
+    }
     const code = form.barcode.trim();
     if (code && products.some((p) => p.barcode === code && p.id !== form.id)) {
       toast.error(`Barcode ${code} is already used by another product`);
@@ -76,9 +84,36 @@ export function ProductEditDialog({ product, onClose }: { product: Product | nul
             <Input type="number" min={0} value={form.cost} onChange={(e) => setForm({ ...form, cost: Math.max(0, Number(e.target.value) || 0) })} />
           </div>
           <div className="space-y-1.5">
-            <Label>Sell price ({settings.currency})</Label>
+            <Label>Retail price ({settings.currency})</Label>
             <Input type="number" min={0} value={form.price} onChange={(e) => setForm({ ...form, price: Math.max(0, Number(e.target.value) || 0) })} />
           </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Wholesale price ({settings.currency})</Label>
+            {/* Left blank, the wholesale counter simply charges the retail price,
+                which is the sensible default for anything not sold to trade. */}
+            <Input
+              type="number"
+              min={0}
+              placeholder={`Leave blank to use the retail price (${formatRs(form.price, settings.currency)})`}
+              value={form.wholesalePrice ?? ""}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setForm({ ...form, wholesalePrice: raw === "" ? undefined : Math.max(0, Number(raw) || 0) });
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              Charged at wholesale shops only. Retail branches always use the retail price.
+            </p>
+          </div>
+
+          {wholesaleMargin !== null && (
+            <div className={`sm:col-span-2 text-sm rounded-md p-2 ${
+              (form.wholesalePrice ?? 0) >= form.cost ? "text-success-strong bg-success/10" : "text-destructive bg-destructive/10"
+            }`}>
+              Wholesale margin: {formatRs((form.wholesalePrice ?? 0) - form.cost, settings.currency)} ({wholesaleMargin}%)
+              {(form.wholesalePrice ?? 0) < form.cost && " — selling below cost"}
+            </div>
+          )}
 
           {margin !== null && (
             <div className={`sm:col-span-2 text-sm rounded-md p-2 ${form.price >= form.cost ? "text-success-strong bg-success/10" : "text-destructive bg-destructive/10"}`}>
