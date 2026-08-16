@@ -144,6 +144,11 @@ interface StoreState {
   markThreadRead: (shopId: string) => void;
   /** Removes a message you sent by mistake. */
   deleteMessage: (id: string) => void;
+  /**
+   * Clears a whole conversation. Returns how many messages went, so the caller
+   * can say so rather than claiming success over an empty thread.
+   */
+  clearThread: (shopId: string) => number;
 }
 
 /** One signed stock movement: `delta` units of a product at one shop. */
@@ -309,16 +314,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
    * you sent would appear twice on your own screen.
    */
   useEffect(() => {
-    return subscribeToMessages((incoming) => {
-      setMessages((prev) => {
-        const i = prev.findIndex((m) => m.id === incoming.id);
-        if (i >= 0) {
-          const next = [...prev];
-          next[i] = incoming;
-          return next;
-        }
-        return [...prev, incoming].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-      });
+    return subscribeToMessages({
+      onUpsert: (incoming) =>
+        setMessages((prev) => {
+          const i = prev.findIndex((m) => m.id === incoming.id);
+          if (i >= 0) {
+            const next = [...prev];
+            next[i] = incoming;
+            return next;
+          }
+          return [...prev, incoming].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        }),
+      // Deleting on one screen has to clear the other; the sender's own state
+      // was already updated optimistically, so this is a no-op for them.
+      onDelete: (id) => setMessages((prev) => prev.filter((m) => m.id !== id)),
     });
   }, []);
 
@@ -1010,6 +1019,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       deleteMessage: (id) => {
         setMessages((prev) => prev.filter((m) => m.id !== id));
         persist("the deletion", () => db.deleteMessage(id));
+      },
+
+      /**
+       * Clears a whole conversation, for both sides.
+       *
+       * A thread belongs to the shop rather than to either person in it, so
+       * there is no "delete for me only" that would leave the two screens
+       * telling different stories about what was said.
+       */
+      clearThread: (shopId) => {
+        const count = messages.filter((m) => m.shopId === shopId).length;
+        if (count === 0) return 0;
+        setMessages((prev) => prev.filter((m) => m.shopId !== shopId));
+        persist("the deletion", () => db.deleteThread(shopId));
+        return count;
       },
     }),
     [user, ready, usingSupabase, dbError, pendingMigration, online, shops, users, products, inventory, sales, purchases, suppliers, expenses, returns, daySessions, transfers, customers, customerPayments, messages, settings, discounts],

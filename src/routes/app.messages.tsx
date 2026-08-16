@@ -38,7 +38,10 @@ function dayLabel(iso: string) {
 }
 
 function MessagesPage() {
-  const { user, shops, messages, sendMessage, markThreadRead, deleteMessage, usingSupabase, pendingMigration } = useStore();
+  const {
+    user, shops, messages, sendMessage, markThreadRead, deleteMessage, clearThread,
+    usingSupabase, pendingMigration,
+  } = useStore();
   const isAdmin = user?.role === "admin";
 
   /**
@@ -110,6 +113,22 @@ function MessagesPage() {
 
   const shopLabel = (s: Shop) => `${s.name}${shopKind(s) === "wholesale" ? " · wholesale" : ""}`;
 
+  /**
+   * Clears the open conversation.
+   *
+   * A thread belongs to the shop rather than to either person in it, so this is
+   * deliberately not a "delete for me only" — that would leave the two screens
+   * telling different stories about what was said. The confirmation says so.
+   */
+  const deleteChat = () => {
+    if (!shopId) return;
+    const gone = clearThread(shopId);
+    if (gone === 0) { toast.info("There's nothing in this conversation yet"); return; }
+    toast.success(`Conversation cleared — ${gone} message${gone === 1 ? "" : "s"} deleted`);
+    // The owner drops back to the shop list; a shopkeeper has nowhere else to go.
+    if (isAdmin) setPicked(null);
+  };
+
   /* ------------------------------------------------------------ the thread */
 
   const conversation = (
@@ -129,7 +148,7 @@ function MessagesPage() {
         <div className="h-9 w-9 shrink-0 rounded-full bg-primary/10 text-primary flex items-center justify-center">
           <Store className="h-4 w-4" />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="font-semibold text-sm truncate">
             {isAdmin ? shop?.name ?? "Pick a shop" : "Head office"}
           </div>
@@ -141,6 +160,37 @@ function MessagesPage() {
               : `Messaging the owner as ${shop?.name ?? "your shop"}`}
           </div>
         </div>
+
+        {/* Only offered once there is actually something to clear. */}
+        {thread.length > 0 && (
+          <Confirm
+            title="Delete this conversation?"
+            description={
+              <>
+                All <strong>{thread.length}</strong> message
+                {thread.length === 1 ? "" : "s"} between{" "}
+                {isAdmin ? <strong>{shop?.name ?? "this shop"}</strong> : "you"} and{" "}
+                {isAdmin ? "head office" : "the owner"} are deleted{" "}
+                <strong>for both sides</strong> — this is one shared conversation, not two copies.
+                It can't be undone.
+              </>
+            }
+            confirmLabel="Delete conversation"
+            destructive
+            onConfirm={deleteChat}
+            trigger={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Delete this conversation"
+                title="Delete conversation"
+                className="shrink-0 text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            }
+          />
+        )}
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-3">

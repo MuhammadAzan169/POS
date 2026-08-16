@@ -398,6 +398,10 @@ export const db = {
   upsertMessage: (m: Message) => run(() => supabase!.from("messages").upsert(messageToRow(m))),
   deleteMessage: (id: string) => run(() => supabase!.from("messages").delete().eq("id", id)),
 
+  /** Wipes one shop's whole conversation in a single statement. */
+  deleteThread: (shopId: string) =>
+    run(() => supabase!.from("messages").delete().eq("shop_id", shopId)),
+
   /**
    * Marks every message in one shop's thread as seen by the given side.
    *
@@ -429,10 +433,15 @@ export const db = {
  * unsubscribe function; a no-op when Supabase isn't configured, which keeps the
  * caller free of `if (supabase)` branches.
  *
- * Both INSERT and UPDATE are watched: an update is how "read" propagates, so
- * the sender's screen can show that the other side has seen it.
+ * All three events matter: INSERT delivers, UPDATE is how "read" propagates so
+ * the sender sees their ticks turn, and DELETE has to reach the other side too
+ * — a deleted message that stays on someone else's screen until they reload is
+ * worse than not deleting it at all.
  */
-export function subscribeToMessages(onChange: (m: Message) => void): () => void {
+export function subscribeToMessages(handlers: {
+  onUpsert: (m: Message) => void;
+  onDelete: (id: string) => void;
+}): () => void {
   if (!supabase) return () => {};
   const channel = supabase
     .channel("messages-live")
@@ -440,8 +449,14 @@ export function subscribeToMessages(onChange: (m: Message) => void): () => void 
       "postgres_changes",
       { event: "*", schema: "public", table: "messages" },
       (payload) => {
-        if (payload.eventType === "DELETE") return;
-        onChange(rowToMessage(payload.new));
+        if (payload.eventType === "DELETE") {
+          // `replica identity full` (set by the migration) means the deleted row
+          // arrives whole rather than as a bare primary key.
+          const id = (payload.old as { id?: string } | null)?.id;
+          if (id) handlers.onDelete(id);
+          return;
+        }
+        handlers.onUpsert(rowToMessage(payload.new));
       },
     )
     .subscribe();
