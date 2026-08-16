@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { useStore, formatRs, todayISO, daysAgoISO, dayOf, type Sale } from "@/lib/store";
+import { useStore, formatRs, todayISO, daysAgoISO, dayOf, discountSplitOf, type Sale } from "@/lib/store";
 import { SaleEditDialog } from "@/components/SaleEditDialog";
 import { Receipt as ReceiptView, type ReceiptData } from "@/components/Receipt";
 import { PageHeader } from "@/components/AppLayout";
@@ -95,9 +95,15 @@ function SalesPage() {
     const live = rows.filter((s) => s.status !== "Returned");
     const revenue = live.reduce((a, s) => a + s.total, 0);
     const returned = rows.filter((s) => s.status === "Returned");
+    // Split the same way every row is: per-item rates, and what was knocked off
+    // the slip as a whole. Money given away is worth its own headline figure.
+    const splits = live.map(discountSplitOf);
     return {
       invoices: live.length,
       revenue,
+      itemDiscount: splits.reduce((a, d) => a + d.items, 0),
+      billDiscount: splits.reduce((a, d) => a + d.bill, 0),
+      discount: splits.reduce((a, d) => a + d.total, 0),
       profit: live.reduce((a, s) => a + s.profit, 0),
       items: live.reduce((a, s) => a + s.lines.reduce((b, l) => b + l.qty, 0), 0),
       // Average basket is the number that tells you whether people are buying
@@ -165,18 +171,29 @@ function SalesPage() {
     if (rows.length === 0) { toast.error("Nothing to export"); return; }
     downloadCsv(
       `sales-${new Date().toISOString().slice(0, 10)}.csv`,
-      ["Invoice", "Date", "Shop", "Customer", "Paid by", "Items", "Total", ...(isAdmin ? ["Profit"] : []), "Status"],
-      rows.map((s) => [
-        s.invoice,
-        new Date(s.date).toLocaleString(),
-        shops.find((sh) => sh.id === s.shopId)?.name ?? "",
-        s.customer,
-        s.payment,
-        s.lines.reduce((a, l) => a + l.qty, 0),
-        s.total,
-        ...(isAdmin ? [s.profit] : []),
-        s.status,
-      ]),
+      [
+        "Invoice", "Date", "Shop", "Customer", "Paid by", "Items", "Subtotal",
+        "Item discount", "Bill discount", "Total discount", "Total",
+        ...(isAdmin ? ["Profit"] : []), "Status",
+      ],
+      rows.map((s) => {
+        const d = discountSplitOf(s);
+        return [
+          s.invoice,
+          new Date(s.date).toLocaleString(),
+          shops.find((sh) => sh.id === s.shopId)?.name ?? "",
+          s.customer,
+          s.payment,
+          s.lines.reduce((a, l) => a + l.qty, 0),
+          s.subtotal,
+          d.items,
+          d.bill,
+          d.total,
+          s.total,
+          ...(isAdmin ? [s.profit] : []),
+          s.status,
+        ];
+      }),
     );
     toast.success(`Exported ${rows.length} invoices`);
   };
@@ -213,11 +230,23 @@ function SalesPage() {
         so they stay aligned as the filters change.
       */}
       <Card className="mb-4 overflow-hidden">
-        <dl className="grid grid-cols-2 divide-x divide-y sm:grid-cols-3 lg:grid-cols-5 lg:divide-y-0">
+        <dl className="grid grid-cols-2 divide-x divide-y sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
           <Metric label="Invoices" value={stats.invoices.toLocaleString()} />
           <Metric label="Revenue" value={formatRs(stats.revenue, settings.currency)} emphasis />
           <Metric label="Items sold" value={stats.items.toLocaleString()} />
           <Metric label="Average sale" value={formatRs(stats.average, settings.currency)} />
+          {/* Discount given is money that left the business as surely as an
+              expense did, so it gets a headline of its own rather than being
+              buried inside each invoice. */}
+          <Metric
+            label="Discount given"
+            value={stats.discount === 0 ? "—" : formatRs(stats.discount, settings.currency)}
+            sub={
+              stats.discount > 0
+                ? `${formatRs(stats.itemDiscount, settings.currency)} item · ${formatRs(stats.billDiscount, settings.currency)} bill`
+                : undefined
+            }
+          />
           {isAdmin ? (
             <Metric label="Profit" value={formatRs(stats.profit, settings.currency)} tone="success" />
           ) : (
@@ -410,6 +439,13 @@ function SalesPage() {
               fields={[
                 { label: "Customer", value: s.customer },
                 { label: "Items", value: s.lines.reduce((a, l) => a + l.qty, 0) },
+                ...(s.discount > 0
+                  ? [{
+                      label: "Discount",
+                      value: `− ${formatRs(s.discount, settings.currency)}`,
+                      className: "text-success-strong",
+                    }]
+                  : []),
               ]}
               actions={
                 <>
@@ -448,6 +484,7 @@ function SalesPage() {
                 <th className="px-4 py-3 font-medium">Customer</th>
                 <th className="px-4 py-3 font-medium">Paid by</th>
                 <th className="px-4 py-3 font-medium text-right">Items</th>
+                <th className="px-4 py-3 font-medium text-right">Discount</th>
                 <th className="px-4 py-3 font-medium text-right">Total</th>
                 {isAdmin && <th className="px-4 py-3 font-medium text-right">Profit</th>}
                 <th className="px-4 py-3 font-medium">Status</th>
@@ -484,6 +521,22 @@ function SalesPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">{s.lines.reduce((a, l) => a + l.qty, 0)}</td>
+                  {/* Split in the tooltip rather than in two more columns: the
+                      table is already wide, and the breakdown is what you check
+                      on one invoice, not something you scan down a page. */}
+                  <td
+                    className={cn(
+                      "px-4 py-3 text-right tabular-nums",
+                      s.discount > 0 ? "text-success-strong" : "text-muted-foreground",
+                    )}
+                    title={
+                      s.discount > 0
+                        ? `${formatRs(discountSplitOf(s).items, settings.currency)} on items · ${formatRs(discountSplitOf(s).bill, settings.currency)} on the bill`
+                        : undefined
+                    }
+                  >
+                    {s.discount > 0 ? `− ${formatRs(s.discount, settings.currency)}` : "—"}
+                  </td>
                   {/* tabular-nums keeps the rupee columns aligned digit-for-digit;
                       proportional figures made every row's total sit differently. */}
                   <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatRs(s.total, settings.currency)}</td>
@@ -522,7 +575,8 @@ function SalesPage() {
                   the empty row overhanging and breaking the bottom border. */}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={isAdmin ? 9 : 7} className="px-4 py-16">
+                  {/* 9 base columns, plus Shop and Profit for an owner. */}
+                  <td colSpan={isAdmin ? 11 : 9} className="px-4 py-16">
                     <EmptyState hasFilters={hasFilters} onClear={clearFilters} />
                   </td>
                 </tr>
@@ -538,6 +592,9 @@ function SalesPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">{stats.items.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-success-strong">
+                    {stats.discount > 0 ? `− ${formatRs(stats.discount, settings.currency)}` : "—"}
+                  </td>
                   <td className="px-4 py-3 text-right tabular-nums">{formatRs(stats.revenue, settings.currency)}</td>
                   {isAdmin && (
                     <td className="px-4 py-3 text-right tabular-nums text-success-strong">
@@ -571,28 +628,88 @@ function SalesPage() {
                   <div><div className="text-muted-foreground text-xs">Payment</div><div className="font-medium">{selected.payment}</div></div>
                   <div><div className="text-muted-foreground text-xs">Status</div><StatusPill status={selected.status} /></div>
                 </div>
-                <div className="border rounded-lg overflow-hidden">
+                {/* Per-item discount gets its own column: "why is this line
+                    Rs 40 less than qty × price" is the first question anyone
+                    asks of a slip, and the answer was nowhere on this screen. */}
+                <div className="border rounded-lg overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50 text-xs uppercase">
-                      <tr><th className="px-3 py-2 text-left font-medium">Item</th><th className="px-3 py-2 text-right font-medium">Qty</th><th className="px-3 py-2 text-right font-medium">Price</th>{isAdmin && <th className="px-3 py-2 text-right font-medium">Profit</th>}</tr>
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium">Item</th>
+                        <th className="px-3 py-2 text-right font-medium">Qty</th>
+                        <th className="px-3 py-2 text-right font-medium">Price</th>
+                        <th className="px-3 py-2 text-right font-medium">Disc.</th>
+                        <th className="px-3 py-2 text-right font-medium">Line</th>
+                        {isAdmin && <th className="px-3 py-2 text-right font-medium">Profit</th>}
+                      </tr>
                     </thead>
                     <tbody>
                       {selected.lines.map((l, i) => (
                         <tr key={i} className="border-t">
                           <td className="px-3 py-2">{l.name}</td>
-                          <td className="px-3 py-2 text-right">{l.qty}</td>
-                          <td className="px-3 py-2 text-right">{formatRs(l.price)}</td>
-                          {isAdmin && <td className="px-3 py-2 text-right text-success-strong">{formatRs(l.qty * (l.price - l.cost))}</td>}
+                          <td className="px-3 py-2 text-right tabular-nums">{l.qty}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{formatRs(l.price, settings.currency)}</td>
+                          <td className={cn("px-3 py-2 text-right tabular-nums", l.discount > 0 ? "text-success-strong" : "text-muted-foreground")}>
+                            {l.discount > 0 ? `− ${formatRs(l.discount, settings.currency)}` : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums font-medium">
+                            {formatRs(l.qty * l.price - l.discount, settings.currency)}
+                          </td>
+                          {/* The line discount comes off the profit too — this
+                              column used to ignore it and overstate every
+                              discounted line. */}
+                          {isAdmin && (
+                            <td className="px-3 py-2 text-right tabular-nums text-success-strong">
+                              {formatRs(l.qty * (l.price - l.cost) - l.discount, settings.currency)}
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
                 <div className="space-y-1 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatRs(selected.subtotal)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span>− {formatRs(selected.discount)}</span></div>
-                  <div className="flex justify-between font-semibold text-base pt-2 border-t"><span>Total</span><span>{formatRs(selected.total)}</span></div>
-                  {isAdmin && <div className="flex justify-between text-success-strong"><span>Profit</span><span>{formatRs(selected.profit)}</span></div>}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span className="tabular-nums">{formatRs(selected.subtotal, settings.currency)}</span>
+                  </div>
+                  {/* Itemised and whole-slip discounts are different decisions —
+                      a standing rate versus something knocked off at the
+                      counter — so they are reported separately. */}
+                  {(() => {
+                    const d = discountSplitOf(selected);
+                    return (
+                      <>
+                        {d.items > 0 && (
+                          <div className="flex justify-between text-success-strong">
+                            <span>Item discounts</span>
+                            <span className="tabular-nums">− {formatRs(d.items, settings.currency)}</span>
+                          </div>
+                        )}
+                        {d.bill > 0 && (
+                          <div className="flex justify-between text-success-strong">
+                            <span>Discount on the bill</span>
+                            <span className="tabular-nums">− {formatRs(d.bill, settings.currency)}</span>
+                          </div>
+                        )}
+                        {d.total === 0 && (
+                          <div className="flex justify-between text-muted-foreground">
+                            <span>Discount</span><span>none</span>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                  <div className="flex justify-between font-semibold text-base pt-2 border-t">
+                    <span>Total</span>
+                    <span className="tabular-nums">{formatRs(selected.total, settings.currency)}</span>
+                  </div>
+                  {isAdmin && (
+                    <div className="flex justify-between text-success-strong">
+                      <span>Profit</span>
+                      <span className="tabular-nums">{formatRs(selected.profit, settings.currency)}</span>
+                    </div>
+                  )}
                 </div>
                 {/* Screen-only actions: never appear on paper. */}
                 <div data-print="hide" className="flex gap-2 pt-2">
@@ -654,11 +771,14 @@ function SalesPage() {
 function Metric({
   label,
   value,
+  sub,
   emphasis,
   tone,
 }: {
   label: string;
   value: string;
+  /** Optional breakdown line under the figure, e.g. how a total splits. */
+  sub?: string;
   emphasis?: boolean;
   tone?: "success" | "destructive";
 }) {
@@ -675,6 +795,7 @@ function Metric({
       >
         {value}
       </dd>
+      {sub && <dd className="text-[11px] text-muted-foreground mt-0.5 tabular-nums break-words">{sub}</dd>}
     </div>
   );
 }

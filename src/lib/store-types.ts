@@ -67,6 +67,39 @@ export interface Product {
   active: boolean;
 }
 
+/**
+ * The product a scanned or typed code refers to, or nothing.
+ *
+ * Every screen with a scanner box had its own version of this, and they were
+ * all the same two lines: exact barcode, else "name contains the term". That
+ * second step is what made a scan look like it had found the wrong item —
+ * typing `500` matched "Face Powder 500g", and a code that simply isn't in the
+ * catalogue silently landed on whatever product happened to contain those
+ * digits. A digit-only term is a barcode, full stop: if no barcode matches, the
+ * answer is "not found", not a guess.
+ *
+ * Barcodes are compared with whitespace stripped, because a scanner that emits
+ * a trailing space, or a code typed with a gap, is the same code.
+ */
+export function matchProduct(products: Product[], term: string): Product | undefined {
+  const code = term.trim();
+  if (!code) return undefined;
+  const squash = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+  const target = squash(code);
+
+  const byBarcode = products.find((p) => p.barcode && squash(p.barcode) === target);
+  if (byBarcode) return byBarcode;
+
+  // No letters means it was a barcode, and it isn't one of ours.
+  if (!/[a-z]/i.test(code)) return undefined;
+
+  const lower = code.toLowerCase();
+  return (
+    products.find((p) => p.name.toLowerCase() === lower) ??
+    products.find((p) => p.name.toLowerCase().includes(lower))
+  );
+}
+
 /** The price a given kind of shop sells at. */
 export function priceFor(product: Pick<Product, "price" | "wholesalePrice">, kind: ShopKind) {
   if (kind !== "wholesale") return product.price;
@@ -122,6 +155,24 @@ export interface Sale {
   payment: PaymentMethod;
   status: "Completed" | "Returned" | "Partial";
   synced: boolean;
+}
+
+/**
+ * The two discounts on a sale, separated.
+ *
+ * `Sale.discount` is the total taken off the slip and `SaleLine.discount` is the
+ * part attributable to each item, so whatever is left over was taken off the
+ * bill as a whole — the "give him a hundred off" a shopkeeper does at the
+ * counter. Deriving it rather than storing a third number means the two can
+ * never disagree, and no column has to be added to a table that already holds
+ * live sales.
+ */
+export function discountSplitOf(sale: Pick<Sale, "discount" | "lines">) {
+  const items = sale.lines.reduce((a, l) => a + (l.discount || 0), 0);
+  // Never negative: a hand-edited row where the lines add up to more than the
+  // slip total should read as "all of it was itemised", not as a bill surcharge.
+  const bill = Math.max(0, Math.round(sale.discount - items));
+  return { items, bill, total: items + bill };
 }
 
 /** Settled on the spot, or put on the buyer's account. */

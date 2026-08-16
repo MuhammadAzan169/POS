@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useStore, formatRs, todayISO, shopKind, type Shop, type Transfer } from "@/lib/store";
+import { useStore, formatRs, todayISO, shopKind, matchProduct, type Shop, type Transfer } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { Card } from "@/components/ui/card";
@@ -101,9 +101,9 @@ function TransfersPage() {
   const scanIn = () => {
     const code = scan.trim();
     if (!code) return;
-    const p =
-      products.find((x) => x.barcode === code) ??
-      products.find((x) => x.name.toLowerCase().includes(code.toLowerCase()));
+    // Shared with the till and the purchase bill, so a code that finds an item
+    // on one screen finds the same item on all of them.
+    const p = matchProduct(products, code);
     if (!p) { toast.error(`No product matches “${code}”`); return; }
     addLine(p.id);
     setScan("");

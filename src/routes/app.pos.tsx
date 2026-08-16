@@ -8,6 +8,7 @@ import {
   priceFor,
   shopKind,
   shortDay,
+  matchProduct,
   customerBalance,
   creditHeadroom,
   type Product,
@@ -150,8 +151,10 @@ function POS() {
     e.preventDefault();
     const term = q.trim();
     if (!term) return;
-    const exact = products.find((p) => p.barcode === term);
-    const match = exact ?? (filtered.length === 1 ? filtered[0] : undefined);
+    // Barcode first (whitespace-insensitive, shared with purchases and
+    // transfers); failing that, a search that has narrowed to exactly one
+    // product is unambiguous enough to ring up.
+    const match = matchProduct(products, term) ?? (filtered.length === 1 ? filtered[0] : undefined);
     if (match) addToCart(match);
     else toast.error(`No product matches “${term}”`);
   };

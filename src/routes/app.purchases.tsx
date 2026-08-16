@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { useStore, formatRs, todayISO, type Purchase } from "@/lib/store";
+import { useStore, formatRs, todayISO, matchProduct, type Purchase } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { StatusPill } from "@/components/Stat";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
@@ -59,7 +59,9 @@ function PurchasesPage() {
   // A shopkeeper's lines always land in their own shop; only admins choose.
   const defaultShopId = isAdmin ? shops[0]?.id ?? "" : ownShopId;
   const emptyLine = (): Line => ({ productId: products[0]?.id ?? "", shopId: defaultShopId, qty: 10, rate: products[0]?.cost ?? 0 });
-  const [lines, setLines] = useState<Line[]>([emptyLine()]);
+  // Starts empty: the first thing a buyer does is scan, and a pre-filled line
+  // for an arbitrary product only ever had to be corrected or deleted.
+  const [lines, setLines] = useState<Line[]>([]);
   const [scan, setScan] = useState("");
   const [shopFilter, setShopFilter] = useState(isAdmin ? "all" : ownShopId);
   const [allQ, setAllQ] = useState("");
@@ -123,7 +125,7 @@ function PurchasesPage() {
 
   const openBlank = () => {
     setEditing(null);
-    setLines([emptyLine()]);
+    setLines([]);
     setBillNo("");
     setDate(todayISO());
     setOpen(true);
@@ -192,11 +194,19 @@ function PurchasesPage() {
   };
 
   /** Barcode entry inside the bill: adds or bumps the matching line. */
+  /**
+   * What the code in the box currently points at, recomputed as it is typed.
+   *
+   * Feedback only on Enter meant a mistyped code produced a toast that was gone
+   * a second later, while the bill still showed the line that was already
+   * there — so it read as "the scan added the wrong product".
+   */
+  const scanMatch = matchProduct(products, scan);
+
   const scanIntoBill = () => {
     const code = scan.trim();
     if (!code) return;
-    const p = products.find((x) => x.barcode === code) ??
-      products.find((x) => x.name.toLowerCase().includes(code.toLowerCase()));
+    const p = scanMatch;
     if (!p) { toast.error(`No product with barcode “${code}”`); return; }
     setLines((prev) => {
       const i = prev.findIndex((l) => l.productId === p.id);
@@ -261,7 +271,7 @@ function PurchasesPage() {
     setOpen(false);
     setEditing(null);
     setBillNo("");
-    setLines([emptyLine()]);
+    setLines([]);
   };
 
   /**
@@ -691,16 +701,45 @@ function PurchasesPage() {
 
           <div className="space-y-1.5">
             <Label>Add by barcode</Label>
-            <div className="relative">
-              <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <Input
-                value={scan}
-                onChange={(e) => setScan(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); scanIntoBill(); } }}
-                placeholder="Scan or type a barcode, then press Enter…"
-                className="pl-9"
-              />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  value={scan}
+                  onChange={(e) => setScan(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); scanIntoBill(); } }}
+                  placeholder="Scan a barcode, or type a product name…"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  className="pl-9"
+                />
+              </div>
+              {/* Enter alone is invisible to anyone typing rather than scanning. */}
+              <Button variant="outline" onClick={scanIntoBill} disabled={!scan.trim()}>
+                Add
+              </Button>
             </div>
+
+            {/* Says what the code resolves to before it is committed, so a code
+                that matches nothing is obvious while it is still on screen. */}
+            {scan.trim() && (
+              scanMatch ? (
+                <p className="text-xs flex items-center gap-1.5 text-success-strong">
+                  <PackagePlus className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">
+                    {scanMatch.name}
+                    <span className="text-muted-foreground">
+                      {" · "}{scanMatch.barcode || "no barcode"}{" · cost "}{formatRs(scanMatch.cost, settings.currency)}
+                    </span>
+                  </span>
+                </p>
+              ) : (
+                <p className="text-xs text-destructive">
+                  Nothing matches “{scan.trim()}”. Check the code, or add the product on the{" "}
+                  <span className="font-medium">Products</span> page first.
+                </p>
+              )
+            )}
           </div>
 
           <div className="mt-1">
@@ -772,6 +811,20 @@ function PurchasesPage() {
                   </div>
                 );
               })}
+
+              {/*
+                A bill used to open with one line pre-filled to whatever product
+                happened to be first in the catalogue. Scan a code that matched
+                nothing and that stray line was still sitting there, so the scan
+                looked like it had added the wrong item. It starts empty now and
+                says what to do.
+              */}
+              {lines.length === 0 && (
+                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                  <ScanLine className="h-5 w-5 mx-auto mb-2 opacity-60" />
+                  Scan a barcode above, or add a line and pick the product.
+                </div>
+              )}
             </div>
             <Button variant="outline" size="sm" className="mt-3" onClick={() => setLines((prev) => [...prev, emptyLine()])}>
               <Plus className="h-3.5 w-3.5 mr-1" /> Add line
