@@ -18,6 +18,7 @@ import {
   type DiscountRules,
   type Expense,
   type InventoryRow,
+  type Message,
   type Product,
   type Purchase,
   type ReturnRec,
@@ -45,6 +46,7 @@ export interface Snapshot {
   transfers: Transfer[];
   customers: Customer[];
   customerPayments: CustomerPayment[];
+  messages: Message[];
   settings: Settings;
   discounts: DiscountRules;
   /**
@@ -168,6 +170,17 @@ const customerPaymentToRow = (p: CustomerPayment) => ({
   shop_id: p.shopId, session_id: p.sessionId ?? null, note: p.note, received_by: p.receivedBy,
 });
 
+const rowToMessage = (r: any): Message => ({
+  id: r.id, shopId: r.shop_id, fromRole: r.from_role === "admin" ? "admin" : "shop",
+  fromUserId: r.from_user_id ?? undefined, fromName: r.from_name ?? "", body: r.body ?? "",
+  createdAt: r.created_at, readByAdmin: Boolean(r.read_by_admin), readByShop: Boolean(r.read_by_shop),
+});
+const messageToRow = (m: Message) => ({
+  id: m.id, shop_id: m.shopId, from_role: m.fromRole, from_user_id: m.fromUserId ?? null,
+  from_name: m.fromName, body: m.body, created_at: m.createdAt,
+  read_by_admin: m.readByAdmin, read_by_shop: m.readByShop,
+});
+
 const rowToTransfer = (r: any): Transfer => ({
   id: r.id, transferNo: r.transfer_no, date: r.date, fromShopId: r.from_shop_id, toShopId: r.to_shop_id,
   items: r.items ?? [], notes: r.notes ?? "", createdBy: r.created_by ?? "",
@@ -244,7 +257,7 @@ export async function loadSnapshot(): Promise<Snapshot> {
 
   const missing: string[] = [];
 
-  const [core, daySessions, transfers, customers, customerPayments] = await Promise.all([
+  const [core, daySessions, transfers, customers, customerPayments, messages] = await Promise.all([
     Promise.all([
       supabase.from("shops").select("*").order("name"),
       supabase.from("users").select("*").order("name"),
@@ -281,6 +294,14 @@ export async function loadSnapshot(): Promise<Snapshot> {
       rowToCustomerPayment,
       missing,
     ),
+    // Only the recent tail: a thread is read newest-first and nobody scrolls a
+    // year back, so the whole history is not worth loading on every boot.
+    selectOptional(
+      "messages",
+      () => supabase!.from("messages").select("*").order("created_at", { ascending: false }).limit(500),
+      rowToMessage,
+      missing,
+    ),
   ]);
 
   const [shops, users, products, inventory, sales, purchases, suppliers, expenses, returns, appState] = core;
@@ -311,6 +332,9 @@ export async function loadSnapshot(): Promise<Snapshot> {
     transfers,
     customers,
     customerPayments,
+    // Oldest first: a conversation reads downwards, so the UI never has to
+    // reverse it and the two orderings can't drift apart.
+    messages: [...messages].reverse(),
     settings: { ...DEFAULT_SETTINGS, ...((appState.data?.settings as Partial<Settings>) ?? {}) },
     discounts: { ...DEFAULT_DISCOUNTS, ...((appState.data?.discounts as Partial<DiscountRules>) ?? {}) },
     pendingMigration: missing.length > 0 ? missing : undefined,
@@ -371,7 +395,55 @@ export const db = {
 
   upsertProducts: (rows: Product[]) => run(() => supabase!.from("products").upsert(rows.map(productToRow))),
 
+  upsertMessage: (m: Message) => run(() => supabase!.from("messages").upsert(messageToRow(m))),
+  deleteMessage: (id: string) => run(() => supabase!.from("messages").delete().eq("id", id)),
+
+  /**
+   * Marks every message in one shop's thread as seen by the given side.
+   *
+   * Done as one statement rather than a row-per-message loop: opening a thread
+   * with forty unread messages would otherwise fire forty requests, and the
+   * filter is exactly the same condition the unread badge counts.
+   */
+  markThreadRead: (shopId: string, role: "admin" | "shop") =>
+    run(() =>
+      supabase!
+        .from("messages")
+        .update(role === "admin" ? { read_by_admin: true } : { read_by_shop: true })
+        .eq("shop_id", shopId)
+        // Your own messages need no marking, and excluding them keeps the write
+        // to the rows that actually change.
+        .neq("from_role", role),
+    ),
+
   /** Settings and discounts share one singleton row. */
   saveAppState: (settings: Settings, discounts: DiscountRules) =>
     run(() => supabase!.from("app_state").upsert({ id: "singleton", settings, discounts })),
 };
+
+/**
+ * Live message delivery.
+ *
+ * Postgres changes are pushed over a websocket, so a message typed at head
+ * office appears on the shop's screen without either side reloading. Returns an
+ * unsubscribe function; a no-op when Supabase isn't configured, which keeps the
+ * caller free of `if (supabase)` branches.
+ *
+ * Both INSERT and UPDATE are watched: an update is how "read" propagates, so
+ * the sender's screen can show that the other side has seen it.
+ */
+export function subscribeToMessages(onChange: (m: Message) => void): () => void {
+  if (!supabase) return () => {};
+  const channel = supabase
+    .channel("messages-live")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "messages" },
+      (payload) => {
+        if (payload.eventType === "DELETE") return;
+        onChange(rowToMessage(payload.new));
+      },
+    )
+    .subscribe();
+  return () => { void supabase!.removeChannel(channel); };
+}

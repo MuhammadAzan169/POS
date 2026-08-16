@@ -58,7 +58,19 @@ sale vanishes; on Supabase it is still there.
 | `inventory` | One row per product per shop, keyed on both |
 | `sales`, `purchases`, `returns` | Line items are `jsonb` — see the comment in `schema.sql` |
 | `expenses` | One row per expense |
+| `day_sessions` | One trading day per shop — the cash count that settles it |
+| `customers`, `customer_payments` | Trade buyers and what they owe |
+| `messages` | Owner ↔ shop conversation, one thread per shop, pushed over Realtime |
 | `app_state` | Single row holding settings + discount rules as `jsonb` |
+
+### Already have the tables?
+
+`schema.sql` is idempotent, so re-running it adds anything new. If you'd rather
+apply just the change, the files in [`migrations/`](./migrations) are numbered
+and run in order — the newest is `004_messages.sql`, which adds messaging and
+registers the table with the `supabase_realtime` publication. Without that
+publication line a message is stored but never pushed, so the chat would only
+update on a page reload.
 
 ## Security, honestly
 

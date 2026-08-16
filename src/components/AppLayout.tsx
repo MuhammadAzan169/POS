@@ -32,10 +32,12 @@ import {
   ArrowLeftRight,
   CalendarClock,
   Contact,
+  MessagesSquare,
 } from "lucide-react";
-import { useStore, formatRs, openSessionFor, shortDay } from "@/lib/store";
+import { useStore, formatRs, openSessionFor, shortDay, isUnreadFor } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { NotificationBell } from "@/components/NotificationBell";
 import { Confirm } from "@/components/Confirm";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { toast } from "sonner";
@@ -45,6 +47,7 @@ type NavItem = { to: string; label: string; icon: ReactNode };
 const ADMIN_NAV: NavItem[] = [
   { to: "/app/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
   { to: "/app/daybook", label: "Day Book", icon: <CalendarClock className="h-4 w-4" /> },
+  { to: "/app/messages", label: "Messages", icon: <MessagesSquare className="h-4 w-4" /> },
   { to: "/app/ai", label: "AI Assistant", icon: <Sparkles className="h-4 w-4" /> },
   { to: "/app/sales", label: "Sales", icon: <Receipt className="h-4 w-4" /> },
   { to: "/app/purchases", label: "Purchases", icon: <Package className="h-4 w-4" /> },
@@ -69,6 +72,7 @@ const SHOP_NAV: NavItem[] = [
   { to: "/app/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
   { to: "/app/daybook", label: "Day Book", icon: <CalendarClock className="h-4 w-4" /> },
   { to: "/app/pos", label: "New Sale", icon: <ShoppingCart className="h-4 w-4" /> },
+  { to: "/app/messages", label: "Messages", icon: <MessagesSquare className="h-4 w-4" /> },
   { to: "/app/sales", label: "Sales", icon: <Receipt className="h-4 w-4" /> },
   { to: "/app/customers", label: "Customers", icon: <Contact className="h-4 w-4" /> },
   { to: "/app/purchases", label: "Purchases", icon: <Package className="h-4 w-4" /> },
@@ -271,6 +275,9 @@ function MigrationNotice() {
 
   if (!pendingMigration || pendingMigration.length === 0 || hidden) return null;
 
+  const files = migrationFilesFor(pendingMigration);
+  const features = migrationFeaturesFor(pendingMigration);
+
   return (
     <div
       data-print="hide"
@@ -278,19 +285,29 @@ function MigrationNotice() {
     >
       <Database className="h-4 w-4 mt-0.5 shrink-0 text-warning-strong" />
       <div className="min-w-0 flex-1 text-sm">
-        <div className="font-medium text-warning-strong">Your database needs one update</div>
+        <div className="font-medium text-warning-strong">
+          Your database needs {files.length === 1 ? "one update" : `${files.length} updates`}
+        </div>
         <p className="text-muted-foreground mt-1">
           Everything else is working on your real data, but{" "}
           <span className="text-foreground">{pendingMigration.join(", ")}</span>{" "}
-          {pendingMigration.length === 1 ? "is" : "are"} missing, so the day book and stock transfers
-          can't save yet. In the Supabase dashboard open{" "}
-          <span className="font-medium text-foreground">SQL Editor → New query</span>, paste the
-          contents of{" "}
-          <code className="px-1 py-0.5 rounded bg-muted font-mono text-xs break-all">
-            supabase/migrations/002_day_book_and_wholesale.sql
-          </code>{" "}
-          and run it, then reload this page.
+          {pendingMigration.length === 1 ? "is" : "are"} missing, so {features} can't save yet. In the
+          Supabase dashboard open{" "}
+          <span className="font-medium text-foreground">SQL Editor → New query</span>, then paste and
+          run {files.length === 1 ? "this file" : "these files, in order"}:
         </p>
+        {/* Named individually rather than as one sentence: these get copied into
+            a SQL editor, and a filename buried in prose is a filename mistyped. */}
+        <ul className="mt-2 space-y-1">
+          {files.map((f) => (
+            <li key={f}>
+              <code className="px-1 py-0.5 rounded bg-muted font-mono text-xs break-all">
+                supabase/migrations/{f}
+              </code>
+            </li>
+          ))}
+        </ul>
+        <p className="text-muted-foreground mt-2">Then reload this page.</p>
       </div>
       <button
         onClick={() => setHidden(true)}
@@ -303,6 +320,22 @@ function MigrationNotice() {
   );
 }
 
+/**
+ * How many messages are waiting for whoever is signed in.
+ *
+ * Shared by the sidebar row and the drawer so the two can never show different
+ * numbers, and read straight from the store, which the realtime subscription
+ * keeps current without a reload.
+ */
+function useUnreadMessages() {
+  const { user, messages } = useStore();
+  return useMemo(() => {
+    if (!user) return 0;
+    const mine = user.role === "admin" ? messages : messages.filter((m) => m.shopId === user.shopId);
+    return mine.filter((m) => isUnreadFor(m, user.role)).length;
+  }, [user, messages]);
+}
+
 /** The nav list, shared by the desktop sidebar and the mobile drawer. */
 function NavLinks({
   nav,
@@ -313,10 +346,13 @@ function NavLinks({
   isActive: (to: string) => boolean;
   onNavigate?: () => void;
 }) {
+  const unreadMessages = useUnreadMessages();
+
   return (
     <>
       {nav.map((item) => {
         const active = isActive(item.to);
+        const badge = item.to === "/app/messages" ? unreadMessages : 0;
         return (
           <Link
             key={item.to}
@@ -332,6 +368,11 @@ function NavLinks({
           >
             {item.icon}
             <span>{item.label}</span>
+            {badge > 0 && (
+              <span className="ml-auto min-w-[1.15rem] h-[1.15rem] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold flex items-center justify-center tabular-nums">
+                {badge > 9 ? "9+" : badge}
+              </span>
+            )}
           </Link>
         );
       })}
@@ -520,6 +561,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <RefreshCw className="h-3.5 w-3.5" />
               <span>{online ? "Synced" : "Pending"}</span>
             </button>
+
+            <NotificationBell />
 
             <ThemeToggle />
 

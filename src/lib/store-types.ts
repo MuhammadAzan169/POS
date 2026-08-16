@@ -192,6 +192,37 @@ export interface CustomerBalance {
   overLimit: boolean;
 }
 
+/* ------------------------------------------------------------------ messages */
+
+/**
+ * One message in the conversation between the owner and a shop.
+ *
+ * Threads belong to a SHOP, not to a person: a shop is a place with a till, and
+ * whoever is standing behind it today needs to see what was said yesterday.
+ * `fromName` is stored on the row so an old message still reads correctly after
+ * the person who sent it is renamed or removed.
+ */
+export interface Message {
+  id: string;
+  shopId: string;
+  fromRole: Role;
+  fromUserId?: string;
+  fromName: string;
+  body: string;
+  createdAt: string;
+  /** Seen by the owner. Set when they open that shop's thread. */
+  readByAdmin: boolean;
+  /** Seen by whoever is on the till at that shop. */
+  readByShop: boolean;
+}
+
+/** Whether a message counts as unread for the person looking at it. */
+export function isUnreadFor(m: Message, role: Role) {
+  // Your own messages are never unread to you — you just sent them.
+  if (m.fromRole === role) return false;
+  return role === "admin" ? !m.readByAdmin : !m.readByShop;
+}
+
 /** A wholesaler / vendor you buy stock from. */
 export interface Supplier {
   id: string;

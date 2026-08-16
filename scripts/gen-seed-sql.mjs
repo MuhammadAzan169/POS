@@ -84,6 +84,9 @@ parts.push(insert("purchases", ["id", "bill_no", "supplier", "supplier_id", "dat
 parts.push(insert("expenses", ["id", "date", "shop_id", "category", "description", "amount", "added_by", "session_id"], seed.genExpenses(),
   (e) => [q(e.id), q(e.date), q(e.shopId), q(e.category), q(e.description), q(e.amount), q(e.addedBy), q(e.sessionId ?? null)]));
 
+parts.push(insert("messages", ["id", "shop_id", "from_role", "from_user_id", "from_name", "body", "created_at", "read_by_admin", "read_by_shop"], seed.genMessages(),
+  (m) => [q(m.id), q(m.shopId), q(m.fromRole), q(m.fromUserId ?? null), q(m.fromName), q(m.body), q(m.createdAt), q(m.readByAdmin), q(m.readByShop)]));
+
 parts.push(`insert into app_state (id, settings, discounts) values
   ('singleton', ${json(seed.DEFAULT_SETTINGS)}, ${json({ enabled: true, overallPct: 0, maxPct: 20, perProduct: {} })})
 on conflict (id) do update set settings = excluded.settings, discounts = excluded.discounts;
@@ -104,6 +107,7 @@ const counts = {
   customer_payments: seed.genCustomerPayments().length,
   purchases: seed.genPurchases().length,
   expenses: seed.genExpenses().length,
+  messages: seed.genMessages().length,
 };
 console.log("wrote supabase/seed.sql");
 console.table(counts);

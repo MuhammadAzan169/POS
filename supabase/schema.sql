@@ -127,6 +127,20 @@ create table if not exists customer_payments (
   received_by text default ''
 );
 
+-- One message thread per SHOP rather than per person: a shop is a place with a
+-- till, and whoever is standing behind it needs the whole conversation.
+create table if not exists messages (
+  id            text primary key,
+  shop_id       text not null references shops(id) on delete cascade,
+  from_role     text not null check (from_role in ('admin', 'shop')),
+  from_user_id  text,
+  from_name     text not null default '',
+  body          text not null,
+  created_at    timestamptz not null default now(),
+  read_by_admin boolean not null default false,
+  read_by_shop  boolean not null default false
+);
+
 -- `payment = 'Credit'` means the goods left but the money did not. Such a sale
 -- still counts towards takings and profit, but contributes nothing to the
 -- drawer, so the day's cash count must exclude it.
@@ -233,6 +247,21 @@ create index if not exists purchases_date_idx     on purchases (date desc);
 create index if not exists expenses_shop_date_idx on expenses (shop_id, date desc);
 create index if not exists returns_kind_date_idx  on returns (kind, date desc);
 create index if not exists products_barcode_idx   on products (barcode);
+create index if not exists messages_shop_idx      on messages (shop_id, created_at desc);
+create index if not exists messages_created_idx   on messages (created_at desc);
+
+-- Realtime delivery is per-publication: without this a message is stored but
+-- never pushed, so the chat would only update on a page reload.
+do $$
+begin
+  alter publication supabase_realtime add table messages;
+exception
+  when duplicate_object then null;
+  when undefined_object then null;  -- publication absent on a self-hosted setup
+end $$;
+
+-- Sends the whole row on UPDATE, so "marked as read" arrives with its contents.
+alter table messages replica identity full;
 
 -- =====================================================================
 --  Row Level Security
@@ -254,7 +283,7 @@ create index if not exists products_barcode_idx   on products (barcode);
 do $$
 declare t text;
 begin
-  foreach t in array array['shops','users','suppliers','products','inventory','sales','purchases','expenses','returns','day_sessions','transfers','customers','customer_payments','app_state']
+  foreach t in array array['shops','users','suppliers','products','inventory','sales','purchases','expenses','returns','day_sessions','transfers','customers','customer_payments','messages','app_state']
   loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists "demo_open_access" on %I', t);

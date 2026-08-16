@@ -15,7 +15,9 @@ import {
   type DaySession,
   type Expense,
   type InventoryRow,
+  type Message,
   type Product,
+  type Role,
   type Purchase,
   type Sale,
   type SaleLine,
@@ -402,6 +404,74 @@ export function genExpenses(): Expense[] {
       sessionId: `day-${shop.id}-${day}`,
     };
   });
+}
+
+/**
+ * A short conversation per shop, so the messages screen has something to show
+ * on demo data instead of four empty threads.
+ *
+ * The last message in each thread is from the shop and unread by the owner —
+ * that is the state the screen is actually designed around: someone is waiting
+ * on a reply, and the badge says so.
+ */
+export function genMessages(): Message[] {
+  const script: { shopId: string; lines: { role: Role; body: string }[] }[] = [
+    {
+      shopId: "s1",
+      lines: [
+        { role: "admin", body: "Morning — new stock of the Glow lipsticks lands with you today. Put them on the front shelf." },
+        { role: "shop", body: "Got it. The Ruby 02 shade is nearly finished, only 3 left." },
+        { role: "shop", body: "Also a customer asked if we can do a bulk rate on 20 units. What should I quote?" },
+      ],
+    },
+    {
+      shopId: "s2",
+      lines: [
+        { role: "shop", body: "Till was 500 short last night — I think I gave wrong change on the last sale. Noted it in the day book." },
+        { role: "admin", body: "Thanks for flagging it. Recount at open tomorrow and let me know." },
+      ],
+    },
+    {
+      shopId: "s0",
+      lines: [
+        { role: "admin", body: "Bilal Traders have hit their credit limit. No more on account until they settle." },
+        { role: "shop", body: "Understood. They're coming in tomorrow, I'll ask for payment then." },
+      ],
+    },
+  ];
+
+  const out: Message[] = [];
+  let n = 0;
+  script.forEach(({ shopId, lines }) => {
+    // Anything the other side has already answered counts as seen; only the
+    // trailing run — the part still waiting on a reply — stays unread.
+    const trailingRole = lines[lines.length - 1].role;
+    let firstUnanswered = lines.length - 1;
+    while (firstUnanswered > 0 && lines[firstUnanswered - 1].role === trailingRole) firstUnanswered--;
+
+    lines.forEach((line, i) => {
+      n++;
+      const at = new Date();
+      // Spread backwards through the day so the thread reads in order.
+      at.setHours(at.getHours() - (lines.length - i) * 2, 15 * (n % 4), 0, 0);
+      const fromShop = line.role === "shop";
+      const answered = i < firstUnanswered;
+      out.push({
+        id: `msg-seed-${n}`,
+        shopId,
+        fromRole: line.role,
+        fromUserId: fromShop ? USERS.find((u) => u.shopId === shopId)?.id : "u0",
+        fromName: fromShop ? USERS.find((u) => u.shopId === shopId)?.name ?? "Shop" : "Owner",
+        body: line.body,
+        createdAt: at.toISOString(),
+        // The sender has seen their own message; the other side has seen it
+        // only if they have since replied.
+        readByAdmin: !fromShop || answered,
+        readByShop: fromShop || answered,
+      });
+    });
+  });
+  return out.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
 export const DEFAULT_SETTINGS: Settings = {

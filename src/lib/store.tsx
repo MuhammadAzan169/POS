@@ -10,6 +10,7 @@ import type {
   DiscountRules,
   Expense,
   InventoryRow,
+  Message,
   Product,
   Purchase,
   ReceiptDesign,
@@ -27,7 +28,7 @@ import type {
 import { DEFAULT_DISCOUNTS, DEFAULT_RECEIPT } from "./store-types";
 import { openSessionFor } from "./day-book";
 import { dayOf, todayISO } from "./dates";
-import { db, loadSnapshot } from "./db";
+import { db, loadSnapshot, subscribeToMessages } from "./db";
 import { isSupabaseConfigured } from "./supabase";
 
 // Calendar helpers moved to dates.ts so day-book.ts can share them; re-exported
@@ -62,6 +63,8 @@ interface StoreState {
   transfers: Transfer[];
   customers: Customer[];
   customerPayments: CustomerPayment[];
+  /** The owner↔shop conversation, oldest first, live over a websocket. */
+  messages: Message[];
   settings: Settings;
   discounts: DiscountRules;
   login: (email: string, password: string) => User | null;
@@ -133,6 +136,14 @@ interface StoreState {
   addCustomerPayment: (p: Omit<CustomerPayment, "id">) => void;
   updateCustomerPayment: (p: CustomerPayment) => void;
   deleteCustomerPayment: (id: string) => void;
+
+  /* ---------------------------------------------------------------- messages */
+  /** Posts a message into one shop's thread. Returns the stored message. */
+  sendMessage: (input: { shopId: string; body: string }) => Message | null;
+  /** Marks everything the other side said in this thread as seen. */
+  markThreadRead: (shopId: string) => void;
+  /** Removes a message you sent by mistake. */
+  deleteMessage: (id: string) => void;
 }
 
 /** One signed stock movement: `delta` units of a product at one shop. */
@@ -190,6 +201,7 @@ import {
   genDaySessions,
   genExpenses,
   genInventory,
+  genMessages,
   genPurchases,
   genSales,
 } from "./seed-data";
@@ -218,6 +230,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [customers, setCustomers] = useState<Customer[]>(CUSTOMERS);
   const [customerPayments, setCustomerPayments] = useState<CustomerPayment[]>(() => genCustomerPayments());
+  const [messages, setMessages] = useState<Message[]>(() => genMessages());
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [discounts, setDiscounts] = useState<DiscountRules>(DEFAULT_DISCOUNTS);
 
@@ -263,6 +276,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setTransfers(snap.transfers);
           setCustomers(snap.customers);
           setCustomerPayments(snap.customerPayments);
+          setMessages(snap.messages);
           setSettings(snap.settings);
           setDiscounts(snap.discounts);
           setUsingSupabase(true);
@@ -281,6 +295,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     void boot();
     return () => { cancelled = true; };
+  }, []);
+
+  /**
+   * Live messages.
+   *
+   * Subscribed once for the life of the provider rather than from the messages
+   * screen: the unread badge in the header has to light up while the user is on
+   * the till, which is precisely when that screen is not mounted.
+   *
+   * The same row arrives here after the sender's own optimistic insert, so it is
+   * matched by id and replaced rather than appended — otherwise every message
+   * you sent would appear twice on your own screen.
+   */
+  useEffect(() => {
+    return subscribeToMessages((incoming) => {
+      setMessages((prev) => {
+        const i = prev.findIndex((m) => m.id === incoming.id);
+        if (i >= 0) {
+          const next = [...prev];
+          next[i] = incoming;
+          return next;
+        }
+        return [...prev, incoming].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      });
+    });
   }, []);
 
   /**
@@ -318,6 +357,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       transfers,
       customers,
       customerPayments,
+      messages,
       settings,
       discounts,
       login: (email, _password) => {
@@ -921,8 +961,58 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setCustomerPayments((prev) => prev.filter((x) => x.id !== id));
         persist("the deletion", () => db.deleteCustomerPayment(id));
       },
+
+      /* -------------------------------------------------------- messages */
+
+      sendMessage: ({ shopId, body }) => {
+        const text = body.trim();
+        if (!user || !shopId || !text) return null;
+        const message: Message = {
+          // Two people can send in the same millisecond, so the clock alone is
+          // not enough to keep ids apart.
+          id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          shopId,
+          fromRole: user.role,
+          fromUserId: user.id,
+          fromName: user.name,
+          body: text,
+          createdAt: new Date().toISOString(),
+          // You have obviously seen what you just typed.
+          readByAdmin: user.role === "admin",
+          readByShop: user.role === "shop",
+        };
+        // Shown immediately rather than waiting for the round trip: a chat that
+        // pauses after every send feels broken, and the realtime echo is matched
+        // by id so it replaces this rather than duplicating it.
+        setMessages((prev) => [...prev, message]);
+        persist("the message", () => db.upsertMessage(message));
+        return message;
+      },
+
+      markThreadRead: (shopId) => {
+        if (!user) return;
+        const role = user.role;
+        let changed = false;
+        setMessages((prev) => {
+          const next = prev.map((m) => {
+            if (m.shopId !== shopId || m.fromRole === role) return m;
+            if (role === "admin" ? m.readByAdmin : m.readByShop) return m;
+            changed = true;
+            return role === "admin" ? { ...m, readByAdmin: true } : { ...m, readByShop: true };
+          });
+          // Returning `prev` untouched when nothing was unread keeps this safe to
+          // call from an effect — a new array every time would re-run it forever.
+          return changed ? next : prev;
+        });
+        if (changed) persist("the read receipt", () => db.markThreadRead(shopId, role));
+      },
+
+      deleteMessage: (id) => {
+        setMessages((prev) => prev.filter((m) => m.id !== id));
+        persist("the deletion", () => db.deleteMessage(id));
+      },
     }),
-    [user, ready, usingSupabase, dbError, pendingMigration, online, shops, users, products, inventory, sales, purchases, suppliers, expenses, returns, daySessions, transfers, customers, customerPayments, settings, discounts],
+    [user, ready, usingSupabase, dbError, pendingMigration, online, shops, users, products, inventory, sales, purchases, suppliers, expenses, returns, daySessions, transfers, customers, customerPayments, messages, settings, discounts],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
