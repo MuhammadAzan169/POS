@@ -35,6 +35,7 @@ import {
   MessagesSquare,
 } from "lucide-react";
 import { useStore, formatRs, openSessionFor, shortDay, isUnreadFor } from "@/lib/store";
+import { migrationFilesFor, migrationFeaturesFor } from "@/lib/notifications";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NotificationBell } from "@/components/NotificationBell";

@@ -68,6 +68,52 @@ interface Source {
   pendingMigration: string[] | null;
 }
 
+/**
+ * Which migration adds each thing the snapshot found missing, and what stops
+ * working without it.
+ *
+ * `loadSnapshot` reports missing tables and columns by their Postgres names,
+ * which tell a shopkeeper nothing. This is the one place that translates them
+ * into the file to run, shared by the shell's banner and the bell — so a
+ * database missing only `messages` is pointed at the messages migration rather
+ * than at whichever file each message happened to name.
+ */
+const MIGRATIONS: { match: string[]; file: string; feature: string }[] = [
+  {
+    match: ["day_sessions", "transfers", "shops.kind", "sales.business_date"],
+    file: "002_day_book_and_wholesale.sql",
+    feature: "the day book and stock transfers",
+  },
+  {
+    match: ["customers", "customer_payments", "sales.customer_id"],
+    file: "003_customers_and_credit.sql",
+    feature: "customers and credit",
+  },
+  {
+    match: ["messages"],
+    file: "004_messages.sql",
+    feature: "messaging",
+  },
+];
+
+/** The migration files to run, oldest first — later ones build on earlier ones. */
+export function migrationFilesFor(missing: string[]) {
+  return MIGRATIONS.filter((m) => m.match.some((x) => missing.includes(x))).map((m) => m.file);
+}
+
+/**
+ * What those missing pieces cost you, named as features rather than tables.
+ *
+ * Joined with commas rather than a trailing "and": the feature names contain
+ * their own conjunctions ("the day book and stock transfers"), so an Oxford-ish
+ * joiner produced "customers and credit and messaging".
+ */
+export function migrationFeaturesFor(missing: string[]) {
+  const names = MIGRATIONS.filter((m) => m.match.some((x) => missing.includes(x))).map((m) => m.feature);
+  if (names.length === 0) return "some features";
+  return names.join(", ");
+}
+
 const LS_READ = "apos.notifications.read";
 /** Ids are kept only so a dismissed notice stays dismissed; the tail is dead weight. */
 const MAX_REMEMBERED = 300;
@@ -270,12 +316,15 @@ export function buildNotifications(s: Source): AppNotification[] {
   /* ----------------------------------------------------------------- system */
 
   if (s.pendingMigration && s.pendingMigration.length > 0) {
+    const files = migrationFilesFor(s.pendingMigration);
     out.push({
       id: `migration:${s.pendingMigration.join(",")}`,
       group: "System",
       tone: "critical",
-      title: "The database is missing an update",
-      detail: `${s.pendingMigration.join(", ")} — run the files in supabase/migrations/, then reload.`,
+      title: `${capitalise(migrationFeaturesFor(s.pendingMigration))} can't save yet`,
+      detail: files.length
+        ? `Run ${files.map((f) => `supabase/migrations/${f}`).join(" then ")} in the Supabase SQL Editor, then reload.`
+        : `${s.pendingMigration.join(", ")} is missing from the database.`,
       to: "/app/settings",
     });
   }
@@ -284,6 +333,11 @@ export function buildNotifications(s: Source): AppNotification[] {
   // however long ago it happened.
   const rank: Record<NotificationTone, number> = { critical: 0, warning: 1, info: 2 };
   return out.sort((a, b) => rank[a.tone] - rank[b.tone] || (b.at ?? "").localeCompare(a.at ?? ""));
+}
+
+/** Sentence case for a feature name spliced into the front of a title. */
+function capitalise(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 /** `days` before or after an ISO date, as a plain YYYY-MM-DD string. */
