@@ -263,7 +263,7 @@ export function SaleEditDialog({ sale, onClose }: { sale: Sale | null; onClose: 
                       />
                     ) : (
                       <div className="text-right tabular-nums text-muted-foreground">
-                        {l.discount > 0 ? `− ${money(l.discount)}` : "—"}
+                        {l.discount > 0 ? `− ${money(l.discount)}` : "Full price"}
                       </div>
                     )}
                   </td>

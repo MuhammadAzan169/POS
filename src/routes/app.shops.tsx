@@ -111,7 +111,7 @@ function ShopsPage() {
                 </div>
               </dl>
               <div className="mt-3 pt-3 border-t text-xs text-muted-foreground">
-                Linked login: <span className="text-foreground font-medium">{linked?.email ?? "—"}</span>
+                Linked login: <span className="text-foreground font-medium">{linked?.email ?? "No login yet"}</span>
               </div>
               <div className="flex gap-2 mt-4">
                 <Button variant="outline" size="sm" className="flex-1" onClick={() => openEdit(s)}>Edit</Button>

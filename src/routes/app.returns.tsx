@@ -96,8 +96,8 @@ function ReturnCard({
       right={formatRs(r.refund)}
       rightSub={kind === "customer" ? "refunded" : "credit"}
       fields={[
-        ...(kind === "supplier" ? [{ label: "Supplier", value: r.supplier ?? "—" }] : []),
-        { label: kind === "supplier" ? "From shop" : "Shop", value: shopName ?? "—" },
+        ...(kind === "supplier" ? [{ label: "Supplier", value: r.supplier ?? "No supplier" }] : []),
+        { label: kind === "supplier" ? "From shop" : "Shop", value: shopName ?? "Unknown shop" },
         { label: "Reason", value: r.reason },
         { label: "Items", value: r.items.map((i) => `${i.qty} × ${i.name}`).join(", ") },
       ]}
@@ -418,7 +418,7 @@ function NewSupplierReturn({
                       return (
                         <tr key={l.productId} className="border-t">
                           <td className="px-3 py-2">{p.name}</td>
-                          <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{p.barcode || "—"}</td>
+                          <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{p.barcode || "No barcode"}</td>
                           <td className="px-3 py-2 text-right text-muted-foreground">{l.qty}</td>
                           <td className="px-3 py-2 text-right">{stockHere(p.id)}</td>
                           <td className="px-3 py-2">

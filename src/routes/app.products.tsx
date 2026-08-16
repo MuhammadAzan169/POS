@@ -15,7 +15,7 @@ import type { Product } from "@/lib/store";
 
 /** Guards the divide-by-zero that rendered "NaN%"/"Infinity%" for zero-priced items. */
 function margin(price: number, cost: number) {
-  if (!price) return "—";
+  if (!price) return "No price set";
   return `${Math.round(((price - cost) / price) * 100)}%`;
 }
 
@@ -133,10 +133,10 @@ function ProductsPage() {
               right={formatRs(p.price)}
               rightSub={isAdmin ? `cost ${formatRs(p.cost)}` : undefined}
               fields={[
-                { label: "Category", value: p.category || "—" },
-                { label: "Brand", value: p.brand || "—" },
+                { label: "Category", value: p.category || "Uncategorised" },
+                { label: "Brand", value: p.brand || "No brand" },
                 { label: "Stock", value: p.totalStock },
-                { label: "Wholesale", value: p.wholesalePrice ? formatRs(p.wholesalePrice) : "—" },
+                { label: "Wholesale", value: p.wholesalePrice ? formatRs(p.wholesalePrice) : "Retail price only" },
                 ...(isAdmin
                   ? [{
                       label: "Margin",
@@ -181,7 +181,7 @@ function ProductsPage() {
                   {/* A dash reads as "same as retail", which is exactly how the
                       wholesale till treats an unset rate. */}
                   <td className="px-4 py-3 text-right text-muted-foreground">
-                    {p.wholesalePrice ? formatRs(p.wholesalePrice) : "—"}
+                    {p.wholesalePrice ? formatRs(p.wholesalePrice) : "Retail price only"}
                   </td>
                   {isAdmin && <td className={`px-4 py-3 text-right ${p.price >= p.cost ? "text-success-strong" : "text-destructive"}`}>{margin(p.price, p.cost)}</td>}
                   <td className="px-4 py-3 text-right">{p.totalStock}</td>

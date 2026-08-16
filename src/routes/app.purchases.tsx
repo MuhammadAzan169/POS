@@ -447,7 +447,7 @@ function PurchasesPage() {
                         <td className="px-4 py-3 text-right text-muted-foreground">{r.product!.lowAlert}</td>
                         <td className="px-4 py-3 text-right">{qty}</td>
                         <td className="px-4 py-3"><StatusPill status={r.row.qty === 0 ? "OUT" : "LOW"} /></td>
-                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.product!.barcode || "—"}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.product!.barcode || "No barcode"}</td>
                         <td className="px-4 py-3 text-right">
                           <Button size="sm" variant="outline" onClick={() => restock(r.product!.id, r.row.shopId, qty)}>
                             <PackagePlus className="h-3.5 w-3.5 mr-1.5" />Restock
@@ -531,7 +531,7 @@ function PurchasesPage() {
                       <td className="px-4 py-3">
                         <StatusPill status={r.qty === 0 ? "OUT" : r.qty <= r.product.lowAlert ? "LOW" : "OK"} />
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.product.barcode || "\u2014"}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.product.barcode || "No barcode"}</td>
                       <td className="px-4 py-3 text-right">
                         <Button size="sm" variant="outline" onClick={() => restock(r.product.id, r.shop.id, suggestQty(r.qty, r.product.lowAlert))}>
                           <PackagePlus className="h-3.5 w-3.5 mr-1.5" />Restock
@@ -574,7 +574,7 @@ function PurchasesPage() {
                   ))}
                   fields={[
                     { label: "Items", value: p.lines.reduce((a, l) => a + l.qty, 0) },
-                    { label: "Recorded by", value: p.createdBy || "—" },
+                    { label: "Recorded by", value: p.createdBy || "Not recorded" },
                   ]}
                   actions={billActions(p, false)}
                 />
@@ -607,7 +607,7 @@ function PurchasesPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        {p.createdBy || "—"}
+                        {p.createdBy || "Not recorded"}
                         {p.createdByShopId && (
                           <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-muted rounded-full">shop</span>
                         )}

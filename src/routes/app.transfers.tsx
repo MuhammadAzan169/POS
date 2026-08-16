@@ -46,7 +46,7 @@ function TransfersPage() {
     [transfers, filter, isAdmin, user?.shopId],
   );
 
-  const shopName = (id: string) => shops.find((s) => s.id === id)?.name ?? "—";
+  const shopName = (id: string) => shops.find((s) => s.id === id)?.name ?? "Unknown shop";
 
   const openDialog = () => {
     setEditing(null);
@@ -295,7 +295,7 @@ function TransfersPage() {
                   </td>
                   <td className="px-4 py-3 text-right font-medium">{t.items.reduce((a, i) => a + i.qty, 0)}</td>
                   <td className="px-4 py-3 text-muted-foreground">{t.createdBy}</td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs">{t.notes || "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">{t.notes || "No notes"}</td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">{rowActions(t, true)}</td>
                 </tr>
               ))}
@@ -395,7 +395,7 @@ function TransfersPage() {
                       <div className="col-span-2 sm:col-span-6 min-w-0">
                         <div className="text-sm font-medium truncate">{p?.name ?? l.productId}</div>
                         <div className="text-xs text-muted-foreground">
-                          {available} at {shopName(fromShop)} · {stockAt(l.productId, toShop)} at {shopName(toShop) === "—" ? "destination" : shopName(toShop)}
+                          {available} at {shopName(fromShop)} · {stockAt(l.productId, toShop)} at {toShop ? shopName(toShop) : "destination"}
                         </div>
                       </div>
                       <div className="sm:col-span-3">

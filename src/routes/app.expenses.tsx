@@ -192,7 +192,7 @@ function ExpensesPage() {
               right={formatRs(e.amount)}
               badges={<span className="text-xs px-2 py-0.5 bg-muted rounded-full">{e.category}</span>}
               fields={[
-                ...(isAdmin ? [{ label: "Shop", value: shops.find((s) => s.id === e.shopId)?.name ?? "—" }] : []),
+                ...(isAdmin ? [{ label: "Shop", value: shops.find((s) => s.id === e.shopId)?.name ?? "Unknown shop" }] : []),
                 { label: "Added by", value: e.addedBy },
               ]}
               actions={rowActions(e)}

@@ -282,8 +282,8 @@ function SuppliersPage() {
                   onClick={() => setOpenId(r.supplier.id)}
                 >
                   <td className="px-4 py-3 font-medium">{r.supplier.name}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{r.supplier.contact || "—"}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{r.supplier.phone || "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{r.supplier.contact || "Not given"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{r.supplier.phone || "Not given"}</td>
                   <td className="px-4 py-3 text-right">{r.bills}</td>
                   <td className="px-4 py-3 text-right">{r.distinctItems}</td>
                   <td className="px-4 py-3 text-right">{r.units}</td>
@@ -322,10 +322,10 @@ function SuppliersPage() {
 
               <div className="mt-6 space-y-5">
                 <div className="grid sm:grid-cols-2 gap-3 text-sm">
-                  <Info icon={<Pencil className="h-3.5 w-3.5" />} label="Contact" value={open.contact || "—"} />
-                  <Info icon={<Phone className="h-3.5 w-3.5" />} label="Phone" value={open.phone || "—"} />
-                  <Info icon={<Mail className="h-3.5 w-3.5" />} label="Email" value={open.email || "—"} />
-                  <Info icon={<MapPin className="h-3.5 w-3.5" />} label="Address" value={open.address || "—"} />
+                  <Info icon={<Pencil className="h-3.5 w-3.5" />} label="Contact" value={open.contact || "Not given"} />
+                  <Info icon={<Phone className="h-3.5 w-3.5" />} label="Phone" value={open.phone || "Not given"} />
+                  <Info icon={<Mail className="h-3.5 w-3.5" />} label="Email" value={open.email || "Not given"} />
+                  <Info icon={<MapPin className="h-3.5 w-3.5" />} label="Address" value={open.address || "Not given"} />
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -370,7 +370,7 @@ function SuppliersPage() {
                           {openItems.map((i) => (
                             <tr key={i.productId} className="border-t">
                               <td className="px-3 py-2">{i.name}</td>
-                              <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{i.barcode || "—"}</td>
+                              <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{i.barcode || "No barcode"}</td>
                               <td className="px-3 py-2 text-right">{i.qty}</td>
                               <td className="px-3 py-2 text-right">{money(i.lastRate)}</td>
                               <td className="px-3 py-2 text-right font-medium">{money(i.spent)}</td>

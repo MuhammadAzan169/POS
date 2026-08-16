@@ -237,7 +237,7 @@ function DiscountsPage() {
               {rows.map((r) => (
                 <tr key={r.product.id} className="border-t hover:bg-muted/40">
                   <td className="px-4 py-3 font-medium">{r.product.name}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.product.barcode || "—"}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.product.barcode || "No barcode"}</td>
                   <td className="px-4 py-3 text-muted-foreground">{r.product.category}</td>
                   <td className="px-4 py-3 text-right">{formatRs(r.product.price, settings.currency)}</td>
                   <td className="px-4 py-3">

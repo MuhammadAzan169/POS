@@ -240,7 +240,7 @@ function InventoryPage() {
                     <td className="px-4 py-3 text-right font-medium">{r.qty}</td>
                     <td className="px-4 py-3 text-right text-muted-foreground">{r.product.lowAlert}</td>
                     <td className="px-4 py-3"><StatusPill status={status} /></td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.product.barcode || "—"}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.product.barcode || "No barcode"}</td>
                     {isAdmin && (
                       <td className="px-4 py-3 text-right">
                         <Button

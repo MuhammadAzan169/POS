@@ -297,7 +297,7 @@ function ReportsPage() {
                       </td>
                       {r.perShop.map((c, i) => (
                         <td key={scopedShops[i].id} className="px-4 py-3 text-right">
-                          {c.sales === 0 ? "—" : formatRs(c.sales, currency)}
+                          {c.sales === 0 ? "No sales" : formatRs(c.sales, currency)}
                         </td>
                       ))}
                       <td className="px-4 py-3 text-right font-semibold">{formatRs(r.total, currency)}</td>
@@ -381,14 +381,14 @@ function ReportsPage() {
                   {cashDays.map(({ session: s, shop, cash: c }) => (
                     <tr key={s.id} className="border-t hover:bg-muted/40">
                       <td className="px-4 py-3 whitespace-nowrap font-medium">{shortDay(s.businessDate)}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{shop?.name ?? "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{shop?.name ?? "Unknown shop"}</td>
                       <td className="px-4 py-3 text-right text-muted-foreground">{formatRs(c.openingCash, currency)}</td>
                       <td className="px-4 py-3 text-right">{formatRs(c.cashSales, currency)}</td>
                       <td className="px-4 py-3 text-right text-muted-foreground">{formatRs(c.refunds + c.drawerExpenses, currency)}</td>
                       <td className="px-4 py-3 text-right">{formatRs(c.expectedCash, currency)}</td>
-                      <td className="px-4 py-3 text-right font-medium">{c.countedCash === null ? "—" : formatRs(c.countedCash, currency)}</td>
+                      <td className="px-4 py-3 text-right font-medium">{c.countedCash === null ? "Not counted" : formatRs(c.countedCash, currency)}</td>
                       <td className={`px-4 py-3 text-right ${!c.variance ? "text-muted-foreground" : c.variance < 0 ? "text-destructive" : "text-warning-strong"}`}>
-                        {!c.variance ? "—" : `${c.variance > 0 ? "+" : "−"}${formatRs(Math.abs(c.variance), currency)}`}
+                        {!c.variance ? "Balanced" : `${c.variance > 0 ? "+" : "−"}${formatRs(Math.abs(c.variance), currency)}`}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold">{formatRs(c.cashTakenByOwner, currency)}</td>
                       <td className="px-4 py-3 text-right text-muted-foreground">{formatRs(c.cashLeftInShop, currency)}</td>

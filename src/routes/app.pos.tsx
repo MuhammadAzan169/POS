@@ -629,7 +629,7 @@ function POS() {
                     </span>
 
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground pr-14">
-                      {p.category || "—"}
+                      {p.category || "General"}
                     </div>
                     <div className="font-medium text-sm leading-snug line-clamp-2 mt-1 pr-2">{p.name}</div>
 

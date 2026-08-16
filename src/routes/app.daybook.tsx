@@ -42,12 +42,16 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/daybook")({ component: DayBookPage });
 
-/** Times are what matter here — a session can open one date and close on the next. */
+/**
+ * Times are what matter here — a session can open one date and close on the
+ * next. A missing time means the day was never closed, which is worth saying in
+ * words rather than leaving as a dash the reader has to interpret.
+ */
 const at = (iso?: string) =>
-  iso ? new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "—";
+  iso ? new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "Still open";
 
 const timeOnly = (iso?: string) =>
-  iso ? new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "—";
+  iso ? new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "still open";
 
 function DayBookPage() {
   const {
@@ -858,7 +862,7 @@ function ClosedDays({
             {rows.map(({ session: s, cash: c, shop }) => (
               <tr key={s.id} className="border-t hover:bg-muted/40">
                 <td className="px-4 py-3 font-medium whitespace-nowrap">{shortDay(s.businessDate)}</td>
-                {showShop && <td className="px-4 py-3 text-muted-foreground">{shop?.name ?? "—"}</td>}
+                {showShop && <td className="px-4 py-3 text-muted-foreground">{shop?.name ?? "Unknown shop"}</td>}
                 <td className="px-4 py-3 text-muted-foreground whitespace-nowrap text-xs">
                   {timeOnly(s.openedAt)} → {timeOnly(s.closedAt)}
                 </td>
@@ -866,13 +870,13 @@ function ClosedDays({
                 <td className="px-4 py-3 text-right">{formatRs(c.cardSales, currency)}</td>
                 <td className="px-4 py-3 text-right">{formatRs(c.onlineSales, currency)}</td>
                 <td className={`px-4 py-3 text-right ${c.creditSales > 0 ? "text-warning-strong" : "text-muted-foreground"}`}>
-                  {c.creditSales > 0 ? formatRs(c.creditSales, currency) : "—"}
+                  {c.creditSales > 0 ? formatRs(c.creditSales, currency) : "None"}
                 </td>
                 <td className="px-4 py-3 text-right font-medium">{formatRs(c.totalSales, currency)}</td>
                 {showProfit && <td className="px-4 py-3 text-right text-success-strong font-medium">{formatRs(c.profit, currency)}</td>}
-                <td className="px-4 py-3 text-right">{c.countedCash === null ? "—" : formatRs(c.countedCash, currency)}</td>
+                <td className="px-4 py-3 text-right">{c.countedCash === null ? "Not counted" : formatRs(c.countedCash, currency)}</td>
                 <td className={`px-4 py-3 text-right ${varianceTone(c.variance)}`}>
-                  {c.variance === null || c.variance === 0 ? "—" : `${c.variance > 0 ? "+" : "−"}${formatRs(Math.abs(c.variance), currency)}`}
+                  {c.variance === null || c.variance === 0 ? "Balanced" : `${c.variance > 0 ? "+" : "−"}${formatRs(Math.abs(c.variance), currency)}`}
                 </td>
                 <td className="px-4 py-3 text-right font-medium">{formatRs(c.cashTakenByOwner, currency)}</td>
                 <td className="px-4 py-3 text-right text-muted-foreground">{formatRs(c.cashLeftInShop, currency)}</td>

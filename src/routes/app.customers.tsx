@@ -272,7 +272,7 @@ function CustomersPage() {
               onClick={() => setDetail(c.id)}
               title={c.name}
               subtitle={c.contact || c.phone}
-              right={b.outstanding > 0 ? formatRs(b.outstanding, currency) : "—"}
+              right={b.outstanding > 0 ? formatRs(b.outstanding, currency) : "Settled"}
               rightSub={b.outstanding > 0 ? "outstanding" : "settled"}
               badges={
                 <>
@@ -324,14 +324,14 @@ function CustomersPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    <div>{c.contact || "—"}</div>
+                    <div>{c.contact || "Not given"}</div>
                     {c.phone && <div className="text-xs font-mono">{c.phone}</div>}
                   </td>
                   <td className="px-4 py-3"><StatusPill status={c.kind === "wholesale" ? "Trade" : "Retail"} /></td>
                   <td className="px-4 py-3 text-right">{b.orders}</td>
                   <td className="px-4 py-3 text-right">{formatRs(b.lifetime, currency)}</td>
                   <td className={`px-4 py-3 text-right font-semibold ${b.outstanding > 0 ? "text-warning-strong" : "text-muted-foreground"}`}>
-                    {b.outstanding > 0 ? formatRs(b.outstanding, currency) : "—"}
+                    {b.outstanding > 0 ? formatRs(b.outstanding, currency) : "Settled"}
                   </td>
                   <td className="px-4 py-3 text-right text-muted-foreground">
                     {c.creditLimit ? formatRs(c.creditLimit, currency) : "none"}

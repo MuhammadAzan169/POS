@@ -245,7 +245,7 @@ function SalesPage() {
               buried inside each invoice. */}
           <Metric
             label="Discount given"
-            value={stats.discount === 0 ? "—" : formatRs(stats.discount, settings.currency)}
+            value={stats.discount === 0 ? "None given" : formatRs(stats.discount, settings.currency)}
             sub={
               stats.discount > 0
                 ? `${formatRs(stats.itemDiscount, settings.currency)} item · ${formatRs(stats.billDiscount, settings.currency)} bill`
@@ -257,7 +257,7 @@ function SalesPage() {
           ) : (
             <Metric
               label="Returned"
-              value={stats.returned === 0 ? "—" : String(stats.returned)}
+              value={stats.returned === 0 ? "None" : String(stats.returned)}
               tone={stats.returned > 0 ? "destructive" : undefined}
             />
           )}
@@ -387,7 +387,7 @@ function SalesPage() {
                   {productRows.map((r) => (
                     <tr key={r.name} className="border-t hover:bg-muted/40">
                       <td className="px-4 py-3 font-medium">{r.name}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.barcode || "—"}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.barcode || "No barcode"}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{r.qty}</td>
                       <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatRs(r.revenue, settings.currency)}</td>
                       {isAdmin && <td className="px-4 py-3 text-right tabular-nums text-success-strong">{formatRs(r.profit, settings.currency)}</td>}
@@ -540,14 +540,14 @@ function SalesPage() {
                         : undefined
                     }
                   >
-                    {s.discount > 0 ? `− ${formatRs(s.discount, settings.currency)}` : "—"}
+                    {s.discount > 0 ? `− ${formatRs(s.discount, settings.currency)}` : "No discount"}
                   </td>
                   {/* tabular-nums keeps the rupee columns aligned digit-for-digit;
                       proportional figures made every row's total sit differently. */}
                   <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatRs(s.total, settings.currency)}</td>
                   {isAdmin && (
                     <td className="px-4 py-3 text-right font-medium tabular-nums text-success-strong">
-                      {s.status === "Returned" ? "—" : formatRs(s.profit, settings.currency)}
+                      {s.status === "Returned" ? "Returned" : formatRs(s.profit, settings.currency)}
                     </td>
                   )}
                   <td className="px-4 py-3"><StatusPill status={s.status} /></td>
@@ -598,7 +598,7 @@ function SalesPage() {
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">{stats.items.toLocaleString()}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-success-strong">
-                    {stats.discount > 0 ? `− ${formatRs(stats.discount, settings.currency)}` : "—"}
+                    {stats.discount > 0 ? `− ${formatRs(stats.discount, settings.currency)}` : "No discount"}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">{formatRs(stats.revenue, settings.currency)}</td>
                   {isAdmin && (
@@ -655,7 +655,7 @@ function SalesPage() {
                           <td className="px-3 py-2 text-right tabular-nums">{l.qty}</td>
                           <td className="px-3 py-2 text-right tabular-nums">{formatRs(l.price, settings.currency)}</td>
                           <td className={cn("px-3 py-2 text-right tabular-nums", l.discount > 0 ? "text-success-strong" : "text-muted-foreground")}>
-                            {l.discount > 0 ? `− ${formatRs(l.discount, settings.currency)}` : "—"}
+                            {l.discount > 0 ? `− ${formatRs(l.discount, settings.currency)}` : "Full price"}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums font-medium">
                             {formatRs(l.qty * l.price - l.discount, settings.currency)}
