@@ -6,7 +6,7 @@
  * model to do arithmetic — which is exactly what language models get wrong.
  */
 // Helpers live in store.tsx; the plain types come from store-types.ts.
-import { dayOf, daysAgoISO, discountPctFor } from "./store";
+import { dayOf, daysAgoISO, discountPctFor, allocateSale } from "./store";
 import {
   type DiscountRules,
   type Expense,
@@ -64,12 +64,15 @@ export function computeInsights(d: InsightInput) {
 
   // Per-product performance over the last 30 days.
   const perProduct = new Map<string, { name: string; qty: number; revenue: number; profit: number }>();
+  // Net of both discounts, matching the Sales and Reports screens. Feeding the
+  // model full-price figures had it recommending products whose margin the
+  // discounts had already eaten.
   inWindow(daysAgo(29)).forEach((s) =>
-    s.lines.forEach((l) => {
+    allocateSale(s).forEach(({ line: l, revenue, profit }) => {
       const cur = perProduct.get(l.productId) ?? { name: l.name, qty: 0, revenue: 0, profit: 0 };
       cur.qty += l.qty;
-      cur.revenue += l.qty * l.price;
-      cur.profit += l.qty * (l.price - l.cost);
+      cur.revenue += revenue;
+      cur.profit += profit;
       perProduct.set(l.productId, cur);
     }),
   );

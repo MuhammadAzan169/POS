@@ -11,6 +11,7 @@ import {
   daysInRange,
   clampRangeToData,
   dayOf,
+  allocateSale,
 } from "@/lib/store";
 import { useScope, inRange } from "@/lib/scope";
 import { PageHeader } from "@/components/AppLayout";
@@ -156,13 +157,18 @@ function ReportsPage() {
 
   const topItems = useMemo(() => {
     const map = new Map<string, { name: string; qty: number; revenue: number; profit: number }>();
-    periodSales.forEach((s) => s.lines.forEach((l) => {
-      const cur = map.get(l.productId) ?? { name: l.name, qty: 0, revenue: 0, profit: 0 };
-      cur.qty += l.qty;
-      cur.revenue += l.qty * l.price;
-      cur.profit += l.qty * (l.price - l.cost);
-      map.set(l.productId, cur);
-    }));
+    // Discounts were ignored here entirely, so this list reported what each
+    // item would have earned at full price — and ranked "top sellers" by
+    // revenue the business never actually took.
+    periodSales.forEach((s) =>
+      allocateSale(s).forEach(({ line: l, revenue, profit }) => {
+        const cur = map.get(l.productId) ?? { name: l.name, qty: 0, revenue: 0, profit: 0 };
+        cur.qty += l.qty;
+        cur.revenue += revenue;
+        cur.profit += profit;
+        map.set(l.productId, cur);
+      }),
+    );
     return [...map.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 10);
   }, [periodSales]);
 

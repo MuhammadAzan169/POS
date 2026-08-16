@@ -175,6 +175,50 @@ export function discountSplitOf(sale: Pick<Sale, "discount" | "lines">) {
   return { items, bill, total: items + bill };
 }
 
+/** One sale line with both discounts already accounted for. */
+export interface AllocatedLine {
+  line: SaleLine;
+  /** After the line's own discount and its share of the bill discount. */
+  revenue: number;
+  /** The same, less what the goods cost. */
+  profit: number;
+}
+
+/**
+ * Splits a sale into per-line revenue and profit.
+ *
+ * A discount taken off the whole bill belongs to no single line, but any
+ * per-product rollup has to account for it somewhere — the Sales tab's
+ * "Products sold", the Reports top-sellers list and the AI brief all did their
+ * own version of this, and the ones that skipped it reported what an item would
+ * have earned at full price rather than what the business took.
+ *
+ * The bill discount is shared in proportion to what each line is worth after
+ * its own discount, so a big line carries more of it than a small one. Rounding
+ * each share independently leaves a rupee or two unallocated, which is enough
+ * to make a rollup disagree with the invoice it came from, so the remainder is
+ * given to the largest line and the parts always add back exactly.
+ */
+export function allocateSale(sale: Pick<Sale, "discount" | "lines">): AllocatedLine[] {
+  const { bill } = discountSplitOf(sale);
+  const nets = sale.lines.map((l) => l.qty * l.price - (l.discount || 0));
+  const netTotal = nets.reduce((a, b) => a + b, 0);
+
+  const shares = nets.map((n) => (bill > 0 && netTotal > 0 ? Math.round((bill * n) / netTotal) : 0));
+  const residue = bill - shares.reduce((a, b) => a + b, 0);
+  if (residue !== 0 && shares.length > 0) {
+    let biggest = 0;
+    nets.forEach((n, i) => { if (n > nets[biggest]) biggest = i; });
+    shares[biggest] += residue;
+  }
+
+  return sale.lines.map((l, i) => ({
+    line: l,
+    revenue: nets[i] - shares[i],
+    profit: l.qty * (l.price - l.cost) - (l.discount || 0) - shares[i],
+  }));
+}
+
 /** Settled on the spot, or put on the buyer's account. */
 export type PaymentMethod = "Cash" | "Card" | "Online" | "Credit";
 

@@ -1,6 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { useStore, formatRs, todayISO, daysAgoISO, dayOf, discountSplitOf, type Sale } from "@/lib/store";
+import {
+  useStore, formatRs, todayISO, daysAgoISO, dayOf, discountSplitOf, allocateSale, type Sale,
+} from "@/lib/store";
 import { SaleEditDialog } from "@/components/SaleEditDialog";
 import { Receipt as ReceiptView, type ReceiptData } from "@/components/Receipt";
 import { PageHeader } from "@/components/AppLayout";
@@ -128,16 +130,19 @@ function SalesPage() {
     const map = new Map<string, { name: string; barcode: string; qty: number; revenue: number; profit: number; invoices: number }>();
     rows
       .filter((s) => s.status !== "Returned")
+      // Both discounts are accounted for by allocateSale, so this tab's totals
+      // reconcile with the Revenue headline above it rather than overstating
+      // every bill that was discounted as a whole.
       .forEach((s) =>
-        s.lines.forEach((l) => {
+        allocateSale(s).forEach(({ line: l, revenue, profit }) => {
           const cur = map.get(l.productId) ?? {
             name: l.name,
             barcode: products.find((p) => p.id === l.productId)?.barcode ?? "",
             qty: 0, revenue: 0, profit: 0, invoices: 0,
           };
           cur.qty += l.qty;
-          cur.revenue += l.qty * l.price - l.discount;
-          cur.profit += l.qty * (l.price - l.cost) - l.discount;
+          cur.revenue += revenue;
+          cur.profit += profit;
           cur.invoices += 1;
           map.set(l.productId, cur);
         }),
