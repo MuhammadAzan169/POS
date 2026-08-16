@@ -20,6 +20,9 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# Vercel — build output and linked-project metadata
+.vercel
+
 # Secrets — never commit real keys
 .env
 .env.*
