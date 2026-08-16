@@ -350,13 +350,20 @@ export const db = {
   upsertSale: (s: Sale) => run(() => supabase!.from("sales").upsert(saleToRow(s))),
   deleteSale: (id: string) => run(() => supabase!.from("sales").delete().eq("id", id)),
   upsertPurchase: (p: Purchase) => run(() => supabase!.from("purchases").upsert(purchaseToRow(p))),
+  deletePurchase: (id: string) => run(() => supabase!.from("purchases").delete().eq("id", id)),
   upsertExpense: (e: Expense) => run(() => supabase!.from("expenses").upsert(expenseToRow(e))),
+  deleteExpense: (id: string) => run(() => supabase!.from("expenses").delete().eq("id", id)),
   upsertReturn: (r: ReturnRec) => run(() => supabase!.from("returns").upsert(returnToRow(r))),
+  deleteReturn: (id: string) => run(() => supabase!.from("returns").delete().eq("id", id)),
   upsertDaySession: (s: DaySession) => run(() => supabase!.from("day_sessions").upsert(daySessionToRow(s))),
+  deleteDaySession: (id: string) => run(() => supabase!.from("day_sessions").delete().eq("id", id)),
   upsertTransfer: (t: Transfer) => run(() => supabase!.from("transfers").upsert(transferToRow(t))),
+  deleteTransfer: (id: string) => run(() => supabase!.from("transfers").delete().eq("id", id)),
   upsertCustomer: (c: Customer) => run(() => supabase!.from("customers").upsert(customerToRow(c))),
   upsertCustomerPayment: (p: CustomerPayment) =>
     run(() => supabase!.from("customer_payments").upsert(customerPaymentToRow(p))),
+  deleteCustomerPayment: (id: string) =>
+    run(() => supabase!.from("customer_payments").delete().eq("id", id)),
 
   /** Inventory is keyed by (product_id, shop_id), so upsert needs that conflict target. */
   upsertInventory: (rows: InventoryRow[]) =>

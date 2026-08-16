@@ -9,6 +9,7 @@ import {
   businessDayOf,
   shortDay,
   type Customer,
+  type CustomerPayment,
   type SettledMethod,
 } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
@@ -21,7 +22,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Plus, Search, Download, Users, Wallet, HandCoins, Pencil, Phone, AlertTriangle } from "lucide-react";
+import { Plus, Search, Download, Users, Wallet, HandCoins, Pencil, Phone, AlertTriangle, Trash2 } from "lucide-react";
+import { Confirm } from "@/components/Confirm";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
 
@@ -35,7 +37,7 @@ const EMPTY = {
 function CustomersPage() {
   const {
     user, customers, customerPayments, sales, shops, settings, pendingMigration,
-    addCustomer, updateCustomer, addCustomerPayment,
+    addCustomer, updateCustomer, addCustomerPayment, updateCustomerPayment, deleteCustomerPayment,
   } = useStore();
   const isAdmin = user?.role === "admin";
   const currency = settings.currency;
@@ -54,6 +56,8 @@ function CustomersPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [detail, setDetail] = useState<string | null>(null);
   const [payFor, setPayFor] = useState<Customer | null>(null);
+  /** Set when the payment dialog is correcting a receipt rather than taking one. */
+  const [payEditing, setPayEditing] = useState<CustomerPayment | null>(null);
   const [pay, setPay] = useState({ amount: 0, method: "Cash" as SettledMethod, note: "", shopId: "" });
 
   const ledger = useMemo(() => ({ sales, customerPayments }), [sales, customerPayments]);
@@ -123,9 +127,17 @@ function CustomersPage() {
   const openPayment = (c: Customer) => {
     const balance = customerBalance(c, ledger);
     if (balance.outstanding <= 0) { toast.info(`${c.name} has nothing outstanding`); return; }
+    setPayEditing(null);
     setPayFor(c);
     // Default to settling the lot; part-payments are the edit, not the norm.
     setPay({ amount: balance.outstanding, method: "Cash", note: "", shopId: user?.shopId ?? shops[0]?.id ?? "" });
+  };
+
+  /** The same dialog, loaded with a receipt that was already recorded. */
+  const openPaymentEdit = (c: Customer, p: CustomerPayment) => {
+    setPayEditing(p);
+    setPayFor(c);
+    setPay({ amount: p.amount, method: p.method, note: p.note, shopId: p.shopId });
   };
 
   const savePayment = () => {
@@ -134,11 +146,27 @@ function CustomersPage() {
     if (pay.amount <= 0) { toast.error("Enter an amount"); return; }
     // Accepting more than is owed would leave a negative balance that reads as
     // the business owing the customer, which is not a thing this app models.
-    if (pay.amount > balance.outstanding) {
-      toast.error(`That's more than the ${formatRs(balance.outstanding, currency)} outstanding`);
+    // When correcting a receipt, the amount it already contributes is part of
+    // what's settled, so it has to be added back before the comparison.
+    const ceiling = balance.outstanding + (payEditing?.amount ?? 0);
+    if (pay.amount > ceiling) {
+      toast.error(`That's more than the ${formatRs(ceiling, currency)} outstanding`);
       return;
     }
     if (!pay.shopId) { toast.error("Pick which shop received the money"); return; }
+    if (payEditing) {
+      updateCustomerPayment({
+        ...payEditing,
+        amount: pay.amount,
+        method: pay.method,
+        shopId: pay.shopId,
+        note: pay.note.trim(),
+      });
+      toast.success("Payment corrected");
+      setPayFor(null);
+      setPayEditing(null);
+      return;
+    }
     addCustomerPayment({
       customerId: payFor.id,
       date: todayISO(),
@@ -384,12 +412,13 @@ function CustomersPage() {
       </Dialog>
 
       {/* ----------------------------------------------- receive payment */}
-      <Dialog open={!!payFor} onOpenChange={(o) => !o && setPayFor(null)}>
+      <Dialog open={!!payFor} onOpenChange={(o) => { if (!o) { setPayFor(null); setPayEditing(null); } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Receive payment</DialogTitle>
+            <DialogTitle>{payEditing ? "Correct payment" : "Receive payment"}</DialogTitle>
             <DialogDescription>
               {payFor && `${payFor.name} owes ${formatRs(customerBalance(payFor, ledger).outstanding, currency)}.`}
+              {payEditing && ` Taken ${shortDay(payEditing.date)} by ${payEditing.receivedBy || "staff"}.`}
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -436,8 +465,11 @@ function CustomersPage() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPayFor(null)}>Cancel</Button>
-            <Button onClick={savePayment}><HandCoins className="h-4 w-4 mr-1.5" />Record payment</Button>
+            <Button variant="outline" onClick={() => { setPayFor(null); setPayEditing(null); }}>Cancel</Button>
+            <Button onClick={savePayment}>
+              <HandCoins className="h-4 w-4 mr-1.5" />
+              {payEditing ? "Save correction" : "Record payment"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -520,7 +552,7 @@ function CustomersPage() {
                   <h4 className="font-semibold text-sm mb-2">Payments ({history.payments.length})</h4>
                   <div className="border rounded-lg divide-y max-h-64 overflow-y-auto">
                     {history.payments.map((p) => (
-                      <div key={p.id} className="p-3 flex items-start justify-between gap-3 text-sm">
+                      <div key={p.id} className="p-3 flex items-start justify-between gap-2 text-sm">
                         <div className="min-w-0">
                           <div>{shortDay(p.date)} · {p.method}</div>
                           <div className="text-xs text-muted-foreground mt-0.5 truncate">
@@ -528,7 +560,43 @@ function CustomersPage() {
                             {p.note ? ` · ${p.note}` : ""}
                           </div>
                         </div>
-                        <div className="font-medium text-success-strong shrink-0">{formatRs(p.amount, currency)}</div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="font-medium text-success-strong">{formatRs(p.amount, currency)}</span>
+                          {/* A receipt entered as 5,000 instead of 500 leaves a
+                              debt that looks settled, so it has to be fixable. */}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            aria-label="Correct this payment"
+                            disabled={cannotSave}
+                            onClick={() => { setDetail(null); openPaymentEdit(selected, p); }}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Confirm
+                            title="Delete this payment?"
+                            description={
+                              <>
+                                {formatRs(p.amount, currency)} goes back onto {selected.name}'s balance as still
+                                owed, and leaves that day's cash count. This can't be undone.
+                              </>
+                            }
+                            confirmLabel="Delete payment"
+                            destructive
+                            disabled={cannotSave}
+                            onConfirm={() => { deleteCustomerPayment(p.id); toast.success("Payment deleted"); }}
+                            trigger={
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                aria-label="Delete this payment"
+                                className="text-muted-foreground hover:text-destructive"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            }
+                          />
+                        </div>
                       </div>
                     ))}
                     {history.payments.length === 0 && (

@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { useStore, formatRs, todayISO } from "@/lib/store";
+import { useStore, formatRs, todayISO, type Purchase } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { StatusPill } from "@/components/Stat";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
@@ -9,9 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, Trash2, Download, PackagePlus, ScanLine, Truck } from "lucide-react";
+import { Confirm } from "@/components/Confirm";
+import { Plus, Trash2, Download, PackagePlus, ScanLine, Truck, Pencil } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
 
@@ -29,7 +30,10 @@ export const Route = createFileRoute("/app/purchases")({
 type Line = { productId: string; shopId: string; qty: number; rate: number };
 
 function PurchasesPage() {
-  const { user, purchases, shops, products, inventory, suppliers, addPurchase, addSupplier, settings } = useStore();
+  const {
+    user, purchases, shops, products, inventory, suppliers,
+    addPurchase, updatePurchase, deletePurchase, addSupplier, settings,
+  } = useStore();
   const isAdmin = user?.role === "admin";
 
   /**
@@ -44,6 +48,8 @@ function PurchasesPage() {
   );
 
   const [open, setOpen] = useState(false);
+  /** The bill being corrected; null means the dialog is entering a new one. */
+  const [editing, setEditing] = useState<Purchase | null>(null);
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
   const [addingSupplier, setAddingSupplier] = useState(false);
   const [newSupplier, setNewSupplier] = useState({ name: "", contact: "", phone: "" });
@@ -106,6 +112,7 @@ function PurchasesPage() {
     if (!restockParam) return;
     const prod = products.find((x) => x.id === restockParam);
     if (!prod) return;
+    setEditing(null);
     setLines([{ productId: prod.id, shopId: shopParam || shops[0]?.id || "", qty: Math.max(1, qtyParam ?? 1), rate: prod.cost }]);
     setBillNo("");
     setDate(todayISO());
@@ -115,15 +122,34 @@ function PurchasesPage() {
   }, [restockParam, shopParam, qtyParam]);
 
   const openBlank = () => {
+    setEditing(null);
     setLines([emptyLine()]);
     setBillNo("");
     setDate(todayISO());
     setOpen(true);
   };
 
+  /**
+   * Bills a user may correct. A shopkeeper only ever sees bills that stocked
+   * their own shop, and may only touch the ones that stocked nothing else —
+   * editing a head-office bill would move stock at branches they can't see.
+   */
+  const canEdit = (p: Purchase) => isAdmin || p.lines.every((l) => l.shopId === ownShopId);
+
+  /** The same form, loaded with a bill that was already entered. */
+  const openEdit = (p: Purchase) => {
+    setEditing(p);
+    setSupplierId(p.supplierId ?? suppliers.find((s) => s.name === p.supplier)?.id ?? "");
+    setBillNo(p.billNo);
+    setDate(p.date);
+    setLines(p.lines.map((l) => ({ ...l })));
+    setOpen(true);
+  };
+
   /** "Restock" from the low-stock list: opens the bill prefilled for that product+shop. */
   const restock = (productId: string, shopId: string, suggestedQty: number) => {
     const p = products.find((x) => x.id === productId);
+    setEditing(null);
     setLines([{ productId, shopId, qty: Math.max(1, suggestedQty), rate: p?.cost ?? 0 }]);
     setBillNo("");
     setDate(todayISO());
@@ -132,6 +158,7 @@ function PurchasesPage() {
 
   const restockAllListed = () => {
     if (restockRows.length === 0) return;
+    setEditing(null);
     setLines(
       restockRows.slice(0, 20).map((r) => ({
         productId: r.product!.id,
@@ -197,27 +224,92 @@ function PurchasesPage() {
       toast.error("You can only receive stock into your own shop");
       return;
     }
-    if (purchases.some((p) => p.billNo.toLowerCase() === billNo.trim().toLowerCase())) {
+    // A bill being corrected keeps its own number, so it must not collide with
+    // itself in the duplicate check.
+    if (purchases.some((p) => p.id !== editing?.id && p.billNo.toLowerCase() === billNo.trim().toLowerCase())) {
       toast.error(`Bill ${billNo.trim()} already exists`);
       return;
     }
-    addPurchase({
-      supplier: supplier.name,
-      supplierId: supplier.id,
-      billNo: billNo.trim(),
-      date,
-      lines,
-      total,
-      createdBy: user?.name ?? "Unknown",
-      // Recorded only for shop-raised bills, so the owner can tell head-office
-      // buying apart from a shop restocking on its own account.
-      createdByShopId: isAdmin ? undefined : ownShopId,
-      paid: true,
-    });
-    toast.success(isAdmin ? "Purchase saved and stock added to shops" : "Purchase saved and stock added to your shop");
+
+    if (editing) {
+      updatePurchase({
+        ...editing,
+        supplier: supplier.name,
+        supplierId: supplier.id,
+        billNo: billNo.trim(),
+        date,
+        lines,
+        total,
+      });
+      toast.success(`${billNo.trim()} corrected — stock adjusted by the difference`);
+    } else {
+      addPurchase({
+        supplier: supplier.name,
+        supplierId: supplier.id,
+        billNo: billNo.trim(),
+        date,
+        lines,
+        total,
+        createdBy: user?.name ?? "Unknown",
+        // Recorded only for shop-raised bills, so the owner can tell head-office
+        // buying apart from a shop restocking on its own account.
+        createdByShopId: isAdmin ? undefined : ownShopId,
+        paid: true,
+      });
+      toast.success(isAdmin ? "Purchase saved and stock added to shops" : "Purchase saved and stock added to your shop");
+    }
     setOpen(false);
+    setEditing(null);
     setBillNo("");
     setLines([emptyLine()]);
+  };
+
+  /**
+   * Corrections on a recorded bill.
+   *
+   * Deleting takes back everything the bill delivered, so it is the right fix
+   * for a bill entered twice — and the wrong one for goods already sold, which
+   * is what the confirmation says out loud.
+   */
+  const billActions = (p: Purchase, compact: boolean) => {
+    if (!canEdit(p)) return null;
+    return (
+      <>
+        <Button
+          size="sm"
+          variant={compact ? "ghost" : "outline"}
+          onClick={() => openEdit(p)}
+          aria-label={compact ? `Correct bill ${p.billNo}` : undefined}
+        >
+          <Pencil className={compact ? "h-3.5 w-3.5" : "h-3.5 w-3.5 mr-1.5"} />
+          {!compact && "Correct"}
+        </Button>
+        <Confirm
+          title={`Delete bill ${p.billNo}?`}
+          description={
+            <>
+              {p.lines.reduce((a, l) => a + l.qty, 0)} unit(s) worth {formatRs(p.total, settings.currency)} are
+              taken back off the shelves. If any of them have already been sold, correct the bill instead —
+              stock can't go below zero.
+            </>
+          }
+          confirmLabel="Delete bill"
+          destructive
+          onConfirm={() => { deletePurchase(p.id); toast.success(`Bill ${p.billNo} deleted`); }}
+          trigger={
+            <Button
+              size="sm"
+              variant={compact ? "ghost" : "outline"}
+              className="text-muted-foreground hover:text-destructive"
+              aria-label={compact ? `Delete bill ${p.billNo}` : undefined}
+            >
+              <Trash2 className={compact ? "h-3.5 w-3.5" : "h-3.5 w-3.5 mr-1.5"} />
+              {!compact && "Delete"}
+            </Button>
+          }
+        />
+      </>
+    );
   };
 
   const exportRestock = () => {
@@ -474,6 +566,7 @@ function PurchasesPage() {
                     { label: "Items", value: p.lines.reduce((a, l) => a + l.qty, 0) },
                     { label: "Recorded by", value: p.createdBy || "—" },
                   ]}
+                  actions={billActions(p, false)}
                 />
               )}
             />
@@ -487,6 +580,7 @@ function PurchasesPage() {
                   <th className="px-4 py-3 font-medium">Destinations</th>
                   <th className="px-4 py-3 font-medium">Recorded by</th>
                   <th className="px-4 py-3 font-medium text-right">Total</th>
+                  <th className="px-4 py-3 font-medium text-right">Actions</th>
                 </tr></thead>
                 <tbody>
                   {visiblePurchases.map((p) => (
@@ -509,10 +603,11 @@ function PurchasesPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-right font-medium">{formatRs(p.total, settings.currency)}</td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">{billActions(p, true)}</td>
                     </tr>
                   ))}
                   {visiblePurchases.length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">No purchases recorded yet.</td></tr>
+                    <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">No purchases recorded yet.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -521,9 +616,17 @@ function PurchasesPage() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setEditing(null); }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>New purchase</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{editing ? `Correct bill ${editing.billNo}` : "New purchase"}</DialogTitle>
+            {editing && (
+              <DialogDescription>
+                Stock moves by the difference between what this bill says now and what it said before, so
+                nothing is received twice.
+              </DialogDescription>
+            )}
+          </DialogHeader>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label>Supplier</Label>
@@ -680,8 +783,8 @@ function PurchasesPage() {
           <DialogFooter className="border-t pt-4 flex-col gap-3 !justify-between sm:flex-row sm:items-center">
             <div className="text-lg font-semibold">Total: {formatRs(total)}</div>
             <div className="flex gap-2 [&>*]:flex-1 sm:[&>*]:flex-none">
-              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button onClick={save}>Save purchase</Button>
+              <Button variant="outline" onClick={() => { setOpen(false); setEditing(null); }}>Cancel</Button>
+              <Button onClick={save}>{editing ? "Save correction" : "Save purchase"}</Button>
             </div>
           </DialogFooter>
         </DialogContent>

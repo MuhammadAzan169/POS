@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useStore, formatRs, todayISO, shopKind, type Shop } from "@/lib/store";
+import { useStore, formatRs, todayISO, shopKind, type Shop, type Transfer } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { Card } from "@/components/ui/card";
@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ArrowRight, Plus, Trash2, Download, ScanLine, Warehouse } from "lucide-react";
+import { ArrowRight, Plus, Trash2, Download, ScanLine, Warehouse, Pencil, Undo2 } from "lucide-react";
+import { Confirm } from "@/components/Confirm";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
 
@@ -18,11 +19,13 @@ export const Route = createFileRoute("/app/transfers")({ component: TransfersPag
 type Line = { productId: string; qty: number };
 
 function TransfersPage() {
-  const { user, shops, products, inventory, transfers, addTransfer, settings } = useStore();
+  const { user, shops, products, inventory, transfers, addTransfer, updateTransfer, deleteTransfer, settings } = useStore();
   const isAdmin = user?.role === "admin";
 
   const defaultFrom = shops[0]?.id ?? "";
   const [open, setOpen] = useState(false);
+  /** The movement being corrected; null means the dialog is recording a new one. */
+  const [editing, setEditing] = useState<Transfer | null>(null);
   const [fromShop, setFromShop] = useState(defaultFrom);
   const [toShop, setToShop] = useState("");
   const [date, setDate] = useState(todayISO());
@@ -46,6 +49,7 @@ function TransfersPage() {
   const shopName = (id: string) => shops.find((s) => s.id === id)?.name ?? "—";
 
   const openDialog = () => {
+    setEditing(null);
     setFromShop(defaultFrom);
     setToShop(shops.find((s) => s.id !== defaultFrom)?.id ?? "");
     setDate(todayISO());
@@ -53,6 +57,33 @@ function TransfersPage() {
     setLines([]);
     setScan("");
     setOpen(true);
+  };
+
+  /** Same form, loaded with an existing movement. */
+  const openEdit = (t: Transfer) => {
+    setEditing(t);
+    setFromShop(t.fromShopId);
+    setToShop(t.toShopId);
+    setDate(t.date);
+    setNotes(t.notes);
+    setLines(t.items.map((i) => ({ productId: i.productId, qty: i.qty })));
+    setScan("");
+    setOpen(true);
+  };
+
+  /**
+   * How many units of a product the source shop can send.
+   *
+   * When correcting a movement the units it already shipped are back in play:
+   * the shelf reads 2 because this very transfer took 8, so raising it to 9 is
+   * legitimate and only measured against 10.
+   */
+  const headroomAt = (productId: string, shopId: string) => {
+    const shipped =
+      editing && editing.fromShopId === shopId
+        ? editing.items.find((i) => i.productId === productId)?.qty ?? 0
+        : 0;
+    return stockAt(productId, shopId) + shipped;
   };
 
   const addLine = (productId: string) => {
@@ -92,28 +123,77 @@ function TransfersPage() {
 
     // Moving more than the source holds would leave it with negative stock, so
     // the transfer is rejected rather than silently clamped to what's there.
-    const short = lines.find((l) => l.qty > stockAt(l.productId, fromShop));
+    const short = lines.find((l) => l.qty > headroomAt(l.productId, fromShop));
     if (short) {
       const p = products.find((x) => x.id === short.productId);
-      toast.error(`${shopName(fromShop)} only has ${stockAt(short.productId, fromShop)} × ${p?.name ?? "that item"}`);
+      toast.error(`${shopName(fromShop)} only has ${headroomAt(short.productId, fromShop)} × ${p?.name ?? "that item"}`);
       return;
     }
 
-    addTransfer({
-      date,
-      fromShopId: fromShop,
-      toShopId: toShop,
-      items: lines.map((l) => ({
-        productId: l.productId,
-        name: products.find((p) => p.id === l.productId)?.name ?? l.productId,
-        qty: l.qty,
-      })),
-      notes: notes.trim(),
-      createdBy: user?.name ?? "Unknown",
-    });
-    toast.success(`${totalUnits} units moved to ${shopName(toShop)}`);
+    const items = lines.map((l) => ({
+      productId: l.productId,
+      name: products.find((p) => p.id === l.productId)?.name ?? l.productId,
+      qty: l.qty,
+    }));
+
+    if (editing) {
+      // id, transfer number and who recorded it are the movement's identity —
+      // a correction re-states what moved, it doesn't become a new movement.
+      updateTransfer({ ...editing, date, fromShopId: fromShop, toShopId: toShop, items, notes: notes.trim() });
+      toast.success(`${editing.transferNo} corrected — stock adjusted at both shops`);
+    } else {
+      addTransfer({
+        date,
+        fromShopId: fromShop,
+        toShopId: toShop,
+        items,
+        notes: notes.trim(),
+        createdBy: user?.name ?? "Unknown",
+      });
+      toast.success(`${totalUnits} units moved to ${shopName(toShop)}`);
+    }
     setOpen(false);
+    setEditing(null);
   };
+
+  /** Correct or undo a recorded movement. */
+  const rowActions = (t: Transfer, compact: boolean) => (
+    <>
+      <Button
+        size="sm"
+        variant={compact ? "ghost" : "outline"}
+        onClick={() => openEdit(t)}
+        aria-label={compact ? `Correct ${t.transferNo}` : undefined}
+      >
+        <Pencil className={compact ? "h-3.5 w-3.5" : "h-3.5 w-3.5 mr-1.5"} />
+        {!compact && "Correct"}
+      </Button>
+      <Confirm
+        title={`Undo ${t.transferNo}?`}
+        description={
+          <>
+            {t.items.reduce((a, i) => a + i.qty, 0)} unit(s) go back to{" "}
+            <strong>{shopName(t.fromShopId)}</strong> and leave{" "}
+            <strong>{shopName(t.toShopId)}</strong>. The movement disappears from the history.
+          </>
+        }
+        confirmLabel="Undo transfer"
+        destructive
+        onConfirm={() => { deleteTransfer(t.id); toast.success(`${t.transferNo} undone`); }}
+        trigger={
+          <Button
+            size="sm"
+            variant={compact ? "ghost" : "outline"}
+            className="text-muted-foreground hover:text-destructive"
+            aria-label={compact ? `Undo ${t.transferNo}` : undefined}
+          >
+            <Undo2 className={compact ? "h-3.5 w-3.5" : "h-3.5 w-3.5 mr-1.5"} />
+            {!compact && "Undo"}
+          </Button>
+        }
+      />
+    </>
+  );
 
   const exportCsv = () => {
     if (rows.length === 0) { toast.error("Nothing to export"); return; }
@@ -174,6 +254,7 @@ function TransfersPage() {
                 { label: "Items", value: t.items.length },
                 { label: "By", value: t.createdBy },
               ]}
+              actions={rowActions(t, false)}
             />
           )}
         />
@@ -188,6 +269,7 @@ function TransfersPage() {
                 <th className="px-4 py-3 font-medium text-right">Units</th>
                 <th className="px-4 py-3 font-medium">Recorded by</th>
                 <th className="px-4 py-3 font-medium">Notes</th>
+                <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -214,10 +296,11 @@ function TransfersPage() {
                   <td className="px-4 py-3 text-right font-medium">{t.items.reduce((a, i) => a + i.qty, 0)}</td>
                   <td className="px-4 py-3 text-muted-foreground">{t.createdBy}</td>
                   <td className="px-4 py-3 text-muted-foreground text-xs">{t.notes || "—"}</td>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">{rowActions(t, true)}</td>
                 </tr>
               ))}
               {rows.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   No stock has been transferred yet.
                 </td></tr>
               )}
@@ -226,12 +309,14 @@ function TransfersPage() {
         </TableWrap>
       </Card>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setEditing(null); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>New stock transfer</DialogTitle>
+            <DialogTitle>{editing ? `Correct ${editing.transferNo}` : "New stock transfer"}</DialogTitle>
             <DialogDescription>
-              Stock leaves the source shop and arrives at the destination immediately.
+              {editing
+                ? "Stock at both shops is adjusted by the difference, so nothing is moved twice."
+                : "Stock leaves the source shop and arrives at the destination immediately."}
             </DialogDescription>
           </DialogHeader>
 
@@ -301,7 +386,9 @@ function TransfersPage() {
               <div className="space-y-2">
                 {lines.map((l, i) => {
                   const p = products.find((x) => x.id === l.productId);
-                  const available = stockAt(l.productId, fromShop);
+                  // On a correction this includes the units the movement itself
+                  // shipped, which are back in play the moment it is re-stated.
+                  const available = headroomAt(l.productId, fromShop);
                   const tooMany = l.qty > available;
                   return (
                     <div key={l.productId} className="grid grid-cols-2 gap-2 items-end rounded-lg border p-3 sm:grid-cols-12 sm:border-0 sm:p-0">
@@ -358,8 +445,8 @@ function TransfersPage() {
               <span className="text-muted-foreground"> · {formatRs(totalValue, settings.currency)} at cost</span>
             </div>
             <div className="flex gap-2 [&>*]:flex-1 sm:[&>*]:flex-none">
-              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button onClick={save}>Transfer stock</Button>
+              <Button variant="outline" onClick={() => { setOpen(false); setEditing(null); }}>Cancel</Button>
+              <Button onClick={save}>{editing ? "Save correction" : "Transfer stock"}</Button>
             </div>
           </DialogFooter>
         </DialogContent>

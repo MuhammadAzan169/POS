@@ -85,7 +85,20 @@ function POS() {
 
   // Declared before `filtered`, which calls it during render — a const arrow
   // defined below would be in its temporal dead zone and throw.
+  /** Units physically on the shelf at this shop, before anything is reserved. */
   const stockFor = (pid: string) => inventory.find((r) => r.productId === pid && r.shopId === shopId)?.qty ?? 0;
+
+  /** How many of a product the cashier has already put in this cart. */
+  const cartQtyFor = (pid: string) => cart.find((l) => l.product.id === pid)?.qty ?? 0;
+
+  /**
+   * What is still sellable: the shelf count minus what the cart has already
+   * claimed. Stock only leaves inventory when the sale completes, so a tile that
+   * kept advertising "8 in stock" while 8 sat in the cart invited the cashier to
+   * promise units that were already spoken for. Removing the line, or stepping
+   * the quantity back down, hands them straight back.
+   */
+  const availableFor = (pid: string) => Math.max(0, stockFor(pid) - cartQtyFor(pid));
 
   /** Category chips, in the order the catalogue happens to list them. */
   const categories = useMemo(
@@ -112,6 +125,10 @@ function POS() {
   const addToCart = (p: Product) => {
     const stock = stockFor(p.id);
     if (stock === 0) { toast.error(`${p.name} is out of stock`); return; }
+    if (availableFor(p.id) === 0) {
+      toast.error(`All ${stock} of ${p.name} are already in the cart`);
+      return;
+    }
     setCart((prev) => {
       const i = prev.findIndex((l) => l.product.id === p.id);
       if (i >= 0) {
@@ -567,7 +584,10 @@ function POS() {
 
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5 mt-4">
               {filtered.map((p) => {
-                const s = stockFor(p.id);
+                // The badge counts what is still SELLABLE, so it ticks down as
+                // the cashier taps and back up when a line is removed.
+                const inCart = cartQtyFor(p.id);
+                const s = availableFor(p.id);
                 const out = s === 0;
                 const low = !out && s <= p.lowAlert;
                 return (
@@ -578,6 +598,9 @@ function POS() {
                     className={cn(
                       "group relative text-left p-3 min-h-[6.5rem] rounded-xl border bg-card flex flex-col",
                       "transition-all duration-150",
+                      // A tile with units in the cart is ringed rather than
+                      // recoloured, so the grid still reads as one surface.
+                      inCart > 0 && "border-primary/60 ring-1 ring-primary/25",
                       out
                         ? "opacity-55 cursor-not-allowed"
                         : "hover:border-primary hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:shadow-sm",
@@ -596,18 +619,26 @@ function POS() {
                             : "bg-muted text-muted-foreground border-transparent",
                       )}
                     >
-                      {out ? "Out" : s}
+                      {/* "Out" means the shelf is empty; "0 left" means the
+                          cart already holds every unit there is. Different problems,
+                          different fixes. */}
+                      {out ? (stockFor(p.id) === 0 ? "Out" : "0 left") : s}
                     </span>
 
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground pr-10">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground pr-14">
                       {p.category || "—"}
                     </div>
                     <div className="font-medium text-sm leading-snug line-clamp-2 mt-1 pr-2">{p.name}</div>
 
-                    <div className="mt-auto pt-2 flex items-baseline gap-1.5">
+                    <div className="mt-auto pt-2 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
                       <span className="font-display text-lg font-bold tabular-nums">
                         {formatRs(unitPrice(p), settings.currency)}
                       </span>
+                      {inCart > 0 && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary tabular-nums">
+                          {inCart} in cart
+                        </span>
+                      )}
                       {/* Retail price struck through makes it obvious the trade
                           rate is in force, not a mispriced product. */}
                       {isWholesale && unitPrice(p) !== p.price && (
@@ -701,9 +732,45 @@ function POS() {
                     </div>
                     <div className="flex items-center justify-between gap-3 sm:justify-start">
                       <div className="flex items-center gap-1">
-                        <Button variant="outline" size="icon" aria-label="Decrease quantity" className="h-9 w-9 sm:h-8 sm:w-8" onClick={() => setCart((prev) => prev.map((x, j) => j === i ? { ...x, qty: Math.max(1, x.qty - 1) } : x))}><Minus className="h-3.5 w-3.5" /></Button>
-                        <div className="w-10 text-center font-medium">{l.qty}</div>
-                        <Button variant="outline" size="icon" aria-label="Increase quantity" className="h-9 w-9 sm:h-8 sm:w-8" onClick={() => setCart((prev) => prev.map((x, j) => j === i ? { ...x, qty: Math.min(stockFor(x.product.id), x.qty + 1) } : x))}><Plus className="h-3.5 w-3.5" /></Button>
+                        {/*
+                          Minus on the last unit drops the line rather than
+                          sticking at 1: tapping down to nothing is how a cashier
+                          says "not this one after all", and stopping short left
+                          them hunting for the separate remove button.
+                        */}
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          aria-label={l.qty === 1 ? `Remove ${l.product.name}` : "Decrease quantity"}
+                          className="h-9 w-9 sm:h-8 sm:w-8"
+                          onClick={() =>
+                            setCart((prev) =>
+                              l.qty === 1
+                                ? prev.filter((_, j) => j !== i)
+                                : prev.map((x, j) => (j === i ? { ...x, qty: x.qty - 1 } : x)),
+                            )
+                          }
+                        >
+                          <Minus className="h-3.5 w-3.5" />
+                        </Button>
+                        <div className="w-10 text-center font-medium tabular-nums">{l.qty}</div>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          aria-label="Increase quantity"
+                          className="h-9 w-9 sm:h-8 sm:w-8"
+                          // Nothing left on the shelf, so there is nothing to add.
+                          disabled={availableFor(l.product.id) === 0}
+                          onClick={() =>
+                            setCart((prev) =>
+                              prev.map((x, j) =>
+                                j === i ? { ...x, qty: Math.min(stockFor(x.product.id), x.qty + 1) } : x,
+                              ),
+                            )
+                          }
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                       <div className="font-semibold tabular-nums sm:w-24 sm:text-right">{formatRs(l.qty * unitPrice(l.product) - l.discount, settings.currency)}</div>
                       <button

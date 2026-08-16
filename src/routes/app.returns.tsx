@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useStore, formatRs, todayISO, type ReturnRec, type Shop, type Purchase, type Product, type Sale } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
@@ -7,11 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Confirm } from "@/components/Confirm";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
-import { Undo2, Download, PackageMinus, Info } from "lucide-react";
+import { Undo2, Download, PackageMinus, Info, Pencil, Trash2 } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
 
@@ -80,9 +80,17 @@ function FilterBar({
 }
 
 /** A return record as a card — shared by the customer and supplier lists. */
-function ReturnCard({ r, shopName, kind }: { r: ReturnRec; shopName?: string; kind: "customer" | "supplier" }) {
+function ReturnCard({
+  r, shopName, kind, actions,
+}: {
+  r: ReturnRec;
+  shopName?: string;
+  kind: "customer" | "supplier";
+  actions?: ReactNode;
+}) {
   return (
     <ListCard
+      actions={actions}
       title={<span className="font-mono">{r.returnNo}</span>}
       subtitle={`${r.date} · ${kind === "customer" ? "invoice" : "bill"} ${r.invoice}`}
       right={formatRs(r.refund)}
@@ -94,6 +102,123 @@ function ReturnCard({ r, shopName, kind }: { r: ReturnRec; shopName?: string; ki
         { label: "Items", value: r.items.map((i) => `${i.qty} × ${i.name}`).join(", ") },
       ]}
     />
+  );
+}
+
+/**
+ * Corrects a return that was already recorded.
+ *
+ * The money fields are just numbers, but the quantities have already moved
+ * stock, so the store re-applies only the difference. Setting a line to 0 drops
+ * it from the return and hands those units straight back.
+ */
+function EditReturnDialog({ rec, onClose }: { rec: ReturnRec | null; onClose: () => void }) {
+  const { updateReturn, inventory } = useStore();
+  const [date, setDate] = useState("");
+  const [refund, setRefund] = useState(0);
+  const [reason, setReason] = useState("");
+  const [qtys, setQtys] = useState<Record<string, number>>({});
+
+  // Re-seeded whenever a different record is opened; a dialog that kept the last
+  // record's numbers would silently write them onto this one.
+  useEffect(() => {
+    if (!rec) return;
+    setDate(rec.date);
+    setRefund(rec.refund);
+    setReason(rec.reason);
+    setQtys(Object.fromEntries(rec.items.map((i) => [i.productId, i.qty])));
+  }, [rec]);
+
+  if (!rec) return null;
+
+  const stockAt = (productId: string) =>
+    inventory.find((r) => r.productId === productId && r.shopId === rec.shopId)?.qty ?? 0;
+
+  const isSupplier = rec.kind === "supplier";
+  const items = rec.items.map((i) => ({ ...i, qty: qtys[i.productId] ?? i.qty })).filter((i) => i.qty > 0);
+
+  const save = () => {
+    if (items.length === 0) {
+      toast.error("A return needs at least one item — delete it instead.");
+      return;
+    }
+    if (refund < 0) { toast.error("The amount can't be negative"); return; }
+    // Sending MORE back to the supplier than the shop still holds would drive
+    // its stock negative, so the extra units are refused up front.
+    if (isSupplier) {
+      const short = items.find((i) => {
+        const was = rec.items.find((x) => x.productId === i.productId)?.qty ?? 0;
+        return i.qty - was > stockAt(i.productId);
+      });
+      if (short) {
+        toast.error(`Only ${stockAt(short.productId)} × ${short.name} left at this shop`);
+        return;
+      }
+    }
+    updateReturn({ ...rec, date, refund, reason: reason.trim() || rec.reason, items });
+    toast.success(`${rec.returnNo} corrected`);
+    onClose();
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Correct {rec.returnNo}</DialogTitle>
+          <DialogDescription>
+            Against {isSupplier ? "bill" : "invoice"} {rec.invoice}. Changing a quantity moves the stock by
+            the difference — nothing is counted twice.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-1.5">
+          <Label>Items returned</Label>
+          <div className="border rounded-lg divide-y">
+            {rec.items.map((i) => (
+              <div key={i.productId} className="flex items-center gap-3 p-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm truncate">{i.name}</div>
+                  <div className="text-xs text-muted-foreground">
+                    was {i.qty} · {stockAt(i.productId)} in stock now
+                  </div>
+                </div>
+                <Input
+                  type="number"
+                  min={0}
+                  value={qtys[i.productId] ?? i.qty}
+                  onChange={(e) =>
+                    setQtys((prev) => ({ ...prev, [i.productId]: Math.max(0, Number(e.target.value) || 0) }))
+                  }
+                  className="h-9 w-20 text-right"
+                />
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">Set a line to 0 to take it off this return.</p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label>{isSupplier ? "Credit from supplier" : "Refund amount"}</Label>
+            <Input type="number" min={0} value={refund} onChange={(e) => setRefund(Math.max(0, Number(e.target.value) || 0))} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Date</Label>
+            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Reason</Label>
+          <Input value={reason} onChange={(e) => setReason(e.target.value)} />
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={save}>Save correction</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -363,9 +488,61 @@ function EmptyState({ icon, title, hint }: { icon: ReactNode; title: string; hin
 }
 
 function ReturnsPage() {
-  const { user, returns, sales, purchases, products, shops, inventory } = useStore();
+  const { user, returns, sales, purchases, products, shops, inventory, deleteReturn } = useStore();
   const isAdmin = user?.role === "admin";
   const [filters, setFilters] = useState<Filters>({ q: "", shopFilter: "all", from: "", to: "" });
+  const [editing, setEditing] = useState<ReturnRec | null>(null);
+
+  /**
+   * Corrections available on any recorded return.
+   *
+   * Deleting is the fix for the commonest mistake of all — a return put through
+   * against the wrong invoice — so it undoes the stock movement and, for a
+   * customer return, re-opens the invoice it closed.
+   */
+  const rowActions = (r: ReturnRec, compact: boolean) => (
+    <>
+      <Button
+        size="sm"
+        variant={compact ? "ghost" : "outline"}
+        onClick={() => setEditing(r)}
+        aria-label={compact ? `Correct ${r.returnNo}` : undefined}
+      >
+        <Pencil className={compact ? "h-3.5 w-3.5" : "h-3.5 w-3.5 mr-1.5"} />
+        {!compact && "Correct"}
+      </Button>
+      <Confirm
+        title={`Undo ${r.returnNo}?`}
+        description={
+          r.kind === "customer" ? (
+            <>
+              The refund of <strong>{formatRs(r.refund)}</strong> is cancelled, the returned items come back
+              off the shelf, and invoice <strong>{r.invoice}</strong> counts as a completed sale again.
+            </>
+          ) : (
+            <>
+              The credit of <strong>{formatRs(r.refund)}</strong> against <strong>{r.supplier}</strong> is
+              cancelled and the stock goes back onto the shelf at this shop.
+            </>
+          )
+        }
+        confirmLabel="Undo return"
+        destructive
+        onConfirm={() => { deleteReturn(r.id); toast.success(`${r.returnNo} undone`); }}
+        trigger={
+          <Button
+            size="sm"
+            variant={compact ? "ghost" : "outline"}
+            className="text-muted-foreground hover:text-destructive"
+            aria-label={compact ? `Undo ${r.returnNo}` : undefined}
+          >
+            <Trash2 className={compact ? "h-3.5 w-3.5" : "h-3.5 w-3.5 mr-1.5"} />
+            {!compact && "Undo"}
+          </Button>
+        }
+      />
+    </>
+  );
 
   const stockAt = (productId: string, shopId: string) =>
     inventory.find((r) => r.productId === productId && r.shopId === shopId)?.qty ?? 0;
@@ -468,7 +645,14 @@ function ReturnsPage() {
               <MobileCards
                 items={customerRows}
                 keyOf={(r) => r.id}
-                render={(r) => <ReturnCard r={r} kind="customer" shopName={shops.find((s) => s.id === r.shopId)?.name} />}
+                render={(r) => (
+                  <ReturnCard
+                    r={r}
+                    kind="customer"
+                    shopName={shops.find((s) => s.id === r.shopId)?.name}
+                    actions={rowActions(r, false)}
+                  />
+                )}
               />
               <TableWrap>
                 <table className="w-full text-sm">
@@ -480,6 +664,7 @@ function ReturnsPage() {
                     <th className="px-4 py-3 font-medium">Items</th>
                     <th className="px-4 py-3 font-medium text-right">Refund</th>
                     <th className="px-4 py-3 font-medium">Reason</th>
+                    <th className="px-4 py-3 font-medium text-right">Actions</th>
                   </tr></thead>
                   <tbody>
                     {customerRows.map((r) => (
@@ -491,6 +676,7 @@ function ReturnsPage() {
                         <td className="px-4 py-3 text-xs text-muted-foreground">{r.items.map((i) => `${i.qty} × ${i.name}`).join(", ")}</td>
                         <td className="px-4 py-3 text-right font-medium">{formatRs(r.refund)}</td>
                         <td className="px-4 py-3 text-muted-foreground">{r.reason}</td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">{rowActions(r, true)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -524,7 +710,14 @@ function ReturnsPage() {
                 <MobileCards
                   items={supplierRows}
                   keyOf={(r) => r.id}
-                  render={(r) => <ReturnCard r={r} kind="supplier" shopName={shops.find((s) => s.id === r.shopId)?.name} />}
+                  render={(r) => (
+                    <ReturnCard
+                      r={r}
+                      kind="supplier"
+                      shopName={shops.find((s) => s.id === r.shopId)?.name}
+                      actions={rowActions(r, false)}
+                    />
+                  )}
                 />
                 <TableWrap>
                   <table className="w-full text-sm">
@@ -537,6 +730,7 @@ function ReturnsPage() {
                       <th className="px-4 py-3 font-medium">Items</th>
                       <th className="px-4 py-3 font-medium text-right">Credit</th>
                       <th className="px-4 py-3 font-medium">Reason</th>
+                      <th className="px-4 py-3 font-medium text-right">Actions</th>
                     </tr></thead>
                     <tbody>
                       {supplierRows.map((r) => (
@@ -549,6 +743,7 @@ function ReturnsPage() {
                           <td className="px-4 py-3 text-xs text-muted-foreground">{r.items.map((i) => `${i.qty} × ${i.name}`).join(", ")}</td>
                           <td className="px-4 py-3 text-right font-medium">{formatRs(r.refund)}</td>
                           <td className="px-4 py-3 text-muted-foreground">{r.reason}</td>
+                          <td className="px-4 py-3 text-right whitespace-nowrap">{rowActions(r, true)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -560,6 +755,8 @@ function ReturnsPage() {
           </TabsContent>
         )}
       </Tabs>
+
+      <EditReturnDialog rec={editing} onClose={() => setEditing(null)} />
     </div>
   );
 }

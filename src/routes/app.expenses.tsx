@@ -1,15 +1,16 @@
 ﻿import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useStore, formatRs, todayISO } from "@/lib/store";
+import { useStore, formatRs, todayISO, type Expense } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
-import { Plus } from "lucide-react";
+import { Confirm } from "@/components/Confirm";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 const BASE_CATS = ["Rent", "Salary", "Bills", "Transport", "Misc"];
@@ -19,9 +20,11 @@ const CUSTOM = "__custom__";
 export const Route = createFileRoute("/app/expenses")({ component: ExpensesPage });
 
 function ExpensesPage() {
-  const { user, expenses, shops, addExpense } = useStore();
+  const { user, expenses, shops, addExpense, updateExpense, deleteExpense } = useStore();
   const isAdmin = user?.role === "admin";
   const [open, setOpen] = useState(false);
+  /** The row being corrected; null means the dialog is recording a new one. */
+  const [editing, setEditing] = useState<Expense | null>(null);
   const [isCustom, setIsCustom] = useState(false);
   const [customCat, setCustomCat] = useState("");
   const [form, setForm] = useState({
@@ -41,25 +44,94 @@ function ExpensesPage() {
     [expenses],
   );
 
+  const openAdd = () => {
+    setEditing(null);
+    setForm({
+      date: todayISO(),
+      shopId: user?.shopId ?? shops[0]?.id ?? "",
+      category: "Misc",
+      description: "",
+      amount: 0,
+    });
+    setIsCustom(false);
+    setCustomCat("");
+    setOpen(true);
+  };
+
+  const openEdit = (e: Expense) => {
+    setEditing(e);
+    setForm({ date: e.date, shopId: e.shopId, category: e.category, description: e.description, amount: e.amount });
+    setIsCustom(false);
+    setCustomCat("");
+    setOpen(true);
+  };
+
   const save = () => {
     const category = isCustom ? customCat.trim() : form.category;
     if (!category) { toast.error("Category required"); return; }
     if (!form.description.trim() || form.amount <= 0) { toast.error("Description and amount required"); return; }
-    addExpense({ ...form, category, description: form.description.trim(), addedBy: user?.name ?? "Unknown" });
-    toast.success("Expense recorded");
+    const clean = { ...form, category, description: form.description.trim() };
+    if (editing) {
+      // `addedBy` and `sessionId` stay as first recorded: who spent the money and
+      // whether it came out of that day's drawer are facts a correction to the
+      // amount has no business rewriting.
+      updateExpense({ ...editing, ...clean });
+      toast.success("Expense updated");
+    } else {
+      addExpense({ ...clean, addedBy: user?.name ?? "Unknown" });
+      toast.success("Expense recorded");
+    }
     setOpen(false);
-    setForm({ ...form, category, description: "", amount: 0 });
+    setEditing(null);
     setIsCustom(false);
     setCustomCat("");
   };
 
+  /** Shared by the phone cards and the table. */
+  const rowActions = (e: Expense) => (
+    <>
+      <Button size="sm" variant="outline" onClick={() => openEdit(e)}>
+        <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
+      </Button>
+      <Confirm
+        title="Delete this expense?"
+        description={
+          <>
+            <strong>{e.description}</strong> ({formatRs(e.amount)}) is removed from the expense totals and,
+            if it was paid out of the till, from that day's cash count. This can't be undone.
+          </>
+        }
+        confirmLabel="Delete expense"
+        destructive
+        onConfirm={() => { deleteExpense(e.id); toast.success("Expense deleted"); }}
+        trigger={
+          <Button size="sm" variant="outline" className="text-muted-foreground hover:text-destructive">
+            <Trash2 className="h-3.5 w-3.5 mr-1.5" />Delete
+          </Button>
+        }
+      />
+    </>
+  );
+
   return (
     <div>
       <PageHeader title="Expenses" subtitle={isAdmin ? "Operating costs across the business." : "Your shop's expenses."} actions={
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-1.5" />Add expense</Button></DialogTrigger>
+        <Button onClick={openAdd}><Plus className="h-4 w-4 mr-1.5" />Add expense</Button>
+      } />
+
+      {/* One dialog serves both jobs — a separate edit form would be the same
+          five fields kept in step by hand. */}
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setEditing(null); }}>
           <DialogContent>
-            <DialogHeader><DialogTitle>New expense</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>{editing ? "Edit expense" : "New expense"}</DialogTitle>
+              {editing && (
+                <DialogDescription>
+                  Recorded by {editing.addedBy || "someone"}
+                  {editing.sessionId ? " and paid out of the till that day." : "."}
+                </DialogDescription>
+              )}
+            </DialogHeader>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5"><Label>Date</Label><Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
               {isAdmin && (
@@ -101,10 +173,13 @@ function ExpensesPage() {
               <div className="space-y-1.5"><Label>Amount (Rs)</Label><Input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })} /></div>
               <div className="space-y-1.5 sm:col-span-2"><Label>Description</Label><Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
             </div>
-            <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={save}>Save</Button></DialogFooter>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button onClick={save}>{editing ? "Save changes" : "Save"}</Button>
+            </DialogFooter>
           </DialogContent>
-        </Dialog>
-      } />
+      </Dialog>
+
       <Card className="overflow-hidden">
         <MobileCards
           items={rows}
@@ -120,6 +195,7 @@ function ExpensesPage() {
                 ...(isAdmin ? [{ label: "Shop", value: shops.find((s) => s.id === e.shopId)?.name ?? "—" }] : []),
                 { label: "Added by", value: e.addedBy },
               ]}
+              actions={rowActions(e)}
             />
           )}
         />
@@ -132,6 +208,7 @@ function ExpensesPage() {
             <th className="px-4 py-3 font-medium">Description</th>
             <th className="px-4 py-3 font-medium">Added by</th>
             <th className="px-4 py-3 font-medium text-right">Amount</th>
+            <th className="px-4 py-3 font-medium text-right">Actions</th>
           </tr></thead>
           <tbody>
             {rows.map((e) => (
@@ -142,10 +219,33 @@ function ExpensesPage() {
                 <td className="px-4 py-3">{e.description}</td>
                 <td className="px-4 py-3 text-muted-foreground">{e.addedBy}</td>
                 <td className="px-4 py-3 text-right font-medium">{formatRs(e.amount)}</td>
+                <td className="px-4 py-3 text-right whitespace-nowrap">
+                  <Button size="sm" variant="ghost" aria-label="Edit expense" onClick={() => openEdit(e)}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Confirm
+                    title="Delete this expense?"
+                    description={
+                      <>
+                        <strong>{e.description}</strong> ({formatRs(e.amount)}) is removed from the expense
+                        totals and, if it was paid out of the till, from that day's cash count. This can't be
+                        undone.
+                      </>
+                    }
+                    confirmLabel="Delete expense"
+                    destructive
+                    onConfirm={() => { deleteExpense(e.id); toast.success("Expense deleted"); }}
+                    trigger={
+                      <Button size="sm" variant="ghost" aria-label="Delete expense" className="text-muted-foreground hover:text-destructive">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    }
+                  />
+                </td>
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr><td colSpan={isAdmin ? 6 : 5} className="px-4 py-12 text-center text-sm text-muted-foreground">No expenses recorded yet.</td></tr>
+              <tr><td colSpan={isAdmin ? 7 : 6} className="px-4 py-12 text-center text-sm text-muted-foreground">No expenses recorded yet.</td></tr>
             )}
           </tbody>
         </table>

@@ -71,10 +71,20 @@ interface StoreState {
   updateSale: (s: Sale) => void;
   deleteSale: (id: string) => void;
   addPurchase: (p: Omit<Purchase, "id">) => void;
+  /** Re-books a bill: stock moves by the difference between old and new lines. */
+  updatePurchase: (p: Purchase) => void;
+  /** Removes a bill and takes the stock it brought in back off the shelves. */
+  deletePurchase: (id: string) => void;
   addSupplier: (s: Omit<Supplier, "id">) => Supplier;
   updateSupplier: (s: Supplier) => void;
   addExpense: (e: Omit<Expense, "id">) => void;
+  updateExpense: (e: Expense) => void;
+  deleteExpense: (id: string) => void;
   addReturn: (r: Omit<ReturnRec, "id" | "returnNo">) => void;
+  /** Corrects a recorded return, moving stock by the difference in quantities. */
+  updateReturn: (r: ReturnRec) => void;
+  /** Undoes a return: stock goes back as it was, and the invoice re-opens. */
+  deleteReturn: (id: string) => void;
   updateProductAlert: (productId: string, lowAlert: number) => void;
   addProduct: (p: Omit<Product, "id">) => void;
   updateProduct: (p: Product) => void;
@@ -99,15 +109,73 @@ interface StoreState {
     closedBy: string;
     notes?: string;
   }) => void;
+  /** Corrects a session's figures — the opening float, the cash count, the notes. */
+  updateDaySession: (s: DaySession) => void;
+  /**
+   * Puts a closed day back on the counter, e.g. it was ended by mistake or a
+   * sale still has to be rung up. Refuses if another day is already open there.
+   */
+  reopenDay: (id: string) => boolean;
+  /** Deletes a session outright. Refuses while any record still points at it. */
+  deleteDaySession: (id: string) => boolean;
 
   /* ------------------------------------------------------ stock transfers */
   addTransfer: (t: Omit<Transfer, "id" | "transferNo">) => void;
+  /** Re-books a movement: the old one is reversed and the new one applied. */
+  updateTransfer: (t: Transfer) => void;
+  /** Undoes a movement, putting the stock back where it came from. */
+  deleteTransfer: (id: string) => void;
 
   /* ------------------------------------------------- customers and credit */
   addCustomer: (c: Omit<Customer, "id">) => Customer;
   updateCustomer: (c: Customer) => void;
   /** Records money received against a customer's outstanding balance. */
   addCustomerPayment: (p: Omit<CustomerPayment, "id">) => void;
+  updateCustomerPayment: (p: CustomerPayment) => void;
+  deleteCustomerPayment: (id: string) => void;
+}
+
+/** One signed stock movement: `delta` units of a product at one shop. */
+interface StockMove {
+  productId: string;
+  shopId: string;
+  delta: number;
+}
+
+/**
+ * Applies signed stock movements to an inventory list.
+ *
+ * Every correction in this store — editing a bill, undoing a transfer, deleting
+ * a return — is the same operation with different signs, so they all go through
+ * here rather than each re-implementing the find/clamp/insert dance. Quantities
+ * never go below zero, and a shop that has never stocked a product gets a row
+ * only when stock is actually arriving.
+ */
+function applyStock(rows: InventoryRow[], moves: StockMove[]): InventoryRow[] {
+  const next = [...rows];
+  moves.forEach(({ productId, shopId, delta }) => {
+    if (delta === 0) return;
+    const i = next.findIndex((r) => r.productId === productId && r.shopId === shopId);
+    if (i >= 0) next[i] = { ...next[i], qty: Math.max(0, next[i].qty + delta) };
+    else if (delta > 0) next.push({ productId, shopId, qty: delta });
+  });
+  return next;
+}
+
+/** The rows a set of movements touched — the only ones worth writing back. */
+function touchedRows(rows: InventoryRow[], moves: StockMove[]) {
+  const keys = new Set(moves.map((m) => `${m.productId}|${m.shopId}`));
+  return rows.filter((r) => keys.has(`${r.productId}|${r.shopId}`));
+}
+
+/**
+ * Profit on a sale, recomputed from its own lines.
+ *
+ * A returned sale has its profit zeroed; undoing that return has to put a real
+ * figure back, and the lines are the only record of what it was.
+ */
+function profitOf(sale: Sale) {
+  return sale.lines.reduce((a, l) => a + l.qty * (l.price - l.cost) - l.discount, 0);
 }
 // The demo dataset now lives in seed-data.ts so the SQL seed generator can
 // emit exactly the same rows the UI shows.
@@ -381,6 +449,46 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return next;
         });
       },
+      /**
+       * Re-books a purchase bill.
+       *
+       * Stock moves by the DIFFERENCE between the old and new lines, per shop —
+       * correcting "10 units" to "8" must remove 2, not add 8 on top of what the
+       * original bill already delivered.
+       */
+      updatePurchase: (updated) => {
+        const previous = purchases.find((p) => p.id === updated.id);
+        setPurchases((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        persist("the purchase", () => db.upsertPurchase(updated));
+        if (!previous) return;
+        const keys = new Set([...previous.lines, ...updated.lines].map((l) => `${l.productId}|${l.shopId}`));
+        const moves: StockMove[] = [...keys].map((k) => {
+          const [productId, shopId] = k.split("|");
+          const before = previous.lines.find((l) => l.productId === productId && l.shopId === shopId)?.qty ?? 0;
+          const after = updated.lines.find((l) => l.productId === productId && l.shopId === shopId)?.qty ?? 0;
+          return { productId, shopId, delta: after - before };
+        });
+        setInventory((prev) => {
+          const next = applyStock(prev, moves);
+          persist("stock levels", () => db.upsertInventory(touchedRows(next, moves)));
+          return next;
+        });
+      },
+
+      /** Deleting a bill takes back the stock it put on the shelves. */
+      deletePurchase: (id) => {
+        const bill = purchases.find((p) => p.id === id);
+        setPurchases((prev) => prev.filter((p) => p.id !== id));
+        persist("the deletion", () => db.deletePurchase(id));
+        if (!bill) return;
+        const moves: StockMove[] = bill.lines.map((l) => ({ productId: l.productId, shopId: l.shopId, delta: -l.qty }));
+        setInventory((prev) => {
+          const next = applyStock(prev, moves);
+          persist("stock levels", () => db.upsertInventory(touchedRows(next, moves)));
+          return next;
+        });
+      },
+
       addSupplier: (sup) => {
         const created: Supplier = { ...sup, id: `sup-${Date.now()}` };
         setSuppliers((prev) => [...prev, created]);
@@ -404,6 +512,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const expense: Expense = { ...e, id: `exp-${Date.now()}`, sessionId: e.sessionId ?? attach };
         setExpenses((prev) => [expense, ...prev]);
         persist("the expense", () => db.upsertExpense(expense));
+      },
+      /**
+       * Corrects an expense. `sessionId` is carried through untouched: whether
+       * the money left the drawer is a fact about when it was spent, not
+       * something a later edit to the amount should quietly change.
+       */
+      updateExpense: (e) => {
+        setExpenses((prev) => prev.map((x) => (x.id === e.id ? e : x)));
+        persist("the expense", () => db.upsertExpense(e));
+      },
+      deleteExpense: (id) => {
+        setExpenses((prev) => prev.filter((x) => x.id !== id));
+        persist("the deletion", () => db.deleteExpense(id));
       },
       addReturn: (r) => {
         const isSupplier = r.kind === "supplier";
@@ -439,6 +560,73 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return next;
         });
       },
+      /**
+       * Corrects a recorded return.
+       *
+       * The refund and reason are just fields, but the item quantities have
+       * already moved stock, so the difference is applied in the same direction
+       * the original return used: customer returns add to the shelf, supplier
+       * returns take away.
+       */
+      updateReturn: (updated) => {
+        const previous = returns.find((r) => r.id === updated.id);
+        setReturns((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+        persist("the return", () => db.upsertReturn(updated));
+        if (!previous) return;
+        const sign = updated.kind === "supplier" ? -1 : 1;
+        const ids = new Set([...previous.items, ...updated.items].map((i) => i.productId));
+        const moves: StockMove[] = [...ids].map((productId) => {
+          const before = previous.items.find((i) => i.productId === productId)?.qty ?? 0;
+          const after = updated.items.find((i) => i.productId === productId)?.qty ?? 0;
+          return { productId, shopId: updated.shopId, delta: sign * (after - before) };
+        });
+        setInventory((prev) => {
+          const next = applyStock(prev, moves);
+          persist("stock levels", () => db.upsertInventory(touchedRows(next, moves)));
+          return next;
+        });
+      },
+
+      /**
+       * Undoes a return entirely — the usual fix when one was recorded against
+       * the wrong invoice. Stock goes back exactly as it was, and a customer
+       * return also re-opens the invoice it closed, with its profit restored
+       * from the lines (it was zeroed when the return was recorded).
+       */
+      deleteReturn: (id) => {
+        const rec = returns.find((r) => r.id === id);
+        setReturns((prev) => prev.filter((r) => r.id !== id));
+        persist("the deletion", () => db.deleteReturn(id));
+        if (!rec) return;
+
+        if (rec.kind === "customer") {
+          setSales((prev) => {
+            const next = prev.map((s) =>
+              s.invoice === rec.invoice && s.status === "Returned"
+                ? { ...s, status: "Completed" as const, profit: profitOf(s) }
+                : s,
+            );
+            const restored = next.find((s) => s.invoice === rec.invoice);
+            if (restored) persist("the invoice status", () => db.upsertSale(restored));
+            return next;
+          });
+        }
+
+        // Mirror image of addReturn: a customer return had put stock back, so
+        // undoing it takes that stock away again, and vice versa.
+        const sign = rec.kind === "supplier" ? 1 : -1;
+        const moves: StockMove[] = rec.items.map((i) => ({
+          productId: i.productId,
+          shopId: rec.shopId,
+          delta: sign * i.qty,
+        }));
+        setInventory((prev) => {
+          const next = applyStock(prev, moves);
+          persist("stock levels", () => db.upsertInventory(touchedRows(next, moves)));
+          return next;
+        });
+      },
+
       addProduct: (p) => {
         const product: Product = { ...p, id: `p-${Date.now()}` };
         setProducts((prev) => [...prev, product]);
@@ -563,6 +751,58 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
       },
 
+      /**
+       * Corrects a session's own figures — the opening float that was mistyped,
+       * the cash count, the note explaining a short till. It deliberately cannot
+       * change which sales belong to the day: those carry their own session id.
+       */
+      updateDaySession: (s) => {
+        setDaySessions((prev) => prev.map((x) => (x.id === s.id ? s : x)));
+        persist("the day book entry", () => db.upsertDaySession(s));
+      },
+
+      /**
+       * Re-opens a day that was closed too early. The cash figures recorded at
+       * close are cleared, because they described a drawer that is about to keep
+       * moving — leaving them behind would show a count that no longer holds.
+       */
+      reopenDay: (id) => {
+        const session = daySessions.find((s) => s.id === id);
+        if (!session || session.status === "open") return false;
+        // A second open day at one shop would double-count every sale rung up
+        // afterwards, so this is refused rather than resolved arbitrarily.
+        if (openSessionFor(daySessions, session.shopId)) return false;
+        const reopened: DaySession = {
+          ...session,
+          status: "open",
+          closedAt: undefined,
+          closedBy: undefined,
+          countedCash: undefined,
+          cashTakenByOwner: undefined,
+          cashLeftInShop: undefined,
+        };
+        setDaySessions((prev) => prev.map((s) => (s.id === id ? reopened : s)));
+        persist("the day book entry", () => db.upsertDaySession(reopened));
+        return true;
+      },
+
+      /**
+       * Deletes a day that should never have been started — a double tap in the
+       * morning, or the wrong shop. Refused once anything has been booked to it:
+       * those records would be left pointing at a session that no longer exists,
+       * and their takings would vanish from every day-book total.
+       */
+      deleteDaySession: (id) => {
+        const used =
+          sales.some((s) => s.sessionId === id) ||
+          expenses.some((e) => e.sessionId === id) ||
+          customerPayments.some((p) => p.sessionId === id);
+        if (used) return false;
+        setDaySessions((prev) => prev.filter((s) => s.id !== id));
+        persist("the deletion", () => db.deleteDaySession(id));
+        return true;
+      },
+
       addTransfer: (t) => {
         const transfer: Transfer = {
           ...t,
@@ -598,6 +838,50 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
       },
 
+      /**
+       * Re-books a movement by reversing the old one and applying the new, in a
+       * single update. Both shops and both directions change together, so an
+       * edited transfer can never leave stock stranded at the wrong branch.
+       */
+      updateTransfer: (updated) => {
+        const previous = transfers.find((t) => t.id === updated.id);
+        setTransfers((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+        persist("the transfer", () => db.upsertTransfer(updated));
+        if (!previous) return;
+        const moves: StockMove[] = [
+          ...previous.items.flatMap((i) => [
+            { productId: i.productId, shopId: previous.fromShopId, delta: i.qty },
+            { productId: i.productId, shopId: previous.toShopId, delta: -i.qty },
+          ]),
+          ...updated.items.flatMap((i) => [
+            { productId: i.productId, shopId: updated.fromShopId, delta: -i.qty },
+            { productId: i.productId, shopId: updated.toShopId, delta: i.qty },
+          ]),
+        ];
+        setInventory((prev) => {
+          const next = applyStock(prev, moves);
+          persist("stock levels", () => db.upsertInventory(touchedRows(next, moves)));
+          return next;
+        });
+      },
+
+      /** Undoes a movement: the goods go back to the shop they came from. */
+      deleteTransfer: (id) => {
+        const transfer = transfers.find((t) => t.id === id);
+        setTransfers((prev) => prev.filter((t) => t.id !== id));
+        persist("the deletion", () => db.deleteTransfer(id));
+        if (!transfer) return;
+        const moves: StockMove[] = transfer.items.flatMap((i) => [
+          { productId: i.productId, shopId: transfer.fromShopId, delta: i.qty },
+          { productId: i.productId, shopId: transfer.toShopId, delta: -i.qty },
+        ]);
+        setInventory((prev) => {
+          const next = applyStock(prev, moves);
+          persist("stock levels", () => db.upsertInventory(touchedRows(next, moves)));
+          return next;
+        });
+      },
+
       addCustomer: (c) => {
         const created: Customer = { ...c, id: `cust-${Date.now()}` };
         setCustomers((prev) => [...prev, created]);
@@ -622,6 +906,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const payment: CustomerPayment = { ...p, id: `pay-${Date.now()}`, sessionId: p.sessionId ?? attach };
         setCustomerPayments((prev) => [payment, ...prev]);
         persist("the payment", () => db.upsertCustomerPayment(payment));
+      },
+
+      /**
+       * Corrects a receipt — a mistyped amount, or cash booked as card. The
+       * customer's balance is derived from these rows rather than stored, so it
+       * follows the correction with no separate adjustment.
+       */
+      updateCustomerPayment: (p) => {
+        setCustomerPayments((prev) => prev.map((x) => (x.id === p.id ? p : x)));
+        persist("the payment", () => db.upsertCustomerPayment(p));
+      },
+      deleteCustomerPayment: (id) => {
+        setCustomerPayments((prev) => prev.filter((x) => x.id !== id));
+        persist("the deletion", () => db.deleteCustomerPayment(id));
       },
     }),
     [user, ready, usingSupabase, dbError, pendingMigration, online, shops, users, products, inventory, sales, purchases, suppliers, expenses, returns, daySessions, transfers, customers, customerPayments, settings, discounts],

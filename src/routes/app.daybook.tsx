@@ -6,6 +6,7 @@ import {
   carryForwardCash,
   openSessionFor,
   sessionsFor,
+  todayISO,
   summarizeSession,
   shortDay,
   type DaySession,
@@ -29,7 +30,13 @@ import {
   Download,
   AlertTriangle,
   HandCoins,
+  Pencil,
+  Trash2,
+  RotateCcw,
+  Phone,
+  CheckCircle2,
 } from "lucide-react";
+import { Confirm } from "@/components/Confirm";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
 
@@ -43,7 +50,10 @@ const timeOnly = (iso?: string) =>
   iso ? new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "—";
 
 function DayBookPage() {
-  const { user, shops, sales, expenses, returns, customerPayments, daySessions, openDay, closeDay, settings, pendingMigration } = useStore();
+  const {
+    user, shops, users, sales, expenses, returns, customerPayments, daySessions,
+    openDay, closeDay, updateDaySession, reopenDay, deleteDaySession, settings, pendingMigration,
+  } = useStore();
   const isAdmin = user?.role === "admin";
 
   /**
@@ -123,6 +133,89 @@ function DayBookPage() {
     setCloseDialog(false);
   };
 
+  /* ------------------------------------------------- corrections */
+
+  const [editing, setEditing] = useState<DaySession | null>(null);
+  const [editForm, setEditForm] = useState({ openingCash: 0, countedCash: 0, taken: 0, notes: "" });
+
+  const beginEdit = (s: DaySession) => {
+    setEditing(s);
+    setEditForm({
+      openingCash: s.openingCash,
+      countedCash: s.countedCash ?? 0,
+      taken: s.cashTakenByOwner ?? 0,
+      notes: s.notes ?? "",
+    });
+  };
+
+  const saveEdit = () => {
+    if (!editing) return;
+    const wasClosed = editing.status === "closed";
+    if (editForm.openingCash < 0 || editForm.countedCash < 0 || editForm.taken < 0) {
+      toast.error("Cash amounts can't be negative");
+      return;
+    }
+    if (wasClosed && editForm.taken > editForm.countedCash) {
+      toast.error("The owner can't take more than was counted");
+      return;
+    }
+    updateDaySession({
+      ...editing,
+      openingCash: editForm.openingCash,
+      notes: editForm.notes.trim() || undefined,
+      // An open day has no count yet, so those three fields stay untouched
+      // rather than being written as zeros.
+      ...(wasClosed
+        ? {
+            countedCash: editForm.countedCash,
+            cashTakenByOwner: editForm.taken,
+            cashLeftInShop: Math.max(0, editForm.countedCash - editForm.taken),
+          }
+        : {}),
+    });
+    toast.success("Day book entry corrected");
+    setEditing(null);
+  };
+
+  const reopen = (s: DaySession) => {
+    if (reopenDay(s.id)) {
+      toast.success(`${shortDay(s.businessDate)} is open again — remember to end it tonight.`);
+      return;
+    }
+    toast.error("Another day is already open at this shop — end that one first.");
+  };
+
+  const removeSession = (s: DaySession) => {
+    if (deleteDaySession(s.id)) {
+      toast.success(`${shortDay(s.businessDate)} removed from the day book`);
+      return;
+    }
+    toast.error("Sales, expenses or payments are booked to this day — it can't be deleted.");
+  };
+
+  /* --------------------------------------------- who has started today */
+
+  /**
+   * The owner's morning check: which shops have actually opened the till today.
+   * Without it, a shop that forgets to start the day quietly books its takings
+   * against the calendar date and nobody notices until the cash doesn't match.
+   */
+  const today = todayISO();
+  const shopStatus = useMemo(
+    () =>
+      shops
+        .filter((s) => s.active)
+        .map((s) => ({
+          shop: s,
+          open: openSessionFor(daySessions, s.id),
+          todays: daySessions.find((x) => x.shopId === s.id && x.businessDate === today),
+          last: sessionsFor(daySessions, s.id)[0],
+          keepers: users.filter((u) => u.shopId === s.id && u.active),
+        })),
+    [shops, daySessions, users, today],
+  );
+  const notStarted = shopStatus.filter((s) => !s.todays);
+
   const exportSessions = () => {
     const rows = isAdmin ? allClosed : history.filter((s) => s.status === "closed").map((s) => ({
       session: s, cash: summarizeSession(s, data), shop,
@@ -199,6 +292,89 @@ function DayBookPage() {
         </Card>
       )}
 
+      {/*
+        The owner's morning check. A shop that never starts its day still sells —
+        the till just falls back to the calendar date — so nothing breaks loudly
+        and nobody finds out until the cash handed over doesn't match the sheet.
+        This names the shops that haven't opened, and who to ring about it.
+      */}
+      {isAdmin && (
+        <Card className="mb-4 overflow-hidden">
+          <div className="px-4 sm:px-5 py-3.5 border-b flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-semibold">Day started today · {shortDay(today)}</h3>
+            <span
+              className={`text-xs font-medium px-2.5 py-1 rounded-full border ${
+                notStarted.length === 0
+                  ? "bg-success/10 text-success-strong border-success/30"
+                  : "bg-warning/15 text-warning-strong border-warning/40"
+              }`}
+            >
+              {notStarted.length === 0
+                ? "All shops have started"
+                : `${notStarted.length} of ${shopStatus.length} not started`}
+            </span>
+          </div>
+          <ul className="divide-y">
+            {shopStatus.map(({ shop: sh, open, todays, last, keepers }) => (
+              <li key={sh.id} className="px-4 sm:px-5 py-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  {open ? (
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-success-strong" />
+                  ) : todays ? (
+                    <Moon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-warning-strong" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{sh.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {open
+                        ? `Trading since ${timeOnly(open.openedAt)} · opened by ${open.openedBy}`
+                        : todays
+                          ? `Started and already closed · ${timeOnly(todays.openedAt)} → ${timeOnly(todays.closedAt)}`
+                          : last
+                            ? `Not started — last traded ${shortDay(last.businessDate)}`
+                            : "Not started — no trading day recorded yet"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Who to chase, and the number to chase them on. */}
+                {!todays && (
+                  <div className="text-xs text-muted-foreground min-w-0">
+                    {keepers.length > 0 ? keepers.map((k) => k.name).join(", ") : "No shopkeeper assigned"}
+                    {sh.phone && (
+                      <a
+                        href={`tel:${sh.phone}`}
+                        className="ml-2 inline-flex items-center gap-1 text-primary hover:underline"
+                      >
+                        <Phone className="h-3 w-3" />
+                        {sh.phone}
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {!todays && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={cannotSave}
+                    onClick={() => {
+                      setShopPick(sh.id);
+                      setOpeningCash(carryForwardCash(daySessions, sh.id));
+                      setOpenDialog(true);
+                    }}
+                  >
+                    <Sunrise className="h-3.5 w-3.5 mr-1.5" />Start for them
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       {/* ------------------------------------------------- the live day */}
       {active && live ? (
         <>
@@ -217,9 +393,17 @@ function DayBookPage() {
                   </div>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-xs text-muted-foreground">Sales so far</div>
-                <div className="font-display text-2xl font-bold">{formatRs(live.totalSales, settings.currency)}</div>
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <div className="text-xs text-muted-foreground">Sales so far</div>
+                  <div className="font-display text-2xl font-bold">{formatRs(live.totalSales, settings.currency)}</div>
+                </div>
+                {/* The opening float is typed from a drawer count at 8am; getting
+                    it wrong throws the evening's variance out by the same amount,
+                    so it stays correctable while the day is still running. */}
+                <Button variant="outline" size="sm" disabled={cannotSave} onClick={() => beginEdit(active)}>
+                  <Pencil className="h-3.5 w-3.5 mr-1.5" />Correct
+                </Button>
               </div>
             </div>
           </Card>
@@ -299,6 +483,10 @@ function DayBookPage() {
           showShop={isAdmin}
           showProfit={isAdmin}
           currency={settings.currency}
+          disabled={cannotSave}
+          onEdit={beginEdit}
+          onReopen={reopen}
+          onDelete={removeSession}
         />
       </Card>
 
@@ -438,6 +626,89 @@ function DayBookPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ------------------------------------------------ correction dialog */}
+      <Dialog open={Boolean(editing)} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Correct {editing ? shortDay(editing.businessDate) : "the day"}
+              {editing && shops.find((s) => s.id === editing.shopId)
+                ? ` at ${shops.find((s) => s.id === editing.shopId)!.name}`
+                : ""}
+            </DialogTitle>
+            <DialogDescription>
+              Figures get mistyped. Fixing them here re-states the day; the sales booked to it are
+              untouched.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editing && (
+            <>
+              <div className="space-y-1.5">
+                <Label>Opening cash in drawer ({settings.currency})</Label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  value={editForm.openingCash}
+                  onChange={(e) => setEditForm({ ...editForm, openingCash: Math.max(0, Number(e.target.value) || 0) })}
+                />
+              </div>
+
+              {editing.status === "closed" && (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label>Cash counted</Label>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        value={editForm.countedCash}
+                        onChange={(e) => setEditForm({ ...editForm, countedCash: Math.max(0, Number(e.target.value) || 0) })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Owner took away</Label>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        value={editForm.taken}
+                        onChange={(e) => setEditForm({ ...editForm, taken: Math.max(0, Number(e.target.value) || 0) })}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground -mt-1">
+                    {formatRs(Math.max(0, editForm.countedCash - editForm.taken), settings.currency)} stays
+                    behind as the next day's opening float.
+                  </p>
+                  {editForm.taken > editForm.countedCash && (
+                    <p className="text-xs text-destructive">The owner can't take more than was counted.</p>
+                  )}
+                </>
+              )}
+
+              <div className="space-y-1.5">
+                <Label>Notes (optional)</Label>
+                <Input
+                  value={editForm.notes}
+                  onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                  placeholder="e.g. opening float was typed as 5,000 by mistake"
+                />
+              </div>
+            </>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button onClick={saveEdit} disabled={editForm.taken > editForm.countedCash && editing?.status === "closed"}>
+              Save correction
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -462,14 +733,75 @@ function ClosedDays({
   showShop,
   showProfit,
   currency,
+  disabled,
+  onEdit,
+  onReopen,
+  onDelete,
 }: {
   rows: ClosedRow[];
   showShop: boolean;
   showProfit: boolean;
   currency: string;
+  disabled: boolean;
+  onEdit: (s: DaySession) => void;
+  onReopen: (s: DaySession) => void;
+  onDelete: (s: DaySession) => void;
 }) {
   const varianceTone = (v: number | null) =>
     v === null || v === 0 ? "text-muted-foreground" : v < 0 ? "text-destructive" : "text-warning-strong";
+
+  /**
+   * The three ways a closed day gets fixed, shared by the card and table layouts
+   * so a phone can do everything a desktop can. `compact` drops the labels down
+   * to icons for the table's action column.
+   */
+  const actions = (s: ClosedRow["session"], compact: boolean) => (
+    <>
+      <Button
+        size="sm"
+        variant={compact ? "ghost" : "outline"}
+        disabled={disabled}
+        onClick={() => onEdit(s)}
+        aria-label={compact ? "Correct the cash figures" : undefined}
+      >
+        <Pencil className={compact ? "h-3.5 w-3.5" : "h-3.5 w-3.5 mr-1.5"} />
+        {!compact && "Correct"}
+      </Button>
+      <Confirm
+        title={`Re-open ${shortDay(s.businessDate)}?`}
+        description="The cash count recorded at close is cleared, and the shop can ring up sales against this day again. Close it again at the end to settle the drawer."
+        confirmLabel="Re-open the day"
+        disabled={disabled}
+        onConfirm={() => onReopen(s)}
+        trigger={
+          <Button size="sm" variant={compact ? "ghost" : "outline"} disabled={disabled} aria-label={compact ? "Re-open this day" : undefined}>
+            <RotateCcw className={compact ? "h-3.5 w-3.5" : "h-3.5 w-3.5 mr-1.5"} />
+            {!compact && "Re-open"}
+          </Button>
+        }
+      />
+      <Confirm
+        title={`Delete ${shortDay(s.businessDate)}?`}
+        description="The day disappears from the day book and from the cash handover history. Only a day with no sales, expenses or payments booked to it can be deleted."
+        confirmLabel="Delete the day"
+        destructive
+        disabled={disabled}
+        onConfirm={() => onDelete(s)}
+        trigger={
+          <Button
+            size="sm"
+            variant={compact ? "ghost" : "outline"}
+            disabled={disabled}
+            className="text-muted-foreground hover:text-destructive"
+            aria-label={compact ? "Delete this day" : undefined}
+          >
+            <Trash2 className={compact ? "h-3.5 w-3.5" : "h-3.5 w-3.5 mr-1.5"} />
+            {!compact && "Delete"}
+          </Button>
+        }
+      />
+    </>
+  );
 
   return (
     <>
@@ -498,6 +830,7 @@ function ClosedDays({
               { label: "Left in shop", value: formatRs(c.cashLeftInShop, currency) },
               ...(showProfit ? [{ label: "Profit", value: formatRs(c.profit, currency), className: "text-success-strong" }] : []),
             ]}
+            actions={actions(s, false)}
           />
         )}
       />
@@ -518,6 +851,7 @@ function ClosedDays({
               <th className="px-4 py-3 font-medium text-right">Over / short</th>
               <th className="px-4 py-3 font-medium text-right">Owner took</th>
               <th className="px-4 py-3 font-medium text-right">Left in shop</th>
+              <th className="px-4 py-3 font-medium text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -542,11 +876,14 @@ function ClosedDays({
                 </td>
                 <td className="px-4 py-3 text-right font-medium">{formatRs(c.cashTakenByOwner, currency)}</td>
                 <td className="px-4 py-3 text-right text-muted-foreground">{formatRs(c.cashLeftInShop, currency)}</td>
+                <td className="px-4 py-3 text-right whitespace-nowrap">{actions(s, true)}</td>
               </tr>
             ))}
             {rows.length === 0 && (
+              // The column count follows the same two optional columns the header
+              // does, or the empty row overhangs the table and breaks its border.
               <tr>
-                <td colSpan={showShop && showProfit ? 13 : 11} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={12 + (showShop ? 1 : 0) + (showProfit ? 1 : 0)} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   No days have been closed yet.
                 </td>
               </tr>
