@@ -63,8 +63,59 @@ export interface Product {
    * Undefined falls back to `price`, so existing products keep working.
    */
   wholesalePrice?: number;
+  /**
+   * The profit the owner wants on each unit sold at RETAIL, in whole rupees.
+   *
+   * Set it and the retail price stops being a number you maintain by hand: it
+   * becomes cost + this. The point is what happens when the cost moves — a new
+   * bill at a higher rate used to quietly eat the margin, because the price
+   * stayed put. With a target set, the PRICE follows the cost and the profit
+   * stays exactly where it was put.
+   *
+   * Undefined means the old behaviour: the price is whatever was typed, and the
+   * profit is whatever is left over.
+   */
+  profitTarget?: number;
+  /** The same for the wholesale counter, which sells at its own price. */
+  wholesaleProfitTarget?: number;
   lowAlert: number;
   active: boolean;
+}
+
+/**
+ * The selling price that yields a given profit per unit.
+ *
+ * Rounded to whole rupees, and never below the cost — a negative target would
+ * mean deliberately selling at a loss, which is a decision to make on the price
+ * field directly rather than something to arrive at by arithmetic.
+ */
+export function priceForProfit(cost: number, profit: number) {
+  return Math.max(0, Math.round(cost + Math.max(0, profit)));
+}
+
+/** What a product actually earns per unit at each counter, as things stand. */
+export function unitProfit(p: Pick<Product, "cost" | "price" | "wholesalePrice">) {
+  const wholesale = p.wholesalePrice && p.wholesalePrice > 0 ? p.wholesalePrice : p.price;
+  return { retail: Math.round(p.price - p.cost), wholesale: Math.round(wholesale - p.cost) };
+}
+
+/**
+ * Re-prices a product against a new cost, honouring whichever profit targets
+ * are set and leaving the rest alone.
+ *
+ * Used when a purchase bill changes the cost. A product with no target keeps
+ * its price exactly as it was, so this can be applied to everything without
+ * having to ask which products opted in.
+ */
+export function repriceForCost(product: Product, cost: number): Product {
+  const next: Product = { ...product, cost };
+  if (product.profitTarget !== undefined) {
+    next.price = priceForProfit(cost, product.profitTarget);
+  }
+  if (product.wholesaleProfitTarget !== undefined) {
+    next.wholesalePrice = priceForProfit(cost, product.wholesaleProfitTarget);
+  }
+  return next;
 }
 
 /**

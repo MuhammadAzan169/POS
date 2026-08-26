@@ -118,6 +118,11 @@ const MIGRATIONS: { match: string[]; file: string; feature: string }[] = [
     file: "007_activity_log.sql",
     feature: "the deletion history and undo",
   },
+  {
+    match: ["products.profit_target"],
+    file: "008_profit_targets.sql",
+    feature: "a set profit per item",
+  },
 ];
 
 /** The migration files to run, oldest first — later ones build on earlier ones. */

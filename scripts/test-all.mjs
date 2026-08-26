@@ -1254,6 +1254,86 @@ it("a party's position reflects a write-off on either side", () => {
   eq(bilal.net, -30000, "you owe them the lot now");
 });
 
+/* ====================================================== PROFIT PER ITEM */
+
+describe("Setting the profit an item should earn");
+
+it("a price is derived from cost plus the profit wanted", () => {
+  eq(T.priceForProfit(280, 170), 450);
+  eq(T.priceForProfit(0, 100), 100, "no cost yet");
+});
+
+it("a negative profit never prices below cost", () => {
+  eq(T.priceForProfit(280, -50), 280, "clamped — selling at a loss is a price decision, not arithmetic");
+});
+
+it("prices are whole rupees", () => {
+  eq(T.priceForProfit(333.4, 66.9), 400, "no stray paisa on a shelf label");
+});
+
+it("unitProfit reports what each counter actually earns", () => {
+  eq(T.unitProfit({ cost: 280, price: 450, wholesalePrice: 360 }), { retail: 170, wholesale: 80 });
+});
+
+it("with no wholesale price, the wholesale counter earns the retail margin", () => {
+  eq(T.unitProfit({ cost: 280, price: 450 }).wholesale, 170);
+});
+
+it("a NEW COST moves the PRICE when a profit is pinned", () => {
+  // The whole point: a delivery at a higher rate used to eat the margin
+  // silently, because the price stayed put.
+  const p = prod("p1", { cost: 280, price: 450, profitTarget: 170 });
+  const after = T.repriceForCost(p, 310);
+  eq(after.cost, 310);
+  eq(after.price, 480, "price follows the cost");
+  eq(T.unitProfit(after).retail, 170, "and the profit is exactly where it was put");
+});
+
+it("a product with NO target keeps its price, and the margin absorbs the change", () => {
+  const p = prod("p1", { cost: 280, price: 450 });
+  const after = T.repriceForCost(p, 310);
+  eq([after.cost, after.price], [310, 450], "price untouched");
+  eq(T.unitProfit(after).retail, 140, "the old behaviour — margin takes the hit");
+});
+
+it("the two counters are pinned independently", () => {
+  const p = prod("p1", { cost: 280, price: 450, wholesalePrice: 360, profitTarget: 170, wholesaleProfitTarget: 80 });
+  const after = T.repriceForCost(p, 300);
+  eq([after.price, after.wholesalePrice], [470, 380]);
+  eq(T.unitProfit(after), { retail: 170, wholesale: 80 }, "both held");
+});
+
+it("pinning only the wholesale side leaves the retail price alone", () => {
+  const p = prod("p1", { cost: 280, price: 450, wholesalePrice: 360, wholesaleProfitTarget: 80 });
+  const after = T.repriceForCost(p, 300);
+  eq(after.price, 450, "retail untouched");
+  eq(after.wholesalePrice, 380, "wholesale followed");
+});
+
+it("a cheaper delivery passes the saving on rather than widening the margin", () => {
+  const p = prod("p1", { cost: 280, price: 450, profitTarget: 170 });
+  const after = T.repriceForCost(p, 250);
+  eq(after.price, 420, "price comes down");
+  eq(T.unitProfit(after).retail, 170, "profit still exactly as set");
+});
+
+it("repricing never mutates the product it was given", () => {
+  const p = prod("p1", { cost: 280, price: 450, profitTarget: 170 });
+  const snapshot = JSON.stringify(p);
+  T.repriceForCost(p, 999);
+  eq(JSON.stringify(p), snapshot);
+});
+
+it("a past sale keeps the cost it was sold at, whatever happens to the product", () => {
+  // The invoice line stores its own cost, so re-pricing today can never move
+  // yesterday's profit.
+  const sold = sale({ lines: [line({ qty: 2, price: 450, cost: 280 })] });
+  const before = T.allocateSale(sold)[0].profit;
+  T.repriceForCost(prod("p1", { cost: 280, price: 450, profitTarget: 170 }), 999);
+  eq(T.allocateSale(sold)[0].profit, before, "history does not move");
+  eq(before, 340, "2 units at 170");
+});
+
 /* ========================================================= SETTLED DAYS */
 
 describe("Knowing a record belongs to a day already settled");

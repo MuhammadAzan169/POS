@@ -55,7 +55,10 @@ export const USERS: User[] = [
 
 /** Wholesale rates sit roughly midway between cost and the retail price. */
 export const PRODUCTS: Product[] = [
-  { id: "p1", barcode: "8901001", name: "Matte Lipstick — Ruby 02", category: "Cosmetics", brand: "Glow", color: "Ruby", cost: 280, price: 450, wholesalePrice: 360, lowAlert: 6, active: true },
+  { id: "p1", barcode: "8901001", name: "Matte Lipstick — Ruby 02", category: "Cosmetics", brand: "Glow", color: "Ruby", cost: 280, price: 450, wholesalePrice: 360,
+    // Pinned: the owner wants Rs 170 a unit whatever the next delivery costs,
+    // so the price follows the cost instead of the margin shrinking.
+    profitTarget: 170, wholesaleProfitTarget: 80, lowAlert: 6, active: true },
   { id: "p2", barcode: "8901002", name: "Kajal Pencil — Black", category: "Cosmetics", brand: "Glow", cost: 80, price: 150, wholesalePrice: 115, lowAlert: 10, active: true },
   { id: "p3", barcode: "8901003", name: "Foundation Stick — Beige", category: "Cosmetics", brand: "Luxe", color: "Beige", cost: 620, price: 1100, wholesalePrice: 860, lowAlert: 4, active: true },
   { id: "p4", barcode: "8901004", name: "Compact Powder", category: "Cosmetics", brand: "Luxe", cost: 480, price: 850, wholesalePrice: 665, lowAlert: 5, active: true },

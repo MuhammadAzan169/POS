@@ -53,8 +53,8 @@ parts.push(insert("users", ["id", "name", "email", "role", "shop_id", "active", 
 parts.push(insert("suppliers", ["id", "name", "contact", "phone", "email", "address", "notes", "active"], seed.SUPPLIERS,
   (s) => [q(s.id), q(s.name), q(s.contact), q(s.phone), q(s.email), q(s.address), q(s.notes), q(s.active)]));
 
-parts.push(insert("products", ["id", "barcode", "name", "category", "brand", "size", "color", "cost", "price", "wholesale_price", "low_alert", "active"], seed.PRODUCTS,
-  (p) => [q(p.id), q(p.barcode), q(p.name), q(p.category), q(p.brand), q(p.size ?? null), q(p.color ?? null), q(p.cost), q(p.price), q(p.wholesalePrice ?? null), q(p.lowAlert), q(p.active)]));
+parts.push(insert("products", ["id", "barcode", "name", "category", "brand", "size", "color", "cost", "price", "wholesale_price", "profit_target", "wholesale_profit_target", "low_alert", "active"], seed.PRODUCTS,
+  (p) => [q(p.id), q(p.barcode), q(p.name), q(p.category), q(p.brand), q(p.size ?? null), q(p.color ?? null), q(p.cost), q(p.price), q(p.wholesalePrice ?? null), q(p.profitTarget ?? null), q(p.wholesaleProfitTarget ?? null), q(p.lowAlert), q(p.active)]));
 
 parts.push(insert("inventory", ["product_id", "shop_id", "qty"], seed.genInventory(),
   (r) => [q(r.productId), q(r.shopId), q(r.qty)]));

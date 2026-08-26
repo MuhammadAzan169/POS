@@ -139,8 +139,8 @@ function ProductsPage() {
                 { label: "Wholesale", value: p.wholesalePrice ? formatRs(p.wholesalePrice) : "Retail price only" },
                 ...(isAdmin
                   ? [{
-                      label: "Margin",
-                      value: margin(p.price, p.cost),
+                      label: p.profitTarget !== undefined ? "Profit (pinned)" : "Profit",
+                      value: `${formatRs(p.price - p.cost)} · ${margin(p.price, p.cost)}`,
                       className: p.price >= p.cost ? "text-success-strong" : "text-destructive",
                     }]
                   : []),
@@ -165,7 +165,7 @@ function ProductsPage() {
               {isAdmin && <th className="px-4 py-3 font-medium text-right">Cost</th>}
               <th className="px-4 py-3 font-medium text-right">Retail</th>
               <th className="px-4 py-3 font-medium text-right">Wholesale</th>
-              {isAdmin && <th className="px-4 py-3 font-medium text-right">Margin</th>}
+              {isAdmin && <th className="px-4 py-3 font-medium text-right">Profit / unit</th>}
               <th className="px-4 py-3 font-medium text-right">Stock</th>
               {isAdmin && <th className="px-4 py-3 font-medium text-right">Edit</th>}
             </tr></thead>
@@ -183,7 +183,17 @@ function ProductsPage() {
                   <td className="px-4 py-3 text-right text-muted-foreground">
                     {p.wholesalePrice ? formatRs(p.wholesalePrice) : "Retail price only"}
                   </td>
-                  {isAdmin && <td className={`px-4 py-3 text-right ${p.price >= p.cost ? "text-success-strong" : "text-destructive"}`}>{margin(p.price, p.cost)}</td>}
+                  {isAdmin && (
+                    <td className={`px-4 py-3 text-right ${p.price >= p.cost ? "text-success-strong" : "text-destructive"}`}>
+                      {/* The rupees first: that is the figure an owner sets and
+                          recognises. The percentage is context, not the point. */}
+                      <div className="font-medium">{formatRs(p.price - p.cost)}</div>
+                      <div className="text-xs font-normal text-muted-foreground">
+                        {margin(p.price, p.cost)}
+                        {p.profitTarget !== undefined && " · pinned"}
+                      </div>
+                    </td>
+                  )}
                   <td className="px-4 py-3 text-right">{p.totalStock}</td>
                   {isAdmin && (
                     <td className="px-4 py-3 text-right">

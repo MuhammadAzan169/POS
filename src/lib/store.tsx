@@ -35,6 +35,7 @@ import { openSessionFor } from "./day-book";
 import { dayOf, todayISO } from "./dates";
 import { db, loadSnapshot, subscribeToMessages } from "./db";
 import { maxSetOff } from "./ledger";
+import { repriceForCost } from "./store-types";
 import { isSupabaseConfigured } from "./supabase";
 
 // Calendar helpers moved to dates.ts so day-book.ts can share them; re-exported
@@ -590,21 +591,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         };
         setPurchases((prev) => [purchase, ...prev]);
         persist("the purchase", () => db.upsertPurchase(purchase));
-        // The purchase form promises "latest cost will update for <product>";
-        // nothing was actually doing it. Past sales keep the cost they recorded.
+        /*
+          The bill sets the new cost — and, where the owner has pinned a profit
+          per unit, the selling price moves with it.
+
+          That is the whole point of a profit target: a delivery at a higher
+          rate used to eat the margin silently, because the price stayed where
+          it was. Now the price follows the cost and the profit stays exactly
+          where it was put. Products with no target are untouched, so this can
+          run over every line without asking which ones opted in.
+
+          Past sales keep the cost they recorded, so history never moves.
+        */
+        const repriced = products
+          .filter((prod) => p.lines.some((l) => l.productId === prod.id && l.rate > 0))
+          .map((prod) => repriceForCost(prod, p.lines.find((l) => l.productId === prod.id)!.rate));
+
         setProducts((prev) =>
-          prev.map((prod) => {
-            const line = p.lines.find((l) => l.productId === prod.id && l.rate > 0);
-            return line ? { ...prod, cost: line.rate } : prod;
-          }),
+          prev.map((prod) => repriced.find((x) => x.id === prod.id) ?? prod),
         );
-        persist("product costs", () =>
-          db.upsertProducts(
-            products
-              .filter((prod) => p.lines.some((l) => l.productId === prod.id && l.rate > 0))
-              .map((prod) => ({ ...prod, cost: p.lines.find((l) => l.productId === prod.id)!.rate })),
-          ),
-        );
+        persist("product costs", () => db.upsertProducts(repriced));
         setInventory((prev) => {
           const next = [...prev];
           p.lines.forEach((l) => {

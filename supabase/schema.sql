@@ -53,6 +53,12 @@ create table if not exists products (
   cost            numeric(12,2) not null default 0,
   price           numeric(12,2) not null default 0,
   wholesale_price numeric(12,2),
+  -- The profit the owner wants per unit. When set, the selling price becomes
+  -- cost + this and is recalculated whenever a bill changes the cost, so a
+  -- delivery at a higher rate moves the PRICE instead of eating the margin.
+  -- NULL keeps the older behaviour: price as typed, profit whatever is left.
+  profit_target   numeric(12,2),
+  wholesale_profit_target numeric(12,2),
   low_alert       integer not null default 5,
   active          boolean not null default true
 );

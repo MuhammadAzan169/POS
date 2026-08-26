@@ -88,12 +88,20 @@ const rowToProduct = (r: any): Product => ({
   size: r.size ?? undefined, color: r.color ?? undefined,
   cost: Number(r.cost), price: Number(r.price),
   wholesalePrice: r.wholesale_price === null || r.wholesale_price === undefined ? undefined : Number(r.wholesale_price),
+  profitTarget: r.profit_target === null || r.profit_target === undefined ? undefined : Number(r.profit_target),
+  wholesaleProfitTarget:
+    r.wholesale_profit_target === null || r.wholesale_profit_target === undefined
+      ? undefined
+      : Number(r.wholesale_profit_target),
   lowAlert: r.low_alert, active: r.active,
 });
 const productToRow = (p: Product) => ({
   id: p.id, barcode: p.barcode, name: p.name, category: p.category, brand: p.brand,
   size: p.size ?? null, color: p.color ?? null, cost: p.cost, price: p.price,
-  wholesale_price: p.wholesalePrice ?? null, low_alert: p.lowAlert, active: p.active,
+  wholesale_price: p.wholesalePrice ?? null,
+  profit_target: p.profitTarget ?? null,
+  wholesale_profit_target: p.wholesaleProfitTarget ?? null,
+  low_alert: p.lowAlert, active: p.active,
 });
 
 const rowToInventory = (r: any): InventoryRow => ({ productId: r.product_id, shopId: r.shop_id, qty: r.qty });
@@ -418,13 +426,18 @@ export async function loadSnapshot(): Promise<Snapshot> {
   if (saleRows.length > 0 && !("customer_id" in saleRows[0])) missing.push("sales.customer_id");
   // Part-paid bills need somewhere to record how much was paid; without the
   // column every bill still reads as all-or-nothing through `paid`.
+  // A product row without the column simply comes back without a target, which
+  // reads as "not pinned" — correct, but worth naming so the owner knows why
+  // the field they filled in did not stick.
+  const productRows = (products.data ?? []) as any[];
+  if (productRows.length > 0 && !("profit_target" in productRows[0])) missing.push("products.profit_target");
   const purchaseRows = (purchases.data ?? []) as any[];
   if (purchaseRows.length > 0 && !("amount_paid" in purchaseRows[0])) missing.push("purchases.amount_paid");
 
   return {
     shops: shopRows.map(rowToShop),
     users: (users.data ?? []).map(rowToUser),
-    products: (products.data ?? []).map(rowToProduct),
+    products: productRows.map(rowToProduct),
     inventory: (inventory.data ?? []).map(rowToInventory),
     sales: saleRows.map(rowToSale),
     purchases: purchaseRows.map(rowToPurchase),

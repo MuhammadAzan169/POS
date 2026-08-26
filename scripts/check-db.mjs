@@ -65,6 +65,9 @@ await checkTable("customers", ["id", "linked_supplier_id"]);
 heading("table added by migration 006:");
 await checkTable("balance_adjustments", ["id", "date", "customer_id", "supplier_id", "amount", "reason", "created_by"]);
 
+heading("columns added by migration 008:");
+await checkTable("products", ["id", "profit_target", "wholesale_profit_target"]);
+
 heading("table added by migration 007:");
 await checkTable("activity_log", ["id", "at", "action", "entity", "entity_id", "label", "amount", "by_name", "by_role", "snapshot"]);
 
