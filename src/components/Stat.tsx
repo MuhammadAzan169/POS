@@ -76,6 +76,15 @@ export function StatusPill({ status }: { status: string }) {
     "You owe": "bg-destructive/10 text-destructive border-destructive/30",
     Advance: "bg-accent/15 text-accent-strong border-accent/30",
     Settled: "bg-success/15 text-success-strong border-success/30",
+    // A balance moved by hand. Writing debt off is the safe direction, so it is
+    // tinted like a settlement; adding to one is the direction worth noticing.
+    "Written off": "bg-success/15 text-success-strong border-success/30",
+    Increased: "bg-warning/20 text-warning-strong border-warning/40",
+    // The activity log. A deletion is the thing worth noticing; a record that
+    // has been put back is resolved and reads as such.
+    Deleted: "bg-destructive/10 text-destructive border-destructive/30",
+    "Put back": "bg-success/15 text-success-strong border-success/30",
+    "By shop": "bg-muted text-muted-foreground border-border",
   };
   return (
     <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border", map[status] ?? "bg-muted text-muted-foreground border-border")}>

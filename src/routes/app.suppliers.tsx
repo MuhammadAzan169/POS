@@ -18,10 +18,11 @@ import { Confirm } from "@/components/Confirm";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { SupplierPaymentDialog } from "@/components/SupplierPaymentDialog";
 import { SetOffDialog } from "@/components/SetOffDialog";
+import { AdjustBalanceDialog } from "@/components/AdjustBalanceDialog";
 import { LedgerTable } from "@/components/LedgerTable";
 import {
   Plus, Download, Search, Pencil, Truck, Phone, Mail, MapPin, PackagePlus,
-  Wallet, ArrowLeftRight, Trash2,
+  Wallet, ArrowLeftRight, Trash2, Scale,
 } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
@@ -116,7 +117,7 @@ function SupplierDialog({
 function SuppliersPage() {
   const {
     user, suppliers, purchases, returns, products, shops, settings,
-    sales, customers, customerPayments, supplierPayments, setOffs, deleteSupplierPayment,
+    sales, customers, customerPayments, supplierPayments, setOffs, adjustments, deleteSupplierPayment,
   } = useStore();
   const isAdmin = user?.role === "admin";
   const navigate = useNavigate();
@@ -129,13 +130,15 @@ function SuppliersPage() {
   const [payFor, setPayFor] = useState<Supplier | null>(null);
   const [payEditing, setPayEditing] = useState<SupplierPayment | null>(null);
   const [settleFor, setSettleFor] = useState<Supplier | null>(null);
+  /** The supplier whose balance the owner is moving by hand. */
+  const [adjustFor, setAdjustFor] = useState<Supplier | null>(null);
 
   const money = (n: number) => formatRs(n, settings.currency);
 
   /** Everything the ledger helpers read, assembled once per render. */
   const ledgerData = useMemo(
-    () => ({ sales, customerPayments, purchases, supplierPayments, returns, setOffs }),
-    [sales, customerPayments, purchases, supplierPayments, returns, setOffs],
+    () => ({ sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments }),
+    [sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments],
   );
 
   /** Bills belong to a supplier by id, falling back to the name on older records. */
@@ -466,6 +469,9 @@ function SuppliersPage() {
                   <Button size="sm" onClick={() => { setPayEditing(null); setPayFor(open); }}>
                     <Wallet className="h-3.5 w-3.5 mr-1.5" />Record payment
                   </Button>
+                  <Button size="sm" variant="outline" onClick={() => setAdjustFor(open)}>
+                    <Scale className="h-3.5 w-3.5 mr-1.5" />Adjust balance
+                  </Button>
                   <Button size="sm" variant="outline" onClick={() => setEditing(open)}>
                     <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit details
                   </Button>
@@ -648,6 +654,7 @@ function SuppliersPage() {
         supplier={settleFor}
         onClose={() => setSettleFor(null)}
       />
+      <AdjustBalanceDialog supplier={adjustFor} onClose={() => setAdjustFor(null)} />
     </div>
   );
 }

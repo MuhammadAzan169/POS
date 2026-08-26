@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
-import { useStore, formatRs, discountAmountFor, discountSplitOf, type Sale } from "@/lib/store";
+import {
+  useStore, formatRs, discountAmountFor, discountSplitOf, closedSessionFor, shortDay,
+  type Sale,
+} from "@/lib/store";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Confirm } from "@/components/Confirm";
 import { PaymentPicker } from "@/components/PaymentPicker";
-import { Trash2, Percent, RotateCcw } from "lucide-react";
+import { Trash2, Percent, RotateCcw, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
 
 /**
@@ -23,7 +26,7 @@ import { toast } from "sonner";
  * now carried through as recorded, and only change when someone changes them.
  */
 export function SaleEditDialog({ sale, onClose }: { sale: Sale | null; onClose: () => void }) {
-  const { user, updateSale, inventory, discounts, settings } = useStore();
+  const { user, updateSale, inventory, discounts, daySessions, settings } = useStore();
   const [draft, setDraft] = useState<Sale | null>(sale);
   /** Taken off the slip as a whole, on top of the per-item discounts. */
   const [billDiscount, setBillDiscount] = useState(0);
@@ -101,6 +104,9 @@ export function SaleEditDialog({ sale, onClose }: { sale: Sale | null; onClose: 
     toast.success("Item discounts reset to the rates in the Discounts tab");
   };
 
+  /** The settled trading day this sale belongs to, when there is one. */
+  const settledDay = closedSessionFor(daySessions, draft);
+
   const subtotal = draft.lines.reduce((a, l) => a + l.qty * l.price, 0);
   const itemDiscount = draft.lines.reduce((a, l) => a + (l.discount || 0), 0);
   // A slip can't be discounted below zero, so the bill part is capped by what
@@ -141,6 +147,27 @@ export function SaleEditDialog({ sale, onClose }: { sale: Sale | null; onClose: 
               : "Quantities and payment. Discounts are set by the owner and are carried through unchanged."}
           </DialogDescription>
         </DialogHeader>
+
+        {/*
+          Changing a sale from a day that has already been settled is not the
+          same as changing today's: the cash was counted that evening and taken
+          away. The edit is still allowed — corrections are exactly why this
+          dialog exists — but nobody should make one without knowing.
+        */}
+        {settledDay && (
+          <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs">
+            <CalendarClock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning-strong" />
+            <div>
+              <div className="font-medium text-warning-strong">
+                This sale belongs to {shortDay(settledDay.businessDate)}, which is already closed
+              </div>
+              <p className="mt-1 text-muted-foreground">
+                That day&apos;s cash was counted and handed over. Changing the figures now will make its
+                takings disagree with the money that actually changed hands.
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="grid sm:grid-cols-2 gap-3">
           <div className="space-y-1.5">

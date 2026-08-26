@@ -32,6 +32,7 @@ import { Route as AppDashboardRouteImport } from './routes/app.dashboard'
 import { Route as AppCustomersRouteImport } from './routes/app.customers'
 import { Route as AppAlertsRouteImport } from './routes/app.alerts'
 import { Route as AppAiRouteImport } from './routes/app.ai'
+import { Route as AppActivityRouteImport } from './routes/app.activity'
 import { Route as AppAccountRouteImport } from './routes/app.account'
 
 const AppRoute = AppRouteImport.update({
@@ -149,6 +150,11 @@ const AppAiRoute = AppAiRouteImport.update({
   path: '/ai',
   getParentRoute: () => AppRoute,
 } as any)
+const AppActivityRoute = AppActivityRouteImport.update({
+  id: '/activity',
+  path: '/activity',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAccountRoute = AppAccountRouteImport.update({
   id: '/account',
   path: '/account',
@@ -159,6 +165,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/app/account': typeof AppAccountRoute
+  '/app/activity': typeof AppActivityRoute
   '/app/ai': typeof AppAiRoute
   '/app/alerts': typeof AppAlertsRoute
   '/app/customers': typeof AppCustomersRoute
@@ -185,6 +192,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/app/account': typeof AppAccountRoute
+  '/app/activity': typeof AppActivityRoute
   '/app/ai': typeof AppAiRoute
   '/app/alerts': typeof AppAlertsRoute
   '/app/customers': typeof AppCustomersRoute
@@ -212,6 +220,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/app/account': typeof AppAccountRoute
+  '/app/activity': typeof AppActivityRoute
   '/app/ai': typeof AppAiRoute
   '/app/alerts': typeof AppAlertsRoute
   '/app/customers': typeof AppCustomersRoute
@@ -240,6 +249,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/app/account'
+    | '/app/activity'
     | '/app/ai'
     | '/app/alerts'
     | '/app/customers'
@@ -266,6 +276,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/app/account'
+    | '/app/activity'
     | '/app/ai'
     | '/app/alerts'
     | '/app/customers'
@@ -292,6 +303,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/app/account'
+    | '/app/activity'
     | '/app/ai'
     | '/app/alerts'
     | '/app/customers'
@@ -483,6 +495,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAiRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/activity': {
+      id: '/app/activity'
+      path: '/activity'
+      fullPath: '/app/activity'
+      preLoaderRoute: typeof AppActivityRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/account': {
       id: '/app/account'
       path: '/account'
@@ -495,6 +514,7 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppAccountRoute: typeof AppAccountRoute
+  AppActivityRoute: typeof AppActivityRoute
   AppAiRoute: typeof AppAiRoute
   AppAlertsRoute: typeof AppAlertsRoute
   AppCustomersRoute: typeof AppCustomersRoute
@@ -520,6 +540,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppAccountRoute: AppAccountRoute,
+  AppActivityRoute: AppActivityRoute,
   AppAiRoute: AppAiRoute,
   AppAlertsRoute: AppAlertsRoute,
   AppCustomersRoute: AppCustomersRoute,

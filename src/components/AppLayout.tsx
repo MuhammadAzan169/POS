@@ -34,6 +34,7 @@ import {
   Contact,
   MessagesSquare,
   Scale,
+  History,
 } from "lucide-react";
 import { useStore, formatRs, openSessionFor, shortDay, isUnreadFor } from "@/lib/store";
 import { migrationFilesFor, migrationFeaturesFor } from "@/lib/notifications";
@@ -69,6 +70,9 @@ const ADMIN_NAV: NavItem[] = [
   { to: "/app/reports", label: "Reports", icon: <BarChart3 className="h-4 w-4" /> },
   { to: "/app/shops", label: "Shops", icon: <Store className="h-4 w-4" /> },
   { to: "/app/users", label: "Users", icon: <Users className="h-4 w-4" /> },
+  // Who deleted what, and how to get it back. Owner-only by design: the point
+  // is that somebody is answerable to somebody else.
+  { to: "/app/activity", label: "Activity", icon: <History className="h-4 w-4" /> },
   { to: "/app/settings", label: "Settings", icon: <SettingsIcon className="h-4 w-4" /> },
 ];
 

@@ -163,6 +163,65 @@ create table if not exists set_offs (
   created_by  text default ''
 );
 
+-- The owner moving what a party owes by hand: writing off a bad debt, carrying
+-- in a balance from before the app, or agreeing a correction.
+--
+-- `amount` is SIGNED, always in the direction of what is owed — negative writes
+-- debt off, positive adds to it. Exactly one of customer_id / supplier_id is
+-- set: a row naming both would be counted by whichever balance looked for it
+-- first, and a row naming neither would silently do nothing.
+--
+-- Nothing here moves money, so an adjustment never reaches a till or a cash
+-- count. It can erase a debt in one row, so it is the first table that should
+-- be locked to an owner role once real balances are in play.
+create table if not exists balance_adjustments (
+  id          text primary key,
+  date        date not null,
+  customer_id text references customers(id) on delete cascade,
+  supplier_id text references suppliers(id) on delete cascade,
+  amount      numeric(12,2) not null default 0,
+  reason      text default '',
+  created_by  text default '',
+  constraint balance_adjustments_one_side check (
+    (customer_id is not null and supplier_id is null)
+    or (customer_id is null and supplier_id is not null)
+  )
+);
+
+-- Who deleted or edited a money document, when, and the whole record as it
+-- stood so it can be put back.
+--
+-- Without this a shopkeeper could delete an invoice and the owner would never
+-- know: no gap anybody would notice, nothing in the day book, and the takings
+-- quietly lower. `snapshot` holds the whole row as JSONB, which is what makes
+-- restore real — it re-inserts the original id and invoice number rather than a
+-- fresh copy, so nothing is renumbered.
+--
+-- APPEND-ONLY BY INTENT: the app never deletes from here, and `restored_at` is
+-- stamped rather than the row removed. "Deleted on the 3rd, put back on the
+-- 5th" is the true history and both halves matter.
+create table if not exists activity_log (
+  id          text primary key,
+  at          timestamptz not null default now(),
+  action      text not null check (action in ('deleted', 'edited', 'restored')),
+  entity      text not null check (entity in (
+                'sale', 'purchase', 'return', 'transfer', 'expense',
+                'day-session', 'customer-payment', 'supplier-payment',
+                'set-off', 'adjustment')),
+  -- Deliberately NOT a foreign key: the row it points at has usually been
+  -- deleted, which is the whole reason the entry exists.
+  entity_id   text not null,
+  label       text default '',
+  amount      numeric(12,2) not null default 0,
+  shop_id     text references shops(id) on delete set null,
+  by_user_id  text references users(id) on delete set null,
+  by_name     text default '',
+  by_role     text not null default 'shop' check (by_role in ('admin', 'shop')),
+  snapshot    jsonb,
+  restored_at timestamptz,
+  restored_by text
+);
+
 -- One message thread per SHOP rather than per person: a shop is a place with a
 -- till, and whoever is standing behind it needs the whole conversation.
 create table if not exists messages (
@@ -292,6 +351,11 @@ create index if not exists sup_pay_session_idx    on supplier_payments (session_
 create index if not exists set_off_customer_idx   on set_offs (customer_id, date desc);
 create index if not exists set_off_supplier_idx   on set_offs (supplier_id, date desc);
 create index if not exists purchases_supplier_idx on purchases (supplier_id, date desc);
+create index if not exists adj_customer_idx        on balance_adjustments (customer_id, date desc);
+create index if not exists adj_supplier_idx        on balance_adjustments (supplier_id, date desc);
+create index if not exists activity_at_idx          on activity_log (at desc);
+create index if not exists activity_shop_idx        on activity_log (shop_id, at desc);
+create index if not exists activity_entity_idx      on activity_log (entity, at desc);
 create index if not exists purchases_supplier_idx on purchases (supplier_id);
 create index if not exists purchases_date_idx     on purchases (date desc);
 create index if not exists expenses_shop_date_idx on expenses (shop_id, date desc);
@@ -333,7 +397,7 @@ alter table messages replica identity full;
 do $$
 declare t text;
 begin
-  foreach t in array array['shops','users','suppliers','products','inventory','sales','purchases','expenses','returns','day_sessions','transfers','customers','customer_payments','supplier_payments','set_offs','messages','app_state']
+  foreach t in array array['shops','users','suppliers','products','inventory','sales','purchases','expenses','returns','day_sessions','transfers','customers','customer_payments','supplier_payments','set_offs','balance_adjustments','activity_log','messages','app_state']
   loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists "demo_open_access" on %I', t);

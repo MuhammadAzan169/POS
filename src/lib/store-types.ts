@@ -689,6 +689,95 @@ export interface ReturnRec {
   reason: string;
 }
 
+/* -------------------------------------------------------------- activity log */
+
+/**
+ * The kinds of record worth keeping a history of.
+ *
+ * Everything here is a money document or a stock movement: the things where
+ * "who removed this, and can we get it back" is a question somebody will
+ * eventually ask. Reference data — a renamed product, a disabled shop — is not
+ * logged, because nothing is lost when it changes.
+ */
+export type ActivityEntity =
+  | "sale"
+  | "purchase"
+  | "return"
+  | "transfer"
+  | "expense"
+  | "day-session"
+  | "customer-payment"
+  | "supplier-payment"
+  | "set-off"
+  | "adjustment";
+
+export type ActivityAction = "deleted" | "edited" | "restored";
+
+/**
+ * One thing that happened to a record, and enough of the record to undo it.
+ *
+ * The problem this solves: a shopkeeper could delete an invoice and the owner
+ * would never know. The sale simply stopped existing — no gap in the numbering
+ * anyone would notice, nothing in the day book, and the takings quietly went
+ * down. The only honest fix is to keep the record itself, not just a note that
+ * it went.
+ *
+ * `snapshot` is therefore the WHOLE row as it stood, stored as JSON. That is
+ * what makes "restore" real rather than a promise: putting it back re-inserts
+ * the original id, invoice number and lines, so nothing is renumbered and the
+ * stock movement it caused can be replayed exactly.
+ *
+ * The log is append-only. A deletion that could itself be deleted would be no
+ * record at all.
+ */
+export interface Activity {
+  id: string;
+  /** When it happened — a wall-clock moment, not a trading day. */
+  at: string;
+  action: ActivityAction;
+  entity: ActivityEntity;
+  /** The id of the record acted on, so a restore can find its way home. */
+  entityId: string;
+  /** What a person calls it: "INV-S1-000201", "BILL-2003", "Cash receipt". */
+  label: string;
+  /** The money involved, so the list can be read at a glance. */
+  amount: number;
+  /** The shop it belonged to, when it belonged to one. */
+  shopId?: string;
+  byUserId?: string;
+  /** Stored on the row so an old entry still reads correctly after a rename. */
+  byName: string;
+  byRole: Role;
+  /**
+   * The record as it was. For a deletion this is what gets put back; for an
+   * edit it is the BEFORE, so the owner can see what the figure used to say.
+   */
+  snapshot: unknown;
+  /** Set once it has been put back, so nothing can be restored twice. */
+  restoredAt?: string;
+  restoredBy?: string;
+}
+
+/** Whether this entry still has something that can be put back. */
+export function isRestorable(a: Activity) {
+  // Only deletions removed anything, and only once.
+  return a.action === "deleted" && !a.restoredAt && a.snapshot != null;
+}
+
+/** The entity name as it should read in a sentence. */
+export const ENTITY_LABELS: Record<ActivityEntity, string> = {
+  sale: "sale",
+  purchase: "purchase bill",
+  return: "return",
+  transfer: "stock transfer",
+  expense: "expense",
+  "day-session": "trading day",
+  "customer-payment": "customer payment",
+  "supplier-payment": "supplier payment",
+  "set-off": "set-off",
+  adjustment: "balance adjustment",
+};
+
 /** Which blocks appear on a printed receipt, and how it's laid out. */
 export interface ReceiptDesign {
   showBusinessName: boolean;

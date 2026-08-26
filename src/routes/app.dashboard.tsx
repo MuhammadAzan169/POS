@@ -61,7 +61,7 @@ export const Route = createFileRoute("/app/dashboard")({
 function Dashboard() {
   const {
     user, sales, expenses, shops, products, inventory, daySessions, customers, customerPayments,
-    suppliers, purchases, supplierPayments, returns, setOffs, settings,
+    suppliers, purchases, supplierPayments, returns, setOffs, adjustments, settings,
   } = useStore();
   const { range, previous, rangeLabel, shopScope, isAllTime } = useScope();
 
@@ -133,8 +133,8 @@ function Dashboard() {
 
   /** Standing debt in both directions — deliberately not date-filtered. */
   const ledger = useMemo(
-    () => ({ sales, customerPayments, purchases, supplierPayments, returns, setOffs }),
-    [sales, customerPayments, purchases, supplierPayments, returns, setOffs],
+    () => ({ sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments }),
+    [sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments],
   );
   const owedToYou = useMemo(() => totalOutstanding(customers, ledger), [customers, ledger]);
   // The other direction, which the dashboard never showed: money owed OUT is

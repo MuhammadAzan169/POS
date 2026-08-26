@@ -14,6 +14,7 @@
  */
 import { dayOf, todayISO } from "./dates";
 import type {
+  Adjustment,
   Customer,
   CustomerBalance,
   CustomerPayment,
@@ -173,6 +174,33 @@ export function summarizeSession(
   };
 }
 
+/**
+ * The CLOSED trading day a record belongs to, if it belongs to one.
+ *
+ * Changing a record from a settled day is not the same as changing today's: the
+ * cash was counted that evening, the owner took it away, and the variance was
+ * signed off. Editing it afterwards makes a day that balanced stop balancing,
+ * and nobody finds out until somebody re-reads an old sheet.
+ *
+ * This does not forbid the edit — corrections are exactly why the app allows
+ * them — it just gives the screen something concrete to warn with.
+ */
+export function closedSessionFor(
+  sessions: DaySession[],
+  rec: { sessionId?: string; shopId?: string; date?: string; businessDate?: string },
+): DaySession | undefined {
+  if (rec.sessionId) {
+    const byId = sessions.find((s) => s.id === rec.sessionId);
+    return byId?.status === "closed" ? byId : undefined;
+  }
+  // Records from before day sessions existed carry no id, so fall back to the
+  // day they landed on at that shop.
+  const day = rec.businessDate ?? (rec.date ? dayOf(rec.date) : undefined);
+  if (!day || !rec.shopId) return undefined;
+  const byDay = sessions.find((s) => s.shopId === rec.shopId && s.businessDate === day);
+  return byDay?.status === "closed" ? byDay : undefined;
+}
+
 /** Payment split across any set of sales — how the takings were settled. */
 export function paymentMix(sales: Sale[]) {
   const live = sales.filter((s) => s.status !== "Returned");
@@ -206,7 +234,12 @@ export function paymentMix(sales: Sale[]) {
  */
 export function customerBalance(
   customer: Pick<Customer, "id" | "creditLimit">,
-  data: { sales: Sale[]; customerPayments: CustomerPayment[]; setOffs?: SetOff[] },
+  data: {
+    sales: Sale[];
+    customerPayments: CustomerPayment[];
+    setOffs?: SetOff[];
+    adjustments?: Adjustment[];
+  },
 ): CustomerBalance {
   const mine = data.sales.filter((s) => s.customerId === customer.id && s.status !== "Returned");
   // A returned credit sale is cancelled, so it stops being owed — which is why
@@ -218,10 +251,16 @@ export function customerBalance(
     .filter((x) => x.customerId === customer.id)
     .reduce((a, x) => a + x.amount, 0);
 
+  // Signed, in the direction of what is owed: a write-off is negative and so
+  // brings the balance down, an opening balance is positive and raises it.
+  const adjusted = (data.adjustments ?? [])
+    .filter((x) => x.customerId === customer.id)
+    .reduce((a, x) => a + x.amount, 0);
+
   // Signed first, then split. Paying in more than you have taken out is not an
   // error to be clamped away — it is the month-start advance, and the shop has
   // to be able to see it sitting there.
-  const net = creditSales - paid - setOff;
+  const net = creditSales - paid - setOff + adjusted;
   const outstanding = Math.max(0, net);
   const advance = Math.max(0, -net);
 
@@ -232,6 +271,7 @@ export function customerBalance(
     creditSales,
     paid,
     setOff,
+    adjusted,
     outstanding,
     advance,
     net,
@@ -246,7 +286,7 @@ export function customerBalance(
 /** Total owed to the business across every customer. */
 export function totalOutstanding(
   customers: Customer[],
-  data: { sales: Sale[]; customerPayments: CustomerPayment[]; setOffs?: SetOff[] },
+  data: { sales: Sale[]; customerPayments: CustomerPayment[]; setOffs?: SetOff[]; adjustments?: Adjustment[] },
 ) {
   return customers.reduce((a, c) => a + customerBalance(c, data).outstanding, 0);
 }
@@ -254,7 +294,7 @@ export function totalOutstanding(
 /** Advances held across every customer — money in the drawer that isn't yours. */
 export function totalAdvances(
   customers: Customer[],
-  data: { sales: Sale[]; customerPayments: CustomerPayment[]; setOffs?: SetOff[] },
+  data: { sales: Sale[]; customerPayments: CustomerPayment[]; setOffs?: SetOff[]; adjustments?: Adjustment[] },
 ) {
   return customers.reduce((a, c) => a + customerBalance(c, data).advance, 0);
 }
@@ -265,7 +305,7 @@ export function totalAdvances(
  */
 export function creditHeadroom(
   customer: Pick<Customer, "id" | "creditLimit">,
-  data: { sales: Sale[]; customerPayments: CustomerPayment[]; setOffs?: SetOff[] },
+  data: { sales: Sale[]; customerPayments: CustomerPayment[]; setOffs?: SetOff[]; adjustments?: Adjustment[] },
 ) {
   const bal = customerBalance(customer, data);
   // An advance is spending money, not borrowing it, so it is always available

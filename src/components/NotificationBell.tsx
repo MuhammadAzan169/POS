@@ -43,7 +43,7 @@ const TONE_CLASS = {
 export function NotificationBell({ className }: { className?: string }) {
   const {
     user, shops, products, inventory, sales, expenses, returns,
-    daySessions, customers, customerPayments, supplierPayments, purchases, setOffs, messages, pendingMigration,
+    daySessions, customers, customerPayments, supplierPayments, purchases, setOffs, activity, messages, pendingMigration,
   } = useStore();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -54,9 +54,9 @@ export function NotificationBell({ className }: { className?: string }) {
   const source = useMemo(
     () => ({
       user, shops, products, inventory, sales, expenses, returns,
-      daySessions, customers, customerPayments, supplierPayments, purchases, setOffs, messages, pendingMigration,
+      daySessions, customers, customerPayments, supplierPayments, purchases, setOffs, activity, messages, pendingMigration,
     }),
-    [user, shops, products, inventory, sales, expenses, returns, daySessions, customers, customerPayments, supplierPayments, purchases, setOffs, messages, pendingMigration],
+    [user, shops, products, inventory, sales, expenses, returns, daySessions, customers, customerPayments, supplierPayments, purchases, setOffs, activity, messages, pendingMigration],
   );
 
   const { items, unreadCount, isRead, markRead, markAllRead } = useNotifications(source);

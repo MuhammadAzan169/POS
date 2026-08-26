@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  useStore, formatRs, todayISO, daysAgoISO, dayOf, discountSplitOf, allocateSale, type Sale,
+  useStore, formatRs, todayISO, daysAgoISO, dayOf, discountSplitOf, allocateSale,
+  closedSessionFor, shortDay, type DaySession, type Sale,
 } from "@/lib/store";
 import { SaleEditDialog } from "@/components/SaleEditDialog";
 import { Receipt as ReceiptView, type ReceiptData } from "@/components/Receipt";
@@ -56,8 +57,31 @@ function useSaleToReceipt() {
   });
 }
 
+/**
+ * A line added to a delete confirmation when the sale belongs to a day that has
+ * already been settled.
+ *
+ * Deliberately part of the confirmation rather than a blocker: correcting an
+ * old invoice is legitimate, and refusing it would send someone to the database.
+ * But the cash for that day was counted and handed over, so removing a sale from
+ * it makes a sheet that balanced stop balancing.
+ */
+function ClosedDayWarning({ sale, sessions }: { sale: Sale; sessions: DaySession[] }) {
+  const day = closedSessionFor(sessions, sale);
+  if (!day) return null;
+  return (
+    <>
+      {" "}
+      <strong className="text-warning-strong">
+        {shortDay(day.businessDate)} is already closed and its cash counted — those takings will no
+        longer match what was handed over.
+      </strong>
+    </>
+  );
+}
+
 function SalesPage() {
-  const { user, sales, shops, products, addReturn, deleteSale, settings } = useStore();
+  const { user, sales, shops, products, addReturn, deleteSale, daySessions, settings } = useStore();
   const navigate = useNavigate();
   const { q: searchParam } = Route.useSearch();
   const saleToReceipt = useSaleToReceipt();
@@ -462,7 +486,8 @@ function SalesPage() {
                     description={
                       <>
                         The invoice is removed from all sales figures{s.status === "Returned" ? "" : " and its items go back into stock"}.
-                        This can't be undone.
+                        <ClosedDayWarning sale={s} sessions={daySessions} />
+                        {" "}It is recorded on the Activity page, where the owner can put it back.
                       </>
                     }
                     confirmLabel="Delete sale"

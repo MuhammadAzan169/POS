@@ -4,6 +4,9 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 // from "@/lib/store" continue to work unchanged.
 export * from "./store-types";
 import type {
+  Activity,
+  ActivityEntity,
+  Adjustment,
   Customer,
   CustomerPayment,
   DaySession,
@@ -27,7 +30,7 @@ import type {
   Transfer,
   User,
 } from "./store-types";
-import { DEFAULT_DISCOUNTS, DEFAULT_RECEIPT } from "./store-types";
+import { DEFAULT_DISCOUNTS, DEFAULT_RECEIPT, isRestorable } from "./store-types";
 import { openSessionFor } from "./day-book";
 import { dayOf, todayISO } from "./dates";
 import { db, loadSnapshot, subscribeToMessages } from "./db";
@@ -71,6 +74,15 @@ interface StoreState {
   supplierPayments: SupplierPayment[];
   /** Debts cancelled against each other with a partner you both buy from and sell to. */
   setOffs: SetOff[];
+  /** Hand-made changes to what a party owes: write-offs, opening balances, corrections. */
+  adjustments: Adjustment[];
+  /**
+   * Deletions and edits worth answering for, newest first.
+   *
+   * Append-only: an entry that could itself be removed would be no record at
+   * all. Deletions carry the whole row, so they can be put back.
+   */
+  activity: Activity[];
   /** The owner↔shop conversation, oldest first, live over a websocket. */
   messages: Message[];
   settings: Settings;
@@ -159,6 +171,31 @@ interface StoreState {
   addSetOff: (x: Omit<SetOff, "id">) => SetOff | null;
   updateSetOff: (x: SetOff) => void;
   deleteSetOff: (id: string) => void;
+
+  /**
+   * Moves what a party owes by hand — writing off a bad debt, carrying in a
+   * balance from before the app, or agreeing a correction.
+   *
+   * `amount` is signed in the direction of what is OWED, so a write-off is
+   * negative. Returns null if it names neither a customer nor a supplier, or
+   * if the amount is zero: an adjustment of nothing is a mis-click, and storing
+   * it would leave a meaningless line on the statement for ever.
+   */
+  addAdjustment: (a: Omit<Adjustment, "id">) => Adjustment | null;
+  updateAdjustment: (a: Adjustment) => void;
+  /** Undoes an adjustment, putting the balance back exactly as it was. */
+  deleteAdjustment: (id: string) => void;
+
+  /* ------------------------------------------------------------- activity */
+  /**
+   * Puts a deleted record back exactly as it was — same id, same invoice or
+   * bill number — and replays the stock movement the deletion reversed.
+   *
+   * Returns false when there is nothing to put back: the entry was an edit
+   * rather than a deletion, it has already been restored, or something now
+   * occupies the same id.
+   */
+  restoreDeleted: (activityId: string) => boolean;
 
   /* ---------------------------------------------------------------- messages */
   /** Posts a message into one shop's thread. Returns the stored message. */
@@ -262,6 +299,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [customerPayments, setCustomerPayments] = useState<CustomerPayment[]>(() => genCustomerPayments());
   const [supplierPayments, setSupplierPayments] = useState<SupplierPayment[]>(() => genSupplierPayments());
   const [setOffs, setSetOffs] = useState<SetOff[]>(() => genSetOffs());
+  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  const [activity, setActivity] = useState<Activity[]>([]);
   const [messages, setMessages] = useState<Message[]>(() => genMessages());
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [discounts, setDiscounts] = useState<DiscountRules>(DEFAULT_DISCOUNTS);
@@ -310,6 +349,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setCustomerPayments(snap.customerPayments);
           setSupplierPayments(snap.supplierPayments);
           setSetOffs(snap.setOffs);
+          setAdjustments(snap.adjustments);
+          setActivity(snap.activity);
           setMessages(snap.messages);
           setSettings(snap.settings);
           setDiscounts(snap.discounts);
@@ -374,6 +415,42 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  /**
+   * Records something that happened to a money document.
+   *
+   * Called from inside the mutation rather than from the screen that triggered
+   * it, so a new button somewhere else cannot forget to log — every path to a
+   * deletion runs through the same few store actions.
+   *
+   * The snapshot is deep-copied at the moment of recording. Keeping a reference
+   * would leave the log pointing at an object the rest of the app is still free
+   * to mutate, and a restore would then put back whatever it had become.
+   */
+  const log = (
+    action: Activity["action"],
+    entity: ActivityEntity,
+    record: { id: string },
+    detail: { label: string; amount: number; shopId?: string },
+  ) => {
+    if (!user) return;
+    const entry: Activity = {
+      id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      at: new Date().toISOString(),
+      action,
+      entity,
+      entityId: record.id,
+      label: detail.label,
+      amount: detail.amount,
+      shopId: detail.shopId,
+      byUserId: user.id,
+      byName: user.name,
+      byRole: user.role,
+      snapshot: JSON.parse(JSON.stringify(record)),
+    };
+    setActivity((prev) => [entry, ...prev]);
+    persist("the activity log", () => db.upsertActivity(entry));
+  };
+
   const value = useMemo<StoreState>(
     () => ({
       user,
@@ -397,6 +474,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       customerPayments,
       supplierPayments,
       setOffs,
+      adjustments,
+      activity,
       messages,
       settings,
       discounts,
@@ -481,6 +560,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       /** Removing a sale returns its items to stock, unless it was already returned. */
       deleteSale: (id) => {
         const sale = sales.find((s) => s.id === id);
+        if (sale) log("deleted", "sale", sale, { label: sale.invoice, amount: sale.total, shopId: sale.shopId });
         setSales((prev) => prev.filter((s) => s.id !== id));
         persist("the deletion", () => db.deleteSale(id));
         if (!sale || sale.status === "Returned") return;
@@ -567,6 +647,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       /** Deleting a bill takes back the stock it put on the shelves. */
       deletePurchase: (id) => {
         const bill = purchases.find((p) => p.id === id);
+        if (bill) {
+          log("deleted", "purchase", bill, {
+            label: bill.billNo, amount: bill.total, shopId: bill.createdByShopId,
+          });
+        }
         setPurchases((prev) => prev.filter((p) => p.id !== id));
         persist("the deletion", () => db.deletePurchase(id));
         if (!bill) return;
@@ -612,6 +697,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         persist("the expense", () => db.upsertExpense(e));
       },
       deleteExpense: (id) => {
+        const rec = expenses.find((x) => x.id === id);
+        if (rec) {
+          log("deleted", "expense", rec, {
+            label: rec.category || "Expense", amount: rec.amount, shopId: rec.shopId,
+          });
+        }
         setExpenses((prev) => prev.filter((x) => x.id !== id));
         persist("the deletion", () => db.deleteExpense(id));
       },
@@ -684,6 +775,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
        */
       deleteReturn: (id) => {
         const rec = returns.find((r) => r.id === id);
+        if (rec) log("deleted", "return", rec, { label: rec.returnNo, amount: rec.refund, shopId: rec.shopId });
         setReturns((prev) => prev.filter((r) => r.id !== id));
         persist("the deletion", () => db.deleteReturn(id));
         if (!rec) return;
@@ -887,6 +979,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           expenses.some((e) => e.sessionId === id) ||
           customerPayments.some((p) => p.sessionId === id);
         if (used) return false;
+        const rec = daySessions.find((s) => s.id === id);
+        if (rec) {
+          log("deleted", "day-session", rec, {
+            label: `Trading day ${rec.businessDate}`,
+            amount: rec.countedCash ?? rec.openingCash,
+            shopId: rec.shopId,
+          });
+        }
         setDaySessions((prev) => prev.filter((s) => s.id !== id));
         persist("the deletion", () => db.deleteDaySession(id));
         return true;
@@ -957,6 +1057,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       /** Undoes a movement: the goods go back to the shop they came from. */
       deleteTransfer: (id) => {
         const transfer = transfers.find((t) => t.id === id);
+        if (transfer) {
+          const units = transfer.items.reduce((a, i) => a + i.qty, 0);
+          log("deleted", "transfer", transfer, {
+            label: transfer.transferNo, amount: units, shopId: transfer.fromShopId,
+          });
+        }
         setTransfers((prev) => prev.filter((t) => t.id !== id));
         persist("the deletion", () => db.deleteTransfer(id));
         if (!transfer) return;
@@ -1007,6 +1113,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         persist("the payment", () => db.upsertCustomerPayment(p));
       },
       deleteCustomerPayment: (id) => {
+        const pay = customerPayments.find((x) => x.id === id);
+        if (pay) {
+          log("deleted", "customer-payment", pay, {
+            label: `${pay.method} receipt`, amount: pay.amount, shopId: pay.shopId,
+          });
+        }
         setCustomerPayments((prev) => prev.filter((x) => x.id !== id));
         persist("the deletion", () => db.deleteCustomerPayment(id));
       },
@@ -1034,6 +1146,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
 
       deleteSupplierPayment: (id) => {
+        const pay = supplierPayments.find((x) => x.id === id);
+        if (pay) {
+          log("deleted", "supplier-payment", pay, {
+            label: `${pay.method} payment`, amount: pay.amount, shopId: pay.shopId || undefined,
+          });
+        }
         setSupplierPayments((prev) => prev.filter((x) => x.id !== id));
         persist("the deletion", () => db.deleteSupplierPayment(id));
       },
@@ -1064,8 +1182,179 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
 
       deleteSetOff: (id) => {
+        const rec = setOffs.find((x) => x.id === id);
+        if (rec) log("deleted", "set-off", rec, { label: "Set-off", amount: rec.amount });
         setSetOffs((prev) => prev.filter((x) => x.id !== id));
         persist("the deletion", () => db.deleteSetOff(id));
+      },
+
+      addAdjustment: (a) => {
+        // One side, one party. A row naming both, or neither, would be counted
+        // by whichever balance happened to look for it.
+        const named = Boolean(a.customerId) !== Boolean(a.supplierId);
+        const amount = Math.round(a.amount);
+        if (!named || amount === 0) return null;
+
+        const rec: Adjustment = { ...a, amount, id: `adj-${Date.now()}` };
+        setAdjustments((prev) => [rec, ...prev]);
+        persist("the adjustment", () => db.upsertAdjustment(rec));
+        return rec;
+      },
+
+      updateAdjustment: (a) => {
+        setAdjustments((prev) => prev.map((x) => (x.id === a.id ? a : x)));
+        persist("the adjustment", () => db.upsertAdjustment(a));
+      },
+
+      deleteAdjustment: (id) => {
+        const rec = adjustments.find((x) => x.id === id);
+        if (rec) {
+          log("deleted", "adjustment", rec, {
+            label: rec.amount < 0 ? "Write-off" : "Balance adjustment",
+            amount: Math.abs(rec.amount),
+          });
+        }
+        setAdjustments((prev) => prev.filter((x) => x.id !== id));
+        persist("the deletion", () => db.deleteAdjustment(id));
+      },
+
+
+      /* ----------------------------------------------------------- activity */
+
+      restoreDeleted: (activityId) => {
+        const entry = activity.find((a) => a.id === activityId);
+        if (!entry || !isRestorable(entry)) return false;
+
+        const snap = entry.snapshot as any;
+        if (!snap?.id) return false;
+
+        /** Stock the deletion gave back has to be taken away again, and vice versa. */
+        const replay = (moves: StockMove[]) => {
+          if (moves.length === 0) return;
+          setInventory((prev) => {
+            const next = applyStock(prev, moves);
+            persist("stock levels", () => db.upsertInventory(touchedRows(next, moves)));
+            return next;
+          });
+        };
+
+        // Anything already occupying this id means the record came back by
+        // another route — re-inserting would duplicate it.
+        const taken = (rows: { id: string }[]) => rows.some((r) => r.id === snap.id);
+
+        switch (entry.entity) {
+          case "sale": {
+            if (taken(sales)) return false;
+            const rec = snap as Sale;
+            setSales((prev) => [rec, ...prev]);
+            persist("the restored sale", () => db.upsertSale(rec));
+            // Deleting a completed sale put its items back on the shelf, so
+            // restoring takes them off again. A returned sale never moved
+            // stock, so nothing is replayed for it.
+            if (rec.status !== "Returned") {
+              replay(rec.lines.map((l) => ({ productId: l.productId, shopId: rec.shopId, delta: -l.qty })));
+            }
+            break;
+          }
+          case "purchase": {
+            if (taken(purchases)) return false;
+            const rec = snap as Purchase;
+            setPurchases((prev) => [rec, ...prev]);
+            persist("the restored purchase", () => db.upsertPurchase(rec));
+            replay(rec.lines.map((l) => ({ productId: l.productId, shopId: l.shopId, delta: l.qty })));
+            break;
+          }
+          case "return": {
+            if (taken(returns)) return false;
+            const rec = snap as ReturnRec;
+            setReturns((prev) => [rec, ...prev]);
+            persist("the restored return", () => db.upsertReturn(rec));
+            // A customer return closes the invoice it belongs to again.
+            if (rec.kind === "customer") {
+              setSales((prev) => {
+                const next = prev.map((x) =>
+                  x.invoice === rec.invoice ? { ...x, status: "Returned" as const, profit: 0 } : x,
+                );
+                const closed = next.find((x) => x.invoice === rec.invoice);
+                if (closed) persist("the invoice status", () => db.upsertSale(closed));
+                return next;
+              });
+            }
+            // Mirror of deleteReturn: a customer return puts stock back, a
+            // supplier return takes it away.
+            const sign = rec.kind === "supplier" ? -1 : 1;
+            replay(rec.items.map((i) => ({ productId: i.productId, shopId: rec.shopId, delta: sign * i.qty })));
+            break;
+          }
+          case "transfer": {
+            if (taken(transfers)) return false;
+            const rec = snap as Transfer;
+            setTransfers((prev) => [rec, ...prev]);
+            persist("the restored transfer", () => db.upsertTransfer(rec));
+            replay(
+              rec.items.flatMap((i) => [
+                { productId: i.productId, shopId: rec.fromShopId, delta: -i.qty },
+                { productId: i.productId, shopId: rec.toShopId, delta: i.qty },
+              ]),
+            );
+            break;
+          }
+          case "expense": {
+            if (taken(expenses)) return false;
+            const rec = snap as Expense;
+            setExpenses((prev) => [rec, ...prev]);
+            persist("the restored expense", () => db.upsertExpense(rec));
+            break;
+          }
+          case "day-session": {
+            if (taken(daySessions)) return false;
+            const rec = snap as DaySession;
+            setDaySessions((prev) => [rec, ...prev]);
+            persist("the restored trading day", () => db.upsertDaySession(rec));
+            break;
+          }
+          case "customer-payment": {
+            if (taken(customerPayments)) return false;
+            const rec = snap as CustomerPayment;
+            setCustomerPayments((prev) => [rec, ...prev]);
+            persist("the restored payment", () => db.upsertCustomerPayment(rec));
+            break;
+          }
+          case "supplier-payment": {
+            if (taken(supplierPayments)) return false;
+            const rec = snap as SupplierPayment;
+            setSupplierPayments((prev) => [rec, ...prev]);
+            persist("the restored payment", () => db.upsertSupplierPayment(rec));
+            break;
+          }
+          case "set-off": {
+            if (taken(setOffs)) return false;
+            const rec = snap as SetOff;
+            setSetOffs((prev) => [rec, ...prev]);
+            persist("the restored set-off", () => db.upsertSetOff(rec));
+            break;
+          }
+          case "adjustment": {
+            if (taken(adjustments)) return false;
+            const rec = snap as Adjustment;
+            setAdjustments((prev) => [rec, ...prev]);
+            persist("the restored adjustment", () => db.upsertAdjustment(rec));
+            break;
+          }
+          default:
+            return false;
+        }
+
+        // Stamped rather than removed: the log is the record that something was
+        // deleted at all, and that stays true even after it is put back.
+        const done: Activity = {
+          ...entry,
+          restoredAt: new Date().toISOString(),
+          restoredBy: user?.name ?? "Unknown",
+        };
+        setActivity((prev) => prev.map((a) => (a.id === done.id ? done : a)));
+        persist("the activity log", () => db.upsertActivity(done));
+        return true;
       },
 
       /* -------------------------------------------------------- messages */
@@ -1133,7 +1422,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return count;
       },
     }),
-    [user, ready, usingSupabase, dbError, pendingMigration, online, shops, users, products, inventory, sales, purchases, suppliers, expenses, returns, daySessions, transfers, customers, customerPayments, supplierPayments, setOffs, messages, settings, discounts],
+    [user, ready, usingSupabase, dbError, pendingMigration, online, shops, users, products, inventory, sales, purchases, suppliers, expenses, returns, daySessions, transfers, customers, customerPayments, supplierPayments, setOffs, adjustments, activity, messages, settings, discounts],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

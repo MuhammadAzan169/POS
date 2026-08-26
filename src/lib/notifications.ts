@@ -16,8 +16,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { dayOf, todayISO } from "./dates";
 import { customerBalance, openSessionFor, summarizeSession } from "./day-book";
 import { openBills } from "./ledger";
-import { isUnreadFor } from "./store-types";
+import { ENTITY_LABELS, isRestorable, isUnreadFor } from "./store-types";
 import type {
+  Activity,
   Customer,
   CustomerPayment,
   DaySession,
@@ -71,6 +72,7 @@ interface Source {
   supplierPayments: SupplierPayment[];
   purchases: Purchase[];
   setOffs: SetOff[];
+  activity: Activity[];
   messages: Message[];
   pendingMigration: string[] | null;
 }
@@ -105,6 +107,16 @@ const MIGRATIONS: { match: string[]; file: string; feature: string }[] = [
     match: ["supplier_payments", "set_offs", "purchases.amount_paid"],
     file: "005_payables_and_setoffs.sql",
     feature: "credit purchases and supplier balances",
+  },
+  {
+    match: ["balance_adjustments"],
+    file: "006_balance_adjustments.sql",
+    feature: "write-offs and balance corrections",
+  },
+  {
+    match: ["activity_log"],
+    file: "007_activity_log.sql",
+    feature: "the deletion history and undo",
   },
 ];
 
@@ -341,6 +353,44 @@ export function buildNotifications(s: Source): AppNotification[] {
         detail: `${total.toLocaleString()} in total. ${worst.purchase.supplier} has been waiting ${worst.overdueDays} days on ${worst.purchase.billNo}.`,
         to: "/app/ledger",
         at: worst.purchase.date,
+      });
+    }
+  }
+
+  /*
+    Something was deleted by shop staff.
+
+    The single most valuable notice in the app: before the activity log existed,
+    a shopkeeper could remove an invoice and nobody would ever find out — no gap
+    in the numbering, nothing in the day book, just quietly lower takings.
+
+    Only DELETIONS by SHOP staff are announced, and only recent ones. The owner
+    deleting their own mistake is not news, and re-announcing a month-old
+    deletion every morning would train people to ignore the bell.
+  */
+  if (isAdmin) {
+    const cutoff = addDays(today, -7);
+    const removed = s.activity.filter(
+      (a) => a.action === "deleted" && a.byRole === "shop" && dayOf(a.at) >= cutoff && !a.restoredAt,
+    );
+    if (removed.length > 0) {
+      const value = removed.reduce((t, a) => t + a.amount, 0);
+      const recoverable = removed.filter(isRestorable).length;
+      const worst = removed.reduce((a, b) => (b.amount > a.amount ? b : a), removed[0]);
+      out.push({
+        // Keyed on what is currently outstanding, so putting one back or a new
+        // deletion arriving both produce a fresh notice.
+        id: `deleted-by-shop:${removed.length}:${value}`,
+        group: "Money",
+        tone: value > 0 ? "critical" : "warning",
+        title: `${removed.length} record${removed.length === 1 ? " was" : "s were"} deleted by shop staff`,
+        detail:
+          `${worst.byName} removed ${ENTITY_LABELS[worst.entity]} ${worst.label}` +
+          `${worst.amount > 0 ? ` worth ${worst.amount.toLocaleString()}` : ""}. ` +
+          `${value.toLocaleString()} in total` +
+          `${recoverable > 0 ? `, ${recoverable} still recoverable.` : "."}`,
+        to: "/app/activity",
+        at: worst.at,
       });
     }
   }

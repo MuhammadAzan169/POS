@@ -34,7 +34,7 @@ export function SupplierPaymentDialog({
   onClose: () => void;
 }) {
   const {
-    user, shops, purchases, supplierPayments, returns, setOffs, sales, customerPayments,
+    user, shops, purchases, supplierPayments, returns, setOffs, adjustments, sales, customerPayments,
     daySessions, settings, addSupplierPayment, updateSupplierPayment,
   } = useStore();
 
@@ -54,7 +54,7 @@ export function SupplierPaymentDialog({
   const [shopId, setShopId] = useState(user?.shopId ?? "");
 
   const balance = supplier
-    ? supplierBalance(supplier, { sales, customerPayments, purchases, supplierPayments, returns, setOffs })
+    ? supplierBalance(supplier, { sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments })
     : null;
 
   // Re-seeded whenever the dialog is pointed at a different supplier or

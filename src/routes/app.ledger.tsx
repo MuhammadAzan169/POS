@@ -20,6 +20,7 @@ import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { LedgerTable } from "@/components/LedgerTable";
 import { SupplierPaymentDialog } from "@/components/SupplierPaymentDialog";
 import { SetOffDialog } from "@/components/SetOffDialog";
+import { AdjustBalanceDialog } from "@/components/AdjustBalanceDialog";
 import { Confirm } from "@/components/Confirm";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,7 +52,7 @@ export const Route = createFileRoute("/app/ledger")({ component: LedgerPage });
 function LedgerPage() {
   const {
     user, customers, suppliers, sales, customerPayments, purchases, supplierPayments,
-    returns, setOffs, shops, settings, deleteSetOff, deleteSupplierPayment,
+    returns, setOffs, adjustments, shops, settings, deleteSetOff, deleteSupplierPayment, deleteAdjustment,
   } = useStore();
 
   const isAdmin = user?.role === "admin";
@@ -64,10 +65,12 @@ function LedgerPage() {
   const [payFor, setPayFor] = useState<Supplier | null>(null);
   const [payEditing, setPayEditing] = useState<SupplierPayment | null>(null);
   const [settleFor, setSettleFor] = useState<{ customer: Customer; supplier: Supplier } | null>(null);
+  /** The party whose balance the owner is moving by hand, and which side of it. */
+  const [adjustFor, setAdjustFor] = useState<{ customer?: Customer; supplier?: Supplier } | null>(null);
 
   const data = useMemo(
-    () => ({ sales, customerPayments, purchases, supplierPayments, returns, setOffs }),
-    [sales, customerPayments, purchases, supplierPayments, returns, setOffs],
+    () => ({ sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments }),
+    [sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments],
   );
 
   const parties = useMemo(() => partyPositions(customers, suppliers, data), [customers, suppliers, data]);
@@ -116,6 +119,29 @@ function LedgerPage() {
         .map((p) => ({ payment: p, supplier: suppliers.find((s) => s.id === p.supplierId) })),
     [supplierPayments, suppliers],
   );
+
+  /**
+   * Every hand-made change to a balance, newest first.
+   *
+   * Worth its own tab rather than being buried in each party's statement: these
+   * are the only figures in the app with no document behind them, so they are
+   * the ones somebody will want to audit as a list.
+   */
+  const adjustmentRows = useMemo(
+    () =>
+      [...adjustments]
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .map((a) => ({
+          adjustment: a,
+          party: a.customerId
+            ? customers.find((c) => c.id === a.customerId)
+            : suppliers.find((sp) => sp.id === a.supplierId),
+          side: a.customerId ? "customer" : "supplier",
+        })),
+    [adjustments, customers, suppliers],
+  );
+
+  const writtenOff = adjustments.filter((a) => a.amount < 0).reduce((t, a) => t + -a.amount, 0);
 
   /* ------------------------------------------------------------- detail */
 
@@ -224,6 +250,7 @@ function LedgerPage() {
           <TabsTrigger value="bills">Open bills ({bills.length})</TabsTrigger>
           <TabsTrigger value="payments">Payments out ({payments.length})</TabsTrigger>
           <TabsTrigger value="setoffs">Set-offs ({setOffRows.length})</TabsTrigger>
+          <TabsTrigger value="adjustments">Adjustments ({adjustmentRows.length})</TabsTrigger>
         </TabsList>
 
         {/* ------------------------------------------------------ parties */}
@@ -493,6 +520,92 @@ function LedgerPage() {
             </TableWrap>
           </Card>
         </TabsContent>
+        {/* ---------------------------------------------- adjustments */}
+        <TabsContent value="adjustments" className="mt-4">
+          <Card className="p-4 mb-4 text-sm text-muted-foreground">
+            The only figures in the app with no invoice or bill behind them: a debt written off, a
+            balance carried in from before you started, or a correction you agreed. No money moves, so
+            nothing here touches a till or a day&apos;s cash count. Undo one and the balance goes back
+            exactly as it was.
+            {writtenOff > 0 && (
+              <span className="mt-2 block font-medium text-foreground">
+                {money(writtenOff)} has been written off in total.
+              </span>
+            )}
+          </Card>
+
+          <Card className="overflow-hidden">
+            <MobileCards
+              items={adjustmentRows}
+              keyOf={(r) => r.adjustment.id}
+              empty="No balances have been adjusted by hand."
+              render={({ adjustment: a, party, side }) => (
+                <ListCard
+                  title={party?.name ?? "Unknown"}
+                  subtitle={`${a.date} · ${side === "customer" ? "what they owe you" : "what you owe them"}`}
+                  right={`${a.amount < 0 ? "−" : "+"} ${money(Math.abs(a.amount))}`}
+                  badges={[<StatusPill key="k" status={a.amount < 0 ? "Written off" : "Increased"} />]}
+                  fields={[
+                    { label: "Reason", value: a.reason || "Not given" },
+                    { label: "Recorded by", value: a.createdBy || "Not recorded" },
+                  ]}
+                />
+              )}
+            />
+            <TableWrap>
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 sticky top-0 z-10">
+                  <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+                    <th className="px-4 py-3 font-medium">Date</th>
+                    <th className="px-4 py-3 font-medium">Party</th>
+                    <th className="px-4 py-3 font-medium">Side</th>
+                    <th className="px-4 py-3 font-medium">Reason</th>
+                    <th className="px-4 py-3 font-medium">Recorded by</th>
+                    <th className="px-4 py-3 font-medium text-right">Change</th>
+                    <th className="px-4 py-3 font-medium text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {adjustmentRows.map(({ adjustment: a, party, side }) => (
+                    <tr key={a.id} className="border-t hover:bg-muted/40">
+                      <td className="px-4 py-3 text-muted-foreground">{shortDay(a.date)}</td>
+                      <td className="px-4 py-3 font-medium">{party?.name ?? "Unknown"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {side === "customer" ? "They owe you" : "You owe them"}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{a.reason || "Not given"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{a.createdBy || "Not recorded"}</td>
+                      <td className={`px-4 py-3 text-right font-medium ${a.amount < 0 ? "text-success-strong" : "text-warning-strong"}`}>
+                        {a.amount < 0 ? "−" : "+"} {money(Math.abs(a.amount))}
+                      </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <Confirm
+                          title="Undo this adjustment?"
+                          description={`${money(Math.abs(a.amount))} goes back onto ${
+                            party?.name ?? "this party"
+                          }'s balance, exactly as it was before.`}
+                          confirmLabel="Undo adjustment"
+                          destructive
+                          onConfirm={() => { deleteAdjustment(a.id); toast.success("Adjustment undone"); }}
+                          trigger={
+                            <Button size="sm" variant="ghost" aria-label="Undo this adjustment">
+                              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                            </Button>
+                          }
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  {adjustmentRows.length === 0 && (
+                    <tr><td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                      No balances have been adjusted by hand.
+                    </td></tr>
+                  )}
+                </tbody>
+              </table>
+            </TableWrap>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* ---------------------------------------------------- statement */}
@@ -594,6 +707,36 @@ function LedgerPage() {
                       <Wallet className="h-3.5 w-3.5 mr-1.5" />Pay them
                     </Button>
                   )}
+                  {/* A party on both sides gets a button per side: the two
+                      balances are separate debts and are written off separately. */}
+                  {detail.customer && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const c = detail.customer!;
+                        setDetail(null);
+                        setAdjustFor({ customer: c });
+                      }}
+                    >
+                      <Scale className="h-3.5 w-3.5 mr-1.5" />
+                      {detail.supplier ? "Adjust what they owe" : "Adjust balance"}
+                    </Button>
+                  )}
+                  {detail.supplier && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const sup = detail.supplier!;
+                        setDetail(null);
+                        setAdjustFor({ supplier: sup });
+                      }}
+                    >
+                      <Scale className="h-3.5 w-3.5 mr-1.5" />
+                      {detail.customer ? "Adjust what you owe" : "Adjust balance"}
+                    </Button>
+                  )}
                 </div>
 
                 {detailCustomer && (
@@ -636,6 +779,11 @@ function LedgerPage() {
         customer={settleFor?.customer ?? null}
         supplier={settleFor?.supplier ?? null}
         onClose={() => setSettleFor(null)}
+      />
+      <AdjustBalanceDialog
+        customer={adjustFor?.customer ?? null}
+        supplier={adjustFor?.supplier ?? null}
+        onClose={() => setAdjustFor(null)}
       />
     </div>
   );

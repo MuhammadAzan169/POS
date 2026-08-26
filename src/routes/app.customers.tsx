@@ -27,9 +27,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { LedgerTable } from "@/components/LedgerTable";
 import { SetOffDialog } from "@/components/SetOffDialog";
+import { AdjustBalanceDialog } from "@/components/AdjustBalanceDialog";
 import {
   Plus, Search, Download, Users, Wallet, HandCoins, Pencil, Phone, AlertTriangle, Trash2,
-  PiggyBank, ArrowLeftRight,
+  PiggyBank, ArrowLeftRight, Scale,
 } from "lucide-react";
 import { Confirm } from "@/components/Confirm";
 import { downloadCsv } from "@/lib/export";
@@ -47,7 +48,7 @@ const EMPTY = {
 function CustomersPage() {
   const {
     user, customers, customerPayments, sales, shops, settings, pendingMigration,
-    suppliers, purchases, supplierPayments, returns, setOffs,
+    suppliers, purchases, supplierPayments, returns, setOffs, adjustments,
     addCustomer, updateCustomer, addCustomerPayment, updateCustomerPayment, deleteCustomerPayment,
   } = useStore();
   const isAdmin = user?.role === "admin";
@@ -79,12 +80,14 @@ function CustomersPage() {
    * work out how much could be cancelled.
    */
   const ledger = useMemo(
-    () => ({ sales, customerPayments, purchases, supplierPayments, returns, setOffs }),
-    [sales, customerPayments, purchases, supplierPayments, returns, setOffs],
+    () => ({ sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments }),
+    [sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments],
   );
 
   /** The partner whose two balances are being cancelled against each other. */
   const [settleFor, setSettleFor] = useState<Customer | null>(null);
+  /** The customer whose balance the owner is moving by hand. */
+  const [adjustFor, setAdjustFor] = useState<Customer | null>(null);
 
   const rows = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -639,6 +642,17 @@ function CustomersPage() {
                       <span>− {formatRs(selectedBalance.setOff, currency)}</span>
                     </div>
                   )}
+                  {selectedBalance.adjusted !== 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        {selectedBalance.adjusted < 0 ? "Written off / reduced by hand" : "Added by hand"}
+                      </span>
+                      <span>
+                        {selectedBalance.adjusted < 0 ? "− " : "+ "}
+                        {formatRs(Math.abs(selectedBalance.adjusted), currency)}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between border-t pt-2 font-semibold">
                     <span>{selectedBalance.advance > 0 ? "Advance held for them" : "Still owed"}</span>
                     <span>{formatRs(selectedBalance.outstanding || selectedBalance.advance, currency)}</span>
@@ -680,6 +694,17 @@ function CustomersPage() {
                     <HandCoins className="h-4 w-4 mr-1.5" />
                     {selectedBalance.outstanding > 0 ? "Receive payment" : "Take an advance"}
                   </Button>
+                  {/* Owner-only: writing a debt off is not a decision anyone
+                      standing at a till should be able to make. */}
+                  {isAdmin && (
+                    <Button
+                      variant="outline"
+                      onClick={() => { setDetail(null); setAdjustFor(selected); }}
+                      title="Write off, or correct what they owe"
+                    >
+                      <Scale className="h-4 w-4 mr-1.5" />Adjust
+                    </Button>
+                  )}
                   {selected.phone && (
                     <Button variant="outline" asChild>
                       <a href={`tel:${selected.phone}`}><Phone className="h-4 w-4" /></a>
@@ -797,6 +822,7 @@ function CustomersPage() {
         supplier={settleFor ? linkedSupplier(settleFor, suppliers) ?? null : null}
         onClose={() => setSettleFor(null)}
       />
+      <AdjustBalanceDialog customer={adjustFor} onClose={() => setAdjustFor(null)} />
     </div>
   );
 }

@@ -33,12 +33,12 @@ export function SetOffDialog({
   onClose: () => void;
 }) {
   const {
-    user, sales, customerPayments, purchases, supplierPayments, returns, setOffs,
+    user, sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments,
     settings, addSetOff,
   } = useStore();
 
   const money = (n: number) => formatRs(n, settings.currency);
-  const data = { sales, customerPayments, purchases, supplierPayments, returns, setOffs };
+  const data = { sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments };
 
   const receivable = customer ? customerBalance(customer, data).outstanding : 0;
   const payable = supplier ? supplierBalance(supplier, data).outstanding : 0;

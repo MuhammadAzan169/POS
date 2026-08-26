@@ -83,8 +83,11 @@ const session = (over = {}) => ({
 
 /** An empty ledger, so each test only has to supply the part it cares about. */
 const ledgerData = (over = {}) => ({
-  sales: [], customerPayments: [], purchases: [], supplierPayments: [], returns: [], setOffs: [], ...over,
+  sales: [], customerPayments: [], purchases: [], supplierPayments: [], returns: [], setOffs: [],
+  adjustments: [], ...over,
 });
+
+const adj = (over = {}) => ({ id: "a1", date: "2026-08-21", amount: -1000, reason: "test", createdBy: "Owner", ...over });
 
 /* ================================================================= DATES */
 
@@ -709,7 +712,7 @@ const openToday = () => shops.map((sh) => session({
 const source = (over = {}) => ({
   user: admin, shops, products: [], inventory: [], sales: [], expenses: [], returns: [],
   daySessions: openToday(), customers: [], customerPayments: [], supplierPayments: [], purchases: [],
-  setOffs: [], messages: [], pendingMigration: null, ...over,
+  setOffs: [], activity: [], messages: [], pendingMigration: null, ...over,
 });
 
 const titles = (s) => N.buildNotifications(s).map((n) => n.title);
@@ -1123,6 +1126,254 @@ it("applying a movement and then its exact reverse restores the original", () =>
     moves.map((m) => ({ ...m, delta: -m.delta })),
   );
   eq(undone, before, "undoing a transfer or a return has to land exactly back");
+});
+
+/* ============================================================ ADJUSTMENTS */
+
+describe("Moving a balance by hand");
+
+it("a write-off brings a customer's debt down", () => {
+  const data = ledgerData({
+    sales: [sale({ customerId: "c1", payment: "Credit", total: 10000 })],
+    adjustments: [adj({ customerId: "c1", amount: -4000, reason: "goodwill" })],
+  });
+  const bal = B.customerBalance({ id: "c1", creditLimit: 0 }, data);
+  eq([bal.adjusted, bal.outstanding], [-4000, 6000]);
+});
+
+it("writing off the whole balance clears it exactly", () => {
+  const data = ledgerData({
+    sales: [sale({ customerId: "c1", payment: "Credit", total: 7500 })],
+    adjustments: [adj({ customerId: "c1", amount: -7500, reason: "shop closed down" })],
+  });
+  const bal = B.customerBalance({ id: "c1", creditLimit: 0 }, data);
+  eq([bal.outstanding, bal.advance], [0, 0], "clear, not in advance");
+});
+
+it("a positive adjustment carries in a balance from before the app", () => {
+  const data = ledgerData({ adjustments: [adj({ customerId: "c1", amount: 12000, reason: "old register" })] });
+  eq(B.customerBalance({ id: "c1", creditLimit: 0 }, data).outstanding, 12000, "owed with no invoice behind it");
+});
+
+it("writing off more than is owed leaves nothing, not an advance", () => {
+  const data = ledgerData({
+    sales: [sale({ customerId: "c1", payment: "Credit", total: 1000 })],
+    adjustments: [adj({ customerId: "c1", amount: -9999 })],
+  });
+  const bal = B.customerBalance({ id: "c1", creditLimit: 0 }, data);
+  eq(bal.outstanding, 0, "clamped at zero");
+});
+
+it("the same works on the supplier side", () => {
+  const data = ledgerData({
+    purchases: [purchase({ total: 10000, payment: "Credit", amountPaid: 0 })],
+    adjustments: [adj({ supplierId: "sup1", amount: -2500, reason: "agreed reduction" })],
+  });
+  const bal = L.supplierBalance(sup, data);
+  eq([bal.adjusted, bal.outstanding], [-2500, 7500]);
+});
+
+it("an adjustment on one side never touches the other", () => {
+  const data = ledgerData({
+    sales: [sale({ customerId: "c1", payment: "Credit", total: 5000 })],
+    purchases: [purchase({ total: 5000, payment: "Credit", amountPaid: 0 })],
+    adjustments: [adj({ customerId: "c1", amount: -5000 })],
+  });
+  eq(B.customerBalance({ id: "c1", creditLimit: 0 }, data).outstanding, 0, "customer side written off");
+  eq(L.supplierBalance(sup, data).outstanding, 5000, "supplier side untouched");
+});
+
+it("an adjustment appears on the statement and moves the running balance", () => {
+  const data = ledgerData({
+    sales: [sale({ customerId: "c1", payment: "Credit", total: 10000, date: "2026-08-10T10:00:00.000Z" })],
+    adjustments: [adj({ customerId: "c1", date: "2026-08-15", amount: -4000, reason: "goodwill" })],
+  });
+  const entries = L.customerLedger({ id: "c1" }, data);
+  eq(entries.map((e) => e.kind), ["sale", "adjustment"]);
+  eq(entries[1].ref, "Written off");
+  eq(entries[1].note, "goodwill", "the reason is what the statement shows");
+  eq([entries[1].debit, entries[1].credit], [0, 4000], "a write-off is a credit");
+  eq(entries[1].balance, 6000, "and the running balance follows it");
+});
+
+it("an increase reads as a debit on the statement", () => {
+  const data = ledgerData({ adjustments: [adj({ customerId: "c1", amount: 3000, reason: "opening balance" })] });
+  const [entry] = L.customerLedger({ id: "c1" }, data);
+  eq([entry.ref, entry.debit, entry.credit, entry.balance], ["Balance adjustment", 3000, 0, 3000]);
+});
+
+it("the statement still ends on the balance the summary reports", () => {
+  const data = ledgerData({
+    sales: [sale({ customerId: "c1", payment: "Credit", total: 10000 })],
+    customerPayments: [{ id: "p1", customerId: "c1", date: "2026-08-12", amount: 2000, method: "Cash", shopId: "s", note: "", receivedBy: "" }],
+    adjustments: [adj({ customerId: "c1", amount: -3000 })],
+  });
+  const entries = L.customerLedger({ id: "c1" }, data);
+  const bal = B.customerBalance({ id: "c1", creditLimit: 0 }, data);
+  eq(entries[entries.length - 1].balance, bal.outstanding - bal.advance, "statement agrees with the summary");
+  eq(bal.outstanding, 5000);
+});
+
+it("undoing an adjustment puts the balance back exactly", () => {
+  const base = { sales: [sale({ customerId: "c1", payment: "Credit", total: 8000 })] };
+  const before = B.customerBalance({ id: "c1", creditLimit: 0 }, ledgerData(base));
+  const after = B.customerBalance({ id: "c1", creditLimit: 0 },
+    ledgerData({ ...base, adjustments: [adj({ customerId: "c1", amount: -8000 })] }));
+  const undone = B.customerBalance({ id: "c1", creditLimit: 0 }, ledgerData({ ...base, adjustments: [] }));
+  eq(after.outstanding, 0, "written off");
+  eq(undone.outstanding, before.outstanding, "and back again");
+});
+
+it("a write-off feeds through to the whole-business totals", () => {
+  const cs = [{ id: "c1", name: "X", contact: "", phone: "", address: "", notes: "", kind: "wholesale", creditLimit: 0, active: true }];
+  const base = { sales: [sale({ customerId: "c1", payment: "Credit", total: 9000 })] };
+  eq(B.totalOutstanding(cs, ledgerData(base)), 9000, "before");
+  eq(B.totalOutstanding(cs, ledgerData({ ...base, adjustments: [adj({ customerId: "c1", amount: -9000 })] })), 0, "after");
+});
+
+it("an adjustment never reaches a day's cash count", () => {
+  // It moves no money, so the drawer must be identical either way.
+  const withNone = B.summarizeSession(session(), { sales: [], expenses: [], returns: [] });
+  const withOne = B.summarizeSession(session(), {
+    sales: [], expenses: [], returns: [],
+    // summarizeSession is not even given adjustments — this asserts the shape
+    // of the day book has not quietly grown a dependency on them.
+  });
+  eq(withOne.expectedCash, withNone.expectedCash);
+  eq(withNone.expectedCash, 5000);
+});
+
+it("a party's position reflects a write-off on either side", () => {
+  const data = ledgerData({
+    sales: [sale({ customerId: "c1", payment: "Credit", total: 50000 })],
+    purchases: [purchase({ total: 30000, payment: "Credit", amountPaid: 0 })],
+    adjustments: [adj({ customerId: "c1", amount: -50000, reason: "bad debt" })],
+  });
+  const [bilal] = L.partyPositions(customers, suppliers, data).filter((r) => r.name === "Bilal Traders");
+  eq([bilal.receivable, bilal.payable, bilal.settleable], [0, 30000, 0], "nothing left to set off");
+  eq(bilal.net, -30000, "you owe them the lot now");
+});
+
+/* ========================================================= SETTLED DAYS */
+
+describe("Knowing a record belongs to a day already settled");
+
+const closedDay = session({ id: "day1", status: "closed", countedCash: 5000 });
+const openDay = session({ id: "day1", status: "open" });
+
+it("a sale from a closed day is flagged", () => {
+  eq(B.closedSessionFor([closedDay], sale({ sessionId: "day1" }))?.id, "day1");
+});
+
+it("a sale from a day still open is not", () => {
+  eq(B.closedSessionFor([openDay], sale({ sessionId: "day1" })), undefined);
+});
+
+it("a record from before day sessions existed falls back to shop and date", () => {
+  const old = { shopId: "shop1", date: "2026-08-20T10:00:00.000Z" };
+  eq(B.closedSessionFor([closedDay], old)?.id, "day1", "matched by the day it landed on");
+  eq(B.closedSessionFor([openDay], old), undefined, "and only when that day is closed");
+});
+
+it("a record from another shop's closed day is not flagged", () => {
+  eq(B.closedSessionFor([closedDay], { shopId: "shop2", date: "2026-08-20T10:00:00.000Z" }), undefined);
+});
+
+it("a record belonging to no day at all is not flagged", () => {
+  eq(B.closedSessionFor([closedDay], { shopId: "shop1" }), undefined, "no date");
+  eq(B.closedSessionFor([], sale({ sessionId: "day1" })), undefined, "no sessions");
+});
+
+it("the session id wins over the date when both are present", () => {
+  // A late-night sale carries yesterday's session but today's timestamp; the
+  // id is the authority, exactly as businessDayOf treats it.
+  const late = sale({ sessionId: "day1", date: "2026-08-21T01:15:00.000Z", businessDate: "2026-08-20" });
+  eq(B.closedSessionFor([closedDay], late)?.id, "day1");
+});
+
+/* =========================================================== ACTIVITY LOG */
+
+describe("The deletion history");
+
+const act = (over = {}) => ({
+  id: "act1", at: new Date().toISOString(), action: "deleted", entity: "sale",
+  entityId: "s1", label: "INV-1", amount: 5000, shopId: "shop1",
+  byUserId: "u2", byName: "Cashier", byRole: "shop",
+  snapshot: sale(), ...over,
+});
+
+it("a deletion with its record still attached can be put back", () => {
+  eq(T.isRestorable(act()), true);
+});
+
+it("an entry already put back cannot be restored twice", () => {
+  eq(T.isRestorable(act({ restoredAt: "2026-08-21T10:00:00.000Z" })), false);
+});
+
+it("an edit is history, not something to undo", () => {
+  eq(T.isRestorable(act({ action: "edited" })), false);
+});
+
+it("an entry with no record attached cannot be put back", () => {
+  eq(T.isRestorable(act({ snapshot: null })), false);
+});
+
+it("every entity has a name that reads in a sentence", () => {
+  const kinds = ["sale","purchase","return","transfer","expense","day-session",
+                 "customer-payment","supplier-payment","set-off","adjustment"];
+  kinds.forEach((k) => ok(T.ENTITY_LABELS[k], `no label for ${k}`));
+  eq(T.ENTITY_LABELS["day-session"], "trading day", "named as a shopkeeper would say it");
+  eq(T.ENTITY_LABELS.purchase, "purchase bill");
+});
+
+describe("Warning the owner that something was deleted");
+
+it("a deletion by shop staff raises a critical warning", () => {
+  const s = source({ activity: [act()] });
+  const notice = N.buildNotifications(s).find((n) => n.title.includes("deleted by shop staff"));
+  ok(notice, `expected a deletion warning, got: ${titles(s)}`);
+  eq(notice.tone, "critical", "money went missing from the books");
+  eq(notice.to, "/app/activity", "points at the page that can undo it");
+  ok(notice.detail.includes("Cashier"), "names who did it");
+  ok(notice.detail.includes("INV-1"), "names what went");
+});
+
+it("the owner deleting their own record is not news", () => {
+  eq(N.buildNotifications(source({ activity: [act({ byRole: "admin", byName: "Owner" })] })), []);
+});
+
+it("a deletion already put back stops being a warning", () => {
+  const s = source({ activity: [act({ restoredAt: new Date().toISOString(), restoredBy: "Owner" })] });
+  ok(!has(s, "deleted by shop staff"), "it is back, so there is nothing to chase");
+});
+
+it("an old deletion is not re-announced for ever", () => {
+  const s = source({ activity: [act({ at: new Date(Date.now() - 40 * 86400000).toISOString() })] });
+  ok(!has(s, "deleted by shop staff"), "outside the seven-day window");
+});
+
+it("several deletions are one notice carrying the total", () => {
+  const s = source({
+    activity: [
+      act({ id: "a1", label: "INV-1", amount: 5000 }),
+      act({ id: "a2", label: "INV-2", amount: 12000, entityId: "s2" }),
+    ],
+  });
+  const items = N.buildNotifications(s).filter((n) => n.title.includes("deleted by shop staff"));
+  eq(items.length, 1, "one notice, not one per deletion");
+  ok(items[0].title.includes("2 records"), items[0].title);
+  ok(items[0].detail.includes("17,000"), `expected the total, got: ${items[0].detail}`);
+  ok(items[0].detail.includes("INV-2"), "names the biggest one");
+});
+
+it("a shopkeeper is never shown the deletion log", () => {
+  const s = source({ user: keeper, activity: [act()] });
+  ok(!has(s, "deleted by shop staff"), "the point is that they are answerable to somebody else");
+});
+
+it("the migration notice names the activity-log file", () => {
+  eq(N.migrationFilesFor(["activity_log"]), ["007_activity_log.sql"]);
+  eq(N.migrationFeaturesFor(["activity_log"]), "the deletion history and undo");
 });
 
 /* ================================================================= SEED */

@@ -16,6 +16,7 @@ import { dayOf, parseDay } from "./dates";
 import { customerBalance } from "./day-book";
 import { purchaseSettlement } from "./store-types";
 import type {
+  Adjustment,
   Customer,
   CustomerPayment,
   Purchase,
@@ -35,6 +36,8 @@ export interface LedgerData {
   supplierPayments: SupplierPayment[];
   returns: ReturnRec[];
   setOffs: SetOff[];
+  /** Hand-made corrections and write-offs. Optional so older callers still compile. */
+  adjustments?: Adjustment[];
 }
 
 /* --------------------------------------------------------------- suppliers */
@@ -63,7 +66,13 @@ export function supplierBalance(supplier: Pick<Supplier, "id">, data: LedgerData
     .filter((r) => r.kind === "supplier" && r.supplierId === supplier.id)
     .reduce((a, r) => a + r.refund, 0);
 
-  const net = billed - paidOnBills - paidLater - setOff - returnCredit;
+  // Signed in the direction of what is owed to THEM: positive raises the
+  // payable, negative writes part of it off.
+  const adjusted = (data.adjustments ?? [])
+    .filter((x) => x.supplierId === supplier.id)
+    .reduce((a, x) => a + x.amount, 0);
+
+  const net = billed - paidOnBills - paidLater - setOff - returnCredit + adjusted;
 
   const latest = (xs: { date: string }[]) =>
     xs.length === 0 ? undefined : xs.reduce((a, x) => (x.date > a ? x.date : a), xs[0].date);
@@ -74,6 +83,7 @@ export function supplierBalance(supplier: Pick<Supplier, "id">, data: LedgerData
     paidLater,
     setOff,
     returnCredit,
+    adjusted,
     outstanding: Math.max(0, net),
     advance: Math.max(0, -net),
     net,
@@ -103,7 +113,8 @@ export type LedgerKind =
   | "bill-payment"
   | "payment"
   | "set-off"
-  | "supplier-return";
+  | "supplier-return"
+  | "adjustment";
 
 /**
  * One line of a statement.
@@ -188,6 +199,22 @@ export function customerLedger(customer: Pick<Customer, "id">, data: LedgerData)
       }),
     );
 
+  // A signed adjustment lands on whichever side of the statement it belongs to,
+  // so a write-off reads as a credit and an opening balance as a debit.
+  (data.adjustments ?? [])
+    .filter((x) => x.customerId === customer.id)
+    .forEach((x) =>
+      rows.push({
+        id: x.id,
+        date: dayOf(x.date),
+        kind: "adjustment",
+        ref: x.amount < 0 ? "Written off" : "Balance adjustment",
+        note: x.reason,
+        debit: x.amount > 0 ? x.amount : 0,
+        credit: x.amount < 0 ? -x.amount : 0,
+      }),
+    );
+
   return withRunning(rows.sort(byDate));
 }
 
@@ -262,6 +289,20 @@ export function supplierLedger(supplier: Pick<Supplier, "id">, data: LedgerData)
         note: x.note || "Cancelled against what they owe you",
         debit: 0,
         credit: x.amount,
+      }),
+    );
+
+  (data.adjustments ?? [])
+    .filter((x) => x.supplierId === supplier.id)
+    .forEach((x) =>
+      rows.push({
+        id: x.id,
+        date: dayOf(x.date),
+        kind: "adjustment",
+        ref: x.amount < 0 ? "Written off" : "Balance adjustment",
+        note: x.reason,
+        debit: x.amount > 0 ? x.amount : 0,
+        credit: x.amount < 0 ? -x.amount : 0,
       }),
     );
 

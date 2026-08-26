@@ -12,6 +12,8 @@
 import { supabase } from "./supabase";
 import {
   DEFAULT_DISCOUNTS,
+  type Activity,
+  type Adjustment,
   type Customer,
   type CustomerPayment,
   type DaySession,
@@ -51,6 +53,9 @@ export interface Snapshot {
   customerPayments: CustomerPayment[];
   supplierPayments: SupplierPayment[];
   setOffs: SetOff[];
+  adjustments: Adjustment[];
+  /** Deletions and edits worth answering for, newest first. */
+  activity: Activity[];
   messages: Message[];
   settings: Settings;
   discounts: DiscountRules;
@@ -207,6 +212,34 @@ const setOffToRow = (x: SetOff) => ({
   amount: x.amount, note: x.note, created_by: x.createdBy,
 });
 
+const rowToAdjustment = (r: any): Adjustment => ({
+  id: r.id, date: r.date,
+  customerId: r.customer_id ?? undefined, supplierId: r.supplier_id ?? undefined,
+  amount: Number(r.amount), reason: r.reason ?? "", createdBy: r.created_by ?? "",
+});
+const adjustmentToRow = (a: Adjustment) => ({
+  id: a.id, date: a.date,
+  customer_id: a.customerId ?? null, supplier_id: a.supplierId ?? null,
+  amount: a.amount, reason: a.reason, created_by: a.createdBy,
+});
+
+const rowToActivity = (r: any): Activity => ({
+  id: r.id, at: r.at, action: r.action, entity: r.entity, entityId: r.entity_id,
+  label: r.label ?? "", amount: Number(r.amount ?? 0), shopId: r.shop_id ?? undefined,
+  byUserId: r.by_user_id ?? undefined, byName: r.by_name ?? "", byRole: r.by_role === "admin" ? "admin" : "shop",
+  snapshot: r.snapshot ?? null,
+  restoredAt: r.restored_at ?? undefined, restoredBy: r.restored_by ?? undefined,
+});
+const activityToRow = (a: Activity) => ({
+  id: a.id, at: a.at, action: a.action, entity: a.entity, entity_id: a.entityId,
+  label: a.label, amount: a.amount, shop_id: a.shopId ?? null,
+  by_user_id: a.byUserId ?? null, by_name: a.byName, by_role: a.byRole,
+  // The whole deleted row travels as JSONB, which is what makes a restore put
+  // back the original id and numbering rather than a fresh copy.
+  snapshot: a.snapshot ?? null,
+  restored_at: a.restoredAt ?? null, restored_by: a.restoredBy ?? null,
+});
+
 const rowToMessage = (r: any): Message => ({
   id: r.id, shopId: r.shop_id, fromRole: r.from_role === "admin" ? "admin" : "shop",
   fromUserId: r.from_user_id ?? undefined, fromName: r.from_name ?? "", body: r.body ?? "",
@@ -294,8 +327,10 @@ export async function loadSnapshot(): Promise<Snapshot> {
 
   const missing: string[] = [];
 
-  const [core, daySessions, transfers, customers, customerPayments, supplierPayments, setOffs, messages] =
-    await Promise.all([
+  const [
+    core, daySessions, transfers, customers, customerPayments,
+    supplierPayments, setOffs, adjustments, activity, messages,
+  ] = await Promise.all([
     Promise.all([
       supabase.from("shops").select("*").order("name"),
       supabase.from("users").select("*").order("name"),
@@ -344,6 +379,20 @@ export async function loadSnapshot(): Promise<Snapshot> {
       rowToSetOff,
       missing,
     ),
+    selectOptional(
+      "balance_adjustments",
+      () => supabase!.from("balance_adjustments").select("*").order("date", { ascending: false }),
+      rowToAdjustment,
+      missing,
+    ),
+    // Only the recent tail: the log grows for ever and nobody scrolls a year
+    // back, so the whole history is not worth loading on every boot.
+    selectOptional(
+      "activity_log",
+      () => supabase!.from("activity_log").select("*").order("at", { ascending: false }).limit(500),
+      rowToActivity,
+      missing,
+    ),
     // Only the recent tail: a thread is read newest-first and nobody scrolls a
     // year back, so the whole history is not worth loading on every boot.
     selectOptional(
@@ -388,6 +437,8 @@ export async function loadSnapshot(): Promise<Snapshot> {
     customerPayments,
     supplierPayments,
     setOffs,
+    adjustments,
+    activity,
     // Oldest first: a conversation reads downwards, so the UI never has to
     // reverse it and the two orderings can't drift apart.
     messages: [...messages].reverse(),
@@ -452,6 +503,17 @@ export const db = {
 
   upsertSetOff: (x: SetOff) => run(() => supabase!.from("set_offs").upsert(setOffToRow(x))),
   deleteSetOff: (id: string) => run(() => supabase!.from("set_offs").delete().eq("id", id)),
+
+  /**
+   * The log is append-only by design, so there is no delete here — only an
+   * upsert, which doubles as the write that marks an entry restored.
+   */
+  upsertActivity: (a: Activity) => run(() => supabase!.from("activity_log").upsert(activityToRow(a))),
+
+  upsertAdjustment: (a: Adjustment) =>
+    run(() => supabase!.from("balance_adjustments").upsert(adjustmentToRow(a))),
+  deleteAdjustment: (id: string) =>
+    run(() => supabase!.from("balance_adjustments").delete().eq("id", id)),
 
   /** Inventory is keyed by (product_id, shop_id), so upsert needs that conflict target. */
   upsertInventory: (rows: InventoryRow[]) =>
