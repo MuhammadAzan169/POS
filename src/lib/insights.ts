@@ -6,7 +6,8 @@
  * model to do arithmetic — which is exactly what language models get wrong.
  */
 // Helpers live in store.tsx; the plain types come from store-types.ts.
-import { dayOf, daysAgoISO, discountPctFor, allocateSale } from "./store";
+import { dayOf, daysAgoISO } from "./dates";
+import { discountPctFor, allocateSale } from "./store-types";
 import {
   type DiscountRules,
   type Expense,

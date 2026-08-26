@@ -200,9 +200,16 @@ export interface AllocatedLine {
  * given to the largest line and the parts always add back exactly.
  */
 export function allocateSale(sale: Pick<Sale, "discount" | "lines">): AllocatedLine[] {
-  const { bill } = discountSplitOf(sale);
   const nets = sale.lines.map((l) => l.qty * l.price - (l.discount || 0));
   const netTotal = nets.reduce((a, b) => a + b, 0);
+
+  // Never take off more than the lines are actually worth. The till caps this
+  // already, but a row edited straight in the database can carry a slip
+  // discount larger than the goods on it, and an uncapped share would report
+  // NEGATIVE revenue for a product — a rollup reading "−50 earned" is worse
+  // than one that simply stops discounting once there is nothing left to
+  // discount. Same reasoning as the clamp in `discountSplitOf`.
+  const bill = Math.min(discountSplitOf(sale).bill, Math.max(0, netTotal));
 
   const shares = nets.map((n) => (bill > 0 && netTotal > 0 ? Math.round((bill * n) / netTotal) : 0));
   const residue = bill - shares.reduce((a, b) => a + b, 0);
@@ -288,6 +295,8 @@ export interface CustomerBalance {
   paid: number;
   /** Settled against what you owe THEM, rather than with money. */
   setOff: number;
+  /** Hand-made changes: written off, carried forward, or corrected. Signed. */
+  adjusted: number;
   /** Still owed to you. Never negative — money in hand shows as `advance`. */
   outstanding: number;
   /**
@@ -466,6 +475,51 @@ export interface SetOff {
   createdBy: string;
 }
 
+/**
+ * A hand-made change to what a party owes, or is owed.
+ *
+ * Three things need this and nothing else provides them:
+ *
+ *  - **Writing off a bad debt.** A customer who is never going to pay leaves a
+ *    receivable on the books for ever, quietly overstating what the business is
+ *    worth. The owner needs to say "that money is gone" without deleting the
+ *    invoices, which are the record of goods that genuinely left the shop.
+ *  - **An opening balance.** Somebody already owed you when you started using
+ *    the app. There is no invoice to point at, but the debt is real.
+ *  - **An agreed correction.** Rounding a long-running account off, a goodwill
+ *    reduction, a late fee — the small movements every khata has.
+ *
+ * Recorded as its own row rather than by editing a sale or a bill, for the same
+ * reason a set-off is: the statement should say what actually happened, and
+ * undoing it has to put the balance back exactly. Nothing here moves money, so
+ * an adjustment never touches a till or a day's cash count.
+ */
+export interface Adjustment {
+  id: string;
+  date: string;
+  /**
+   * Exactly one of these is set — an adjustment belongs to one side of one
+   * party. A partner who is both is adjusted on whichever side is wrong.
+   */
+  customerId?: string;
+  supplierId?: string;
+  /**
+   * Signed, always in the direction of what is OWED.
+   *
+   * On a customer: positive means they owe you more, negative means less — so a
+   * write-off is negative. On a supplier: positive means you owe them more.
+   * One signed number rather than a kind plus a magnitude, because the arithmetic
+   * then needs no branch and cannot disagree with the label.
+   */
+  amount: number;
+  /** Why. Required in the UI — an unexplained write-off is indistinguishable from a mistake. */
+  reason: string;
+  createdBy: string;
+}
+
+/** Which side of a party an adjustment applies to. */
+export type AdjustmentSide = "customer" | "supplier";
+
 /** What you owe one supplier, and what you have already put their way. */
 export interface SupplierBalance {
   /** Total of every bill from them. */
@@ -478,6 +532,8 @@ export interface SupplierBalance {
   setOff: number;
   /** Credit they owe you for goods you sent back. */
   returnCredit: number;
+  /** Hand-made changes: written off, carried forward, or corrected. Signed. */
+  adjusted: number;
   /** Still owed to them. Never negative — money ahead shows as `advance`. */
   outstanding: number;
   /** Money you have put their way ahead of any bill. */
@@ -692,6 +748,35 @@ export const DEFAULT_DISCOUNTS: DiscountRules = {
   maxPct: 20,
   perProduct: {},
 };
+
+/*
+  Money formatting and the discount rules live here rather than in store.tsx
+  because they are pure functions over plain data, and anything that reaches for
+  them should not have to drag in the React provider — and through it Supabase —
+  to get at them. store.tsx re-exports this whole file, so every existing
+  `from "@/lib/store"` import is unaffected.
+*/
+
+export function formatRs(n: number, currency = "Rs") {
+  return `${currency} ${n.toLocaleString("en-PK", { maximumFractionDigits: 0 })}`;
+}
+
+/**
+ * The discount percentage that actually applies to a product.
+ * Product override wins over the overall rate; both are capped by maxPct.
+ * Single source of truth so POS, the Discounts tab and receipts never disagree.
+ */
+export function discountPctFor(productId: string, d: DiscountRules) {
+  if (!d.enabled) return 0;
+  const raw = d.perProduct[productId] ?? d.overallPct;
+  return Math.min(Math.max(raw, 0), Math.max(0, d.maxPct));
+}
+
+/** Money off a line, rounded to whole currency units. */
+export function discountAmountFor(productId: string, unitPrice: number, qty: number, d: DiscountRules) {
+  return Math.round((unitPrice * qty * discountPctFor(productId, d)) / 100);
+}
+
 
 export interface Settings {
   businessName: string;

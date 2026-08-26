@@ -190,7 +190,7 @@ interface StockMove {
  * never go below zero, and a shop that has never stocked a product gets a row
  * only when stock is actually arriving.
  */
-function applyStock(rows: InventoryRow[], moves: StockMove[]): InventoryRow[] {
+export function applyStock(rows: InventoryRow[], moves: StockMove[]): InventoryRow[] {
   const next = [...rows];
   moves.forEach(({ productId, shopId, delta }) => {
     if (delta === 0) return;
@@ -1143,26 +1143,6 @@ export function useStore() {
   const ctx = useContext(StoreContext);
   if (!ctx) throw new Error("useStore must be used within StoreProvider");
   return ctx;
-}
-
-export function formatRs(n: number, currency = "Rs") {
-  return `${currency} ${n.toLocaleString("en-PK", { maximumFractionDigits: 0 })}`;
-}
-
-/**
- * The discount percentage that actually applies to a product.
- * Product override wins over the overall rate; both are capped by maxPct.
- * Single source of truth so POS, the Discounts tab and receipts never disagree.
- */
-export function discountPctFor(productId: string, d: DiscountRules) {
-  if (!d.enabled) return 0;
-  const raw = d.perProduct[productId] ?? d.overallPct;
-  return Math.min(Math.max(raw, 0), Math.max(0, d.maxPct));
-}
-
-/** Money off a line, rounded to whole currency units. */
-export function discountAmountFor(productId: string, unitPrice: number, qty: number, d: DiscountRules) {
-  return Math.round((unitPrice * qty * discountPctFor(productId, d)) / 100);
 }
 
 /**
