@@ -121,7 +121,7 @@ export function AdjustBalanceDialog({
   const modes: { key: Mode; label: string; hint: string }[] = [
     { key: "reduce", label: "Reduce", hint: "Take some of it off" },
     { key: "increase", label: "Increase", hint: "Add to what is owed" },
-    { key: "writeOff", label: "Write off all", hint: "Clear the whole balance" },
+    { key: "writeOff", label: "Write off", hint: "Clear the whole balance" },
   ];
 
   return (

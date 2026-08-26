@@ -328,7 +328,14 @@ function Dashboard() {
       </div>
 
       {/* --------------------------------------------------- headline stats */}
-      <div className={isAdmin ? "grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4 xl:grid-cols-5" : "grid gap-3 sm:gap-4 grid-cols-2"}>
+      {/*
+        Five cards for an owner, two for a shopkeeper.
+
+        3 columns rather than 4 in the middle range: 4 columns leaves the fifth
+        card stranded alone on a second row at exactly the width most laptops
+        run at, whereas 3 splits it 3+2 and reads as deliberate.
+      */}
+      <div className={isAdmin ? "grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-5" : "grid gap-3 sm:gap-4 grid-cols-2"}>
         <StatCard
           label="Total sales"
           value={formatRs(totals.sales, currency)}

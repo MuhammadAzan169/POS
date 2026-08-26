@@ -11,6 +11,7 @@
     "test": "node scripts/test-all.mjs",
     "test:routes": "node scripts/smoke-routes.mjs",
     "test:db": "node scripts/check-db.mjs",
+    "test:ai": "node scripts/test-ai.mjs",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

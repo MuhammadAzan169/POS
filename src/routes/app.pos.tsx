@@ -851,7 +851,7 @@ function POS() {
       </Sheet>
 
       <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader data-print="hide"><DialogTitle>Sale complete</DialogTitle></DialogHeader>
           {lastSale && (
             <div data-print="only" className="max-h-[55dvh] overflow-y-auto">

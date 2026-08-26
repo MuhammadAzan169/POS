@@ -6,9 +6,16 @@
  * model to do arithmetic — which is exactly what language models get wrong.
  */
 // Helpers live in store.tsx; the plain types come from store-types.ts.
-import { dayOf, daysAgoISO } from "./dates";
-import { discountPctFor, allocateSale } from "./store-types";
+import { dayOf, daysAgoISO, todayISO } from "./dates";
+import { discountPctFor, allocateSale, purchaseSettlement } from "./store-types";
+import { customerBalance, paymentMix, summarizeSession } from "./day-book";
+import { supplierBalance, partyPositions, openBills } from "./ledger";
 import {
+  type Activity,
+  type Adjustment,
+  type Customer,
+  type CustomerPayment,
+  type DaySession,
   type DiscountRules,
   type Expense,
   type InventoryRow,
@@ -16,9 +23,12 @@ import {
   type Purchase,
   type ReturnRec,
   type Sale,
+  type SetOff,
   type Settings,
   type Shop,
   type Supplier,
+  type SupplierPayment,
+  type Transfer,
 } from "./store-types";
 
 export interface InsightInput {
@@ -32,6 +42,23 @@ export interface InsightInput {
   returns: ReturnRec[];
   settings: Settings;
   discounts: DiscountRules;
+  /*
+    Everything below arrived with credit, the day book and the activity log.
+
+    Optional because the brief long predates them and an older caller should
+    still compile — but leaving any of them out is what made the assistant
+    answer "how much do I owe my suppliers?" with a shrug. `computeInsights`
+    treats a missing list as an empty one, which is honest: no data means no
+    figure, not a guessed figure.
+  */
+  customers?: Customer[];
+  customerPayments?: CustomerPayment[];
+  supplierPayments?: SupplierPayment[];
+  setOffs?: SetOff[];
+  adjustments?: Adjustment[];
+  daySessions?: DaySession[];
+  transfers?: Transfer[];
+  activity?: Activity[];
 }
 
 // Local-time dates, matching dayOf() — see the note in store.tsx.
@@ -176,6 +203,186 @@ export function computeInsights(d: InsightInput) {
   const pct = (now: number, before: number) =>
     before === 0 ? (now > 0 ? 100 : 0) : Math.round(((now - before) / before) * 100);
 
+  /* ------------------------------------------------- credit owed TO us */
+
+  const customers = d.customers ?? [];
+  const ledgerData = {
+    sales: d.sales,
+    customerPayments: d.customerPayments ?? [],
+    purchases: d.purchases,
+    supplierPayments: d.supplierPayments ?? [],
+    returns: d.returns,
+    setOffs: d.setOffs ?? [],
+    adjustments: d.adjustments ?? [],
+  };
+
+  const customerBalances = customers.map((c) => ({ customer: c, balance: customerBalance(c, ledgerData) }));
+
+  const receivables = {
+    note: "What customers owe the business right now. Not date-scoped — a balance is a standing figure, not a period total.",
+    totalOutstanding: Math.round(sum(customerBalances.map((x) => x.balance.outstanding))),
+    customersOwing: customerBalances.filter((x) => x.balance.outstanding > 0).length,
+    // Money the business is holding that belongs to somebody else until they
+    // collect the goods. It flatters the cash position if you forget it.
+    advancesHeld: Math.round(sum(customerBalances.map((x) => x.balance.advance))),
+    atCreditLimit: customerBalances
+      .filter((x) => x.balance.overLimit)
+      .map((x) => ({ name: x.customer.name, owes: Math.round(x.balance.outstanding), limit: x.customer.creditLimit })),
+    topDebtors: customerBalances
+      .filter((x) => x.balance.outstanding > 0)
+      .sort((a, b) => b.balance.outstanding - a.balance.outstanding)
+      .slice(0, 8)
+      .map((x) => ({
+        name: x.customer.name,
+        owes: Math.round(x.balance.outstanding),
+        creditLimit: x.customer.creditLimit || "none",
+        lastPurchase: x.balance.lastPurchase ? dayOf(x.balance.lastPurchase) : "never",
+        lastPayment: x.balance.lastPayment ? dayOf(x.balance.lastPayment) : "never",
+      })),
+    collectedLast30Days: Math.round(
+      sum((d.customerPayments ?? []).filter((p) => dayOf(p.date) >= daysAgo(29)).map((p) => p.amount)),
+    ),
+  };
+
+  /* ------------------------------------------------- credit owed BY us */
+
+  const supplierBalances = d.suppliers.map((sp) => ({ supplier: sp, balance: supplierBalance(sp, ledgerData) }));
+  const bills = openBills(ledgerData, today);
+  const overdue = bills.filter((b) => b.overdueDays > 0);
+  const parties = partyPositions(customers, d.suppliers, ledgerData);
+
+  const payables = {
+    note: "What the business owes suppliers right now, from their bills less what has been paid, returned or set off.",
+    totalOutstanding: Math.round(sum(supplierBalances.map((x) => x.balance.outstanding))),
+    suppliersOwed: supplierBalances.filter((x) => x.balance.outstanding > 0).length,
+    advancesPlaced: Math.round(sum(supplierBalances.map((x) => x.balance.advance))),
+    openBills: bills.length,
+    overdueBills: overdue.map((b) => ({
+      billNo: b.purchase.billNo,
+      supplier: b.purchase.supplier,
+      owed: Math.round(b.balance),
+      daysOverdue: b.overdueDays,
+    })),
+    topCreditors: supplierBalances
+      .filter((x) => x.balance.outstanding > 0)
+      .sort((a, b) => b.balance.outstanding - a.balance.outstanding)
+      .slice(0, 8)
+      .map((x) => ({
+        name: x.supplier.name,
+        owed: Math.round(x.balance.outstanding),
+        openBills: x.balance.unpaidBills,
+      })),
+    // Debts that cancel: a partner who both buys from and sells to the business
+    // needs no cheque for the overlapping part.
+    settleableWithPartners: parties
+      .filter((x) => x.settleable > 0)
+      .map((x) => ({
+        name: x.name,
+        theyOweUs: Math.round(x.receivable),
+        weOweThem: Math.round(x.payable),
+        canBeCancelled: Math.round(x.settleable),
+      })),
+  };
+
+  /* ------------------------------------------------------- how money arrives */
+
+  const mixSource = paymentMix(live.filter((x) => dayOf(x.date) >= daysAgo(29)));
+  const mix = {
+    period: "last 30 days",
+    cash: Math.round(mixSource.cash),
+    card: Math.round(mixSource.card),
+    online: Math.round(mixSource.online),
+    credit: Math.round(mixSource.credit),
+    total: Math.round(mixSource.total),
+    note: "credit is sold on account — a real sale, but no money arrived. cash/card/online were settled at the counter.",
+  };
+
+  /* --------------------------------------------------- the trading day */
+
+  const sessions = d.daySessions ?? [];
+  const sessionData = {
+    sales: d.sales,
+    expenses: d.expenses,
+    returns: d.returns,
+    customerPayments: d.customerPayments ?? [],
+    supplierPayments: d.supplierPayments ?? [],
+    purchases: d.purchases,
+  };
+  const closedRecently = sessions
+    .filter((x) => x.status === "closed" && x.businessDate >= daysAgo(29))
+    .map((x) => ({ session: x, cash: summarizeSession(x, sessionData) }));
+
+  const shopName = (id: string) => d.shops.find((x) => x.id === id)?.name ?? id;
+
+  const dayBook = {
+    note: "A trading day is declared by the shopkeeper, not inferred from the clock, so a sale at 01:30 still belongs to the day the shop opened.",
+    openDays: sessions
+      .filter((x) => x.status === "open")
+      .map((x) => ({
+        shop: shopName(x.shopId),
+        businessDate: x.businessDate,
+        openingCash: Math.round(x.openingCash),
+        expectedCashNow: Math.round(summarizeSession(x, sessionData).expectedCash),
+      })),
+    shopsNotStartedToday: d.shops
+      .filter((sh) => sh.active && !sessions.some((x) => x.shopId === sh.id && x.businessDate === today))
+      .map((sh) => sh.name),
+    // A short till is the one figure worth chasing the same week.
+    shortfallsLast30Days: closedRecently
+      .filter(({ cash }) => cash.variance !== null && cash.variance < 0)
+      .map(({ session: x, cash }) => ({
+        shop: shopName(x.shopId),
+        businessDate: x.businessDate,
+        short: Math.round(Math.abs(cash.variance ?? 0)),
+      })),
+    cashTakenLast7Days: Math.round(
+      sum(
+        sessions
+          .filter((x) => x.status === "closed" && x.businessDate >= daysAgo(6))
+          .map((x) => x.cashTakenByOwner ?? 0),
+      ),
+    ),
+    recentDays: closedRecently
+      .sort((a, b) => b.session.businessDate.localeCompare(a.session.businessDate))
+      .slice(0, 10)
+      .map(({ session: x, cash }) => ({
+        shop: shopName(x.shopId),
+        businessDate: x.businessDate,
+        counted: cash.countedCash,
+        expected: Math.round(cash.expectedCash),
+        variance: cash.variance,
+        takenByOwner: Math.round(x.cashTakenByOwner ?? 0),
+        leftInShop: Math.round(x.cashLeftInShop ?? 0),
+      })),
+  };
+
+  /* ----------------------------------------------------------- oversight */
+
+  const activity = d.activity ?? [];
+  const recentDeletions = activity.filter((a) => a.action === "deleted" && dayOf(a.at) >= daysAgo(29));
+  const writeOffs = (d.adjustments ?? []).filter((a) => a.amount < 0 && dayOf(a.date) >= daysAgo(29));
+
+  const oversight = {
+    note: "Records removed or balances changed by hand. Deleted records are recoverable from the Activity page.",
+    deletionsLast30Days: recentDeletions.map((a) => ({
+      what: a.entity,
+      reference: a.label,
+      value: Math.round(a.amount),
+      by: a.byName,
+      role: a.byRole,
+      on: dayOf(a.at),
+      putBack: Boolean(a.restoredAt),
+    })),
+    deletionsByShopStaff: recentDeletions.filter((a) => a.byRole === "shop").length,
+    writeOffsLast30Days: writeOffs.map((a) => ({
+      amount: Math.round(Math.abs(a.amount)),
+      reason: a.reason,
+      by: a.createdBy,
+      on: dayOf(a.date),
+    })),
+    transfersLast30Days: (d.transfers ?? []).filter((t) => dayOf(t.date) >= daysAgo(29)).length,
+  };
+
   return {
     currency: d.settings.currency,
     generatedAt: new Date().toISOString(),
@@ -223,6 +430,19 @@ export function computeInsights(d: InsightInput) {
       itemsWithOwnRate: Object.keys(d.discounts.perProduct).length,
     },
     catalogue: { products: d.products.length, shops: d.shops.length, suppliers: d.suppliers.length },
+
+    /*
+      Money owed in both directions, the trading day, and who changed what.
+
+      Half the questions an owner actually types are about these — "who owes
+      me", "how much do I owe", "did the till come up short" — and until they
+      were in the brief the assistant had nothing to answer from.
+    */
+    receivables,
+    payables,
+    paymentMixLast30Days: mix,
+    dayBook,
+    oversight,
   };
 }
 

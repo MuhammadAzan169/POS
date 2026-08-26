@@ -51,8 +51,20 @@ function AIPage() {
         shops: store.shops, products: store.products, inventory: store.inventory, sales: store.sales,
         purchases: store.purchases, suppliers: store.suppliers, expenses: store.expenses,
         returns: store.returns, settings: store.settings, discounts: store.discounts,
+        // Credit, the day book and the audit trail. Without these the assistant
+        // is blind to half the app: "who owes me", "how much do I owe", "did the
+        // till come up short" all had nothing to answer from.
+        customers: store.customers, customerPayments: store.customerPayments,
+        supplierPayments: store.supplierPayments, setOffs: store.setOffs,
+        adjustments: store.adjustments, daySessions: store.daySessions,
+        transfers: store.transfers, activity: store.activity,
       }),
-    [store.shops, store.products, store.inventory, store.sales, store.purchases, store.suppliers, store.expenses, store.returns, store.settings, store.discounts],
+    [
+      store.shops, store.products, store.inventory, store.sales, store.purchases, store.suppliers,
+      store.expenses, store.returns, store.settings, store.discounts,
+      store.customers, store.customerPayments, store.supplierPayments, store.setOffs,
+      store.adjustments, store.daySessions, store.transfers, store.activity,
+    ],
   );
 
   useEffect(() => {

@@ -113,7 +113,7 @@ export function SupplierPaymentDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editing ? "Correct payment" : `Pay ${supplier.name}`}</DialogTitle>
           <DialogDescription>
