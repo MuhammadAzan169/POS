@@ -1,6 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { useStore, formatRs, todayISO, matchProduct, type Purchase } from "@/lib/store";
+import {
+  useStore, formatRs, todayISO, shiftDay, matchProduct, purchaseSettlement,
+  type PaymentMethod, type Purchase,
+} from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { StatusPill } from "@/components/Stat";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
@@ -12,7 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Confirm } from "@/components/Confirm";
-import { Plus, Trash2, Download, PackagePlus, ScanLine, Truck, Pencil } from "lucide-react";
+import { SupplierPaymentDialog } from "@/components/SupplierPaymentDialog";
+import { Plus, Trash2, Download, PackagePlus, ScanLine, Truck, Pencil, Wallet, AlertTriangle } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
 
@@ -63,6 +67,28 @@ function PurchasesPage() {
   // for an arbitrary product only ever had to be corrected or deleted.
   const [lines, setLines] = useState<Line[]>([]);
   const [scan, setScan] = useState("");
+  /**
+   * How this bill is being settled.
+   *
+   * Buying on credit is the norm in trade — the delivery man leaves the stock
+   * and the money follows at the end of the month — but the form had no way to
+   * say so, and every bill was silently recorded as paid. `paidNow` carries the
+   * middle case too: something now, the rest later.
+   */
+  /**
+   * The supplier being paid off.
+   *
+   * A shopkeeper can raise a bill on account, so they must also be able to
+   * settle one later — otherwise the money leaves their till on a day the app
+   * knows nothing about, and the evening count reads short with no explanation.
+   * The dialog locks a non-admin to their own till, so the cash lands on the
+   * right trading day by itself.
+   */
+  const [payFor, setPayFor] = useState<(typeof suppliers)[number] | null>(null);
+
+  const [payMethod, setPayMethod] = useState<PaymentMethod>("Cash");
+  const [paidNow, setPaidNow] = useState<number | null>(null);
+  const [dueDate, setDueDate] = useState("");
   const [shopFilter, setShopFilter] = useState(isAdmin ? "all" : ownShopId);
   const [allQ, setAllQ] = useState("");
   const { restock: restockParam, shop: shopParam, qty: qtyParam } = Route.useSearch();
@@ -106,7 +132,40 @@ function PurchasesPage() {
     [purchases, isAdmin, ownShopId],
   );
 
+  /**
+   * Bills with money still on them, oldest first.
+   *
+   * The point of the list is the phone call it prompts, so it is ordered by how
+   * long the money has been owed rather than by size — and an overdue bill is
+   * called out separately from one that simply has not fallen due yet.
+   */
+  const owedBills = useMemo(
+    () =>
+      visiblePurchases
+        .map((p) => ({ purchase: p, ...purchaseSettlement(p) }))
+        .filter((b) => b.balance > 0)
+        .sort((a, b) => a.purchase.date.localeCompare(b.purchase.date)),
+    [visiblePurchases],
+  );
+  const owedTotal = owedBills.reduce((a, b) => a + b.balance, 0);
+  const overdueTotal = owedBills
+    .filter((b) => b.purchase.dueDate && b.purchase.dueDate < todayISO())
+    .reduce((a, b) => a + b.balance, 0);
+
   const total = lines.reduce((a, l) => a + l.qty * l.rate, 0);
+
+  // A settled bill is paid in full unless the user says otherwise; a credit
+  // bill starts at nothing paid. Either way `paidNow === null` means "follow
+  // the method", so switching the method does not fight a figure they typed.
+  const paidAmount = Math.max(0, Math.min(total, paidNow ?? (payMethod === "Credit" ? 0 : total)));
+  const billBalance = Math.max(0, total - paidAmount);
+
+  /** Puts the settlement controls back to the default for a fresh bill. */
+  const resetSettlement = () => {
+    setPayMethod("Cash");
+    setPaidNow(null);
+    setDueDate("");
+  };
 
   // Arriving from Inventory / Stock alerts opens the bill already filled in, then
   // clears the params so a refresh does not reopen it.
@@ -118,6 +177,7 @@ function PurchasesPage() {
     setLines([{ productId: prod.id, shopId: shopParam || shops[0]?.id || "", qty: Math.max(1, qtyParam ?? 1), rate: prod.cost }]);
     setBillNo("");
     setDate(todayISO());
+    resetSettlement();
     setOpen(true);
     navigate({ to: "/app/purchases", search: {}, replace: true });
 
@@ -128,6 +188,7 @@ function PurchasesPage() {
     setLines([]);
     setBillNo("");
     setDate(todayISO());
+    resetSettlement();
     setOpen(true);
   };
 
@@ -140,11 +201,17 @@ function PurchasesPage() {
 
   /** The same form, loaded with a bill that was already entered. */
   const openEdit = (p: Purchase) => {
+    const st = purchaseSettlement(p);
     setEditing(p);
     setSupplierId(p.supplierId ?? suppliers.find((s) => s.name === p.supplier)?.id ?? "");
     setBillNo(p.billNo);
     setDate(p.date);
     setLines(p.lines.map((l) => ({ ...l })));
+    // Loaded from the bill rather than reset, so correcting a line on a bill
+    // that was half paid does not quietly mark the rest as settled.
+    setPayMethod(st.method);
+    setPaidNow(st.paid);
+    setDueDate(p.dueDate ?? "");
     setOpen(true);
   };
 
@@ -155,6 +222,7 @@ function PurchasesPage() {
     setLines([{ productId, shopId, qty: Math.max(1, suggestedQty), rate: p?.cost ?? 0 }]);
     setBillNo("");
     setDate(todayISO());
+    resetSettlement();
     setOpen(true);
   };
 
@@ -171,6 +239,7 @@ function PurchasesPage() {
     );
     setBillNo("");
     setDate(todayISO());
+    resetSettlement();
     setOpen(true);
   };
 
@@ -241,6 +310,14 @@ function PurchasesPage() {
       return;
     }
 
+    // A due date only means anything while money is still owed, so it is
+    // dropped rather than stored against a bill that is already square.
+    const settlement = {
+      payment: payMethod,
+      amountPaid: paidAmount,
+      dueDate: billBalance > 0 && dueDate ? dueDate : undefined,
+    };
+
     if (editing) {
       updatePurchase({
         ...editing,
@@ -250,6 +327,7 @@ function PurchasesPage() {
         date,
         lines,
         total,
+        ...settlement,
       });
       toast.success(`${billNo.trim()} corrected — stock adjusted by the difference`);
     } else {
@@ -264,14 +342,21 @@ function PurchasesPage() {
         // Recorded only for shop-raised bills, so the owner can tell head-office
         // buying apart from a shop restocking on its own account.
         createdByShopId: isAdmin ? undefined : ownShopId,
-        paid: true,
+        ...settlement,
       });
-      toast.success(isAdmin ? "Purchase saved and stock added to shops" : "Purchase saved and stock added to your shop");
+      toast.success(
+        billBalance > 0
+          ? `Purchase saved — ${formatRs(billBalance, settings.currency)} still owed to ${supplier.name}`
+          : isAdmin
+            ? "Purchase saved and stock added to shops"
+            : "Purchase saved and stock added to your shop",
+      );
     }
     setOpen(false);
     setEditing(null);
     setBillNo("");
     setLines([]);
+    resetSettlement();
   };
 
   /**
@@ -374,6 +459,7 @@ function PurchasesPage() {
           <TabsTrigger value="restock">Needs restock ({restockRows.length})</TabsTrigger>
           <TabsTrigger value="all">All items ({allRows.length})</TabsTrigger>
           <TabsTrigger value="history">Purchase history ({visiblePurchases.length})</TabsTrigger>
+          <TabsTrigger value="owed">Still to pay ({owedBills.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="restock" className="mt-4">
@@ -575,6 +661,14 @@ function PurchasesPage() {
                   fields={[
                     { label: "Items", value: p.lines.reduce((a, l) => a + l.qty, 0) },
                     { label: "Recorded by", value: p.createdBy || "Not recorded" },
+                    { label: "Paid", value: formatRs(purchaseSettlement(p).paid, settings.currency) },
+                    {
+                      label: "Still owed",
+                      value:
+                        purchaseSettlement(p).balance > 0
+                          ? formatRs(purchaseSettlement(p).balance, settings.currency)
+                          : "Nothing",
+                    },
                   ]}
                   actions={billActions(p, false)}
                 />
@@ -590,6 +684,8 @@ function PurchasesPage() {
                   <th className="px-4 py-3 font-medium">Destinations</th>
                   <th className="px-4 py-3 font-medium">Recorded by</th>
                   <th className="px-4 py-3 font-medium text-right">Total</th>
+                  <th className="px-4 py-3 font-medium text-right">Owed</th>
+                  <th className="px-4 py-3 font-medium">Payment</th>
                   <th className="px-4 py-3 font-medium text-right">Actions</th>
                 </tr></thead>
                 <tbody>
@@ -613,18 +709,143 @@ function PurchasesPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-right font-medium">{formatRs(p.total, settings.currency)}</td>
+                      <td className="px-4 py-3 text-right">
+                        {purchaseSettlement(p).balance > 0 ? (
+                          <span className="font-medium text-warning-strong">
+                            {formatRs(purchaseSettlement(p).balance, settings.currency)}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">Nothing owed</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3"><BillStatus purchase={p} /></td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">{billActions(p, true)}</td>
                     </tr>
                   ))}
                   {visiblePurchases.length === 0 && (
-                    <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">No purchases recorded yet.</td></tr>
+                    <tr><td colSpan={10} className="px-4 py-12 text-center text-sm text-muted-foreground">No purchases recorded yet.</td></tr>
                   )}
                 </tbody>
               </table>
             </TableWrap>
           </Card>
         </TabsContent>
+
+        {/*
+          Bought on account and not yet settled.
+
+          This is the half of the credit story the app never showed: the
+          Customers tab has always known what people owe YOU, while what you owe
+          your suppliers was a boolean nobody could total up.
+        */}
+        <TabsContent value="owed" className="mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            <Card className="p-4">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">Still to pay</div>
+              <div className="mt-1 text-2xl font-semibold">{formatRs(owedTotal, settings.currency)}</div>
+            </Card>
+            <Card className="p-4">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">Past its due date</div>
+              <div className={`mt-1 text-2xl font-semibold ${overdueTotal > 0 ? "text-destructive" : ""}`}>
+                {formatRs(overdueTotal, settings.currency)}
+              </div>
+            </Card>
+            <Card className="p-4">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">Open bills</div>
+              <div className="mt-1 text-2xl font-semibold">{owedBills.length}</div>
+            </Card>
+          </div>
+
+          <Card className="overflow-hidden">
+            <MobileCards
+              items={owedBills}
+              keyOf={(b) => b.purchase.id}
+              empty="Nothing owed — every bill is settled."
+              render={(b) => (
+                <ListCard
+                  title={<span className="font-mono">{b.purchase.billNo}</span>}
+                  subtitle={`${b.purchase.supplier} · ${b.purchase.date}`}
+                  right={formatRs(b.balance, settings.currency)}
+                  badges={[<BillStatus key="st" purchase={b.purchase} />]}
+                  fields={[
+                    { label: "Bill total", value: formatRs(b.purchase.total, settings.currency) },
+                    { label: "Paid so far", value: formatRs(b.paid, settings.currency) },
+                    { label: "Due", value: b.purchase.dueDate || "No date agreed" },
+                  ]}
+                  actions={billActions(b.purchase, false)}
+                />
+              )}
+            />
+            <TableWrap>
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 sticky top-0 z-10"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-3 font-medium">Bill no</th>
+                  <th className="px-4 py-3 font-medium">Supplier</th>
+                  <th className="px-4 py-3 font-medium">Dated</th>
+                  <th className="px-4 py-3 font-medium">Due</th>
+                  <th className="px-4 py-3 font-medium text-right">Bill total</th>
+                  <th className="px-4 py-3 font-medium text-right">Paid</th>
+                  <th className="px-4 py-3 font-medium text-right">Still owed</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium text-right">Actions</th>
+                </tr></thead>
+                <tbody>
+                  {owedBills.map((b) => (
+                    <tr key={b.purchase.id} className="border-t hover:bg-muted/40">
+                      <td className="px-4 py-3 font-mono text-xs">{b.purchase.billNo}</td>
+                      <td className="px-4 py-3">{b.purchase.supplier}</td>
+                      <td className="px-4 py-3">{b.purchase.date}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {b.purchase.dueDate || "No date agreed"}
+                      </td>
+                      <td className="px-4 py-3 text-right">{formatRs(b.purchase.total, settings.currency)}</td>
+                      <td className="px-4 py-3 text-right text-muted-foreground">{formatRs(b.paid, settings.currency)}</td>
+                      <td className="px-4 py-3 text-right font-medium text-warning-strong">{formatRs(b.balance, settings.currency)}</td>
+                      <td className="px-4 py-3"><BillStatus purchase={b.purchase} /></td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">{billActions(b.purchase, true)}</td>
+                    </tr>
+                  ))}
+                  {owedBills.length === 0 && (
+                    <tr><td colSpan={9} className="px-4 py-12 text-center text-sm text-muted-foreground">Nothing owed — every bill is settled.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </TableWrap>
+          </Card>
+
+          {/*
+            Paying is offered per SUPPLIER rather than per bill, because that is
+            how it is actually settled: one lump sum at the end of the month
+            covering whatever is outstanding, not a payment allocated to a
+            particular slip.
+          */}
+          {owedBills.length > 0 && (
+            <Card className="mt-4 p-4">
+              <div className="text-sm font-medium mb-1">Pay a supplier</div>
+              <p className="text-xs text-muted-foreground mb-3">
+                Paid against their whole account, not one bill. The oldest bills clear first.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {[...new Set(owedBills.map((b) => b.purchase.supplierId).filter(Boolean))].map((sid) => {
+                  const sup = suppliers.find((x) => x.id === sid);
+                  if (!sup) return null;
+                  const owed = owedBills
+                    .filter((b) => b.purchase.supplierId === sid)
+                    .reduce((a, b) => a + b.balance, 0);
+                  return (
+                    <Button key={sid} variant="outline" size="sm" onClick={() => setPayFor(sup)}>
+                      <Wallet className="h-3.5 w-3.5 mr-1.5" />
+                      {sup.name} — {formatRs(owed, settings.currency)}
+                    </Button>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+        </TabsContent>
       </Tabs>
+
+      <SupplierPaymentDialog supplier={payFor} onClose={() => setPayFor(null)} />
 
       <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setEditing(null); }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -831,10 +1052,87 @@ function PurchasesPage() {
             </Button>
           </div>
 
+          {/*
+            How the bill is being settled.
+
+            Kept next to the total rather than at the top of the form, because
+            it is the last thing decided: you agree the goods, you total them
+            up, and then you work out what is going across the counter today.
+          */}
+          <div className="mt-4 rounded-lg border p-3 space-y-3 bg-muted/20">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Wallet className="h-4 w-4" /> Payment
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">How is it being paid?</Label>
+                <Select
+                  value={payMethod}
+                  onValueChange={(v) => {
+                    setPayMethod(v as PaymentMethod);
+                    // Back to following the method: switching to Credit should
+                    // clear a full payment typed a moment ago, and vice versa.
+                    setPaidNow(null);
+                    if (v === "Credit" && !dueDate) setDueDate(shiftDay(date, 30));
+                  }}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Cash">Cash — paid now</SelectItem>
+                    <SelectItem value="Card">Card — paid now</SelectItem>
+                    <SelectItem value="Online">Online / transfer — paid now</SelectItem>
+                    <SelectItem value="Credit">On account — pay later</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Paid today</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={total}
+                  value={paidAmount || ""}
+                  placeholder="0"
+                  onChange={(e) => setPaidNow(Math.max(0, Math.min(total, Number(e.target.value) || 0)))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Balance due by</Label>
+                <Input
+                  type="date"
+                  value={dueDate}
+                  disabled={billBalance === 0}
+                  onChange={(e) => setDueDate(e.target.value)}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {billBalance === 0 ? (
+                <>Settled in full — nothing is added to what you owe {supplier?.name ?? "this supplier"}.</>
+              ) : (
+                <>
+                  {formatRs(billBalance, settings.currency)} goes onto {supplier?.name ?? "the supplier"}
+                  {"'"}s account
+                  {dueDate ? `, due ${dueDate}` : " with no due date set"}. Pay it from the Suppliers tab.
+                </>
+              )}
+              {!isAdmin && payMethod === "Cash" && paidAmount > 0 && (
+                <> This cash leaves your till, so tonight{"'"}s count expects it to be gone.</>
+              )}
+            </p>
+          </div>
+
           {/* flex-col-reverse (the footer default) would put the total under the
               buttons on a phone, so this footer lays itself out explicitly. */}
           <DialogFooter className="border-t pt-4 flex-col gap-3 !justify-between sm:flex-row sm:items-center">
-            <div className="text-lg font-semibold">Total: {formatRs(total)}</div>
+            <div className="text-lg font-semibold">
+              Total: {formatRs(total)}
+              {billBalance > 0 && (
+                <span className="ml-2 text-sm font-normal text-warning-strong">
+                  {formatRs(paidAmount)} paid · {formatRs(billBalance)} owed
+                </span>
+              )}
+            </div>
             <div className="flex gap-2 [&>*]:flex-1 sm:[&>*]:flex-none">
               <Button variant="outline" onClick={() => { setOpen(false); setEditing(null); }}>Cancel</Button>
               <Button onClick={save}>{editing ? "Save correction" : "Save purchase"}</Button>
@@ -843,6 +1141,29 @@ function PurchasesPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/**
+ * Where a bill stands: paid, part paid, or wholly on account.
+ *
+ * An overdue bill says so rather than just reading "Unpaid" — the number of
+ * days is the part that makes someone pick up the phone.
+ */
+function BillStatus({ purchase }: { purchase: Purchase }) {
+  const { status, balance } = purchaseSettlement(purchase);
+  const overdue = balance > 0 && purchase.dueDate && purchase.dueDate < todayISO();
+
+  if (status === "Paid") return <StatusPill status="Paid" />;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <StatusPill status={status} />
+      {overdue && (
+        <span className="inline-flex items-center gap-1 text-xs text-destructive">
+          <AlertTriangle className="h-3 w-3" /> overdue
+        </span>
+      )}
+    </span>
   );
 }
 

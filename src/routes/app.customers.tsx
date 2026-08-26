@@ -6,6 +6,9 @@ import {
   todayISO,
   customerBalance,
   totalOutstanding,
+  totalAdvances,
+  customerLedger,
+  linkedSupplier,
   businessDayOf,
   shortDay,
   type Customer,
@@ -22,7 +25,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Plus, Search, Download, Users, Wallet, HandCoins, Pencil, Phone, AlertTriangle, Trash2 } from "lucide-react";
+import { LedgerTable } from "@/components/LedgerTable";
+import { SetOffDialog } from "@/components/SetOffDialog";
+import {
+  Plus, Search, Download, Users, Wallet, HandCoins, Pencil, Phone, AlertTriangle, Trash2,
+  PiggyBank, ArrowLeftRight,
+} from "lucide-react";
 import { Confirm } from "@/components/Confirm";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
@@ -32,11 +40,14 @@ export const Route = createFileRoute("/app/customers")({ component: CustomersPag
 const EMPTY = {
   name: "", contact: "", phone: "", address: "", notes: "",
   kind: "wholesale" as Customer["kind"], creditLimit: 0,
+  /** "" means this customer is not also one of your suppliers. */
+  linkedSupplierId: "",
 };
 
 function CustomersPage() {
   const {
     user, customers, customerPayments, sales, shops, settings, pendingMigration,
+    suppliers, purchases, supplierPayments, returns, setOffs,
     addCustomer, updateCustomer, addCustomerPayment, updateCustomerPayment, deleteCustomerPayment,
   } = useStore();
   const isAdmin = user?.role === "admin";
@@ -50,7 +61,7 @@ function CustomersPage() {
   const cannotSave = Boolean(pendingMigration?.includes("customers"));
 
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState<"all" | "owing" | "wholesale">("all");
+  const [filter, setFilter] = useState<"all" | "owing" | "advance" | "wholesale">("all");
   const [form, setForm] = useState(EMPTY);
   const [editing, setEditing] = useState<Customer | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -60,7 +71,20 @@ function CustomersPage() {
   const [payEditing, setPayEditing] = useState<CustomerPayment | null>(null);
   const [pay, setPay] = useState({ amount: 0, method: "Cash" as SettledMethod, note: "", shopId: "" });
 
-  const ledger = useMemo(() => ({ sales, customerPayments }), [sales, customerPayments]);
+  /**
+   * Everything a balance is derived from.
+   *
+   * Purchases and supplier payments are in here because a set-off reduces what
+   * a customer owes, and the ledger helpers need both sides of the partner to
+   * work out how much could be cancelled.
+   */
+  const ledger = useMemo(
+    () => ({ sales, customerPayments, purchases, supplierPayments, returns, setOffs }),
+    [sales, customerPayments, purchases, supplierPayments, returns, setOffs],
+  );
+
+  /** The partner whose two balances are being cancelled against each other. */
+  const [settleFor, setSettleFor] = useState<Customer | null>(null);
 
   const rows = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -75,6 +99,7 @@ function CustomersPage() {
       )
       .filter((r) =>
         filter === "owing" ? r.balance.outstanding > 0
+        : filter === "advance" ? r.balance.advance > 0
         : filter === "wholesale" ? r.customer.kind === "wholesale"
         : true,
       )
@@ -83,6 +108,9 @@ function CustomersPage() {
   }, [customers, ledger, q, filter]);
 
   const owed = useMemo(() => totalOutstanding(customers, ledger), [customers, ledger]);
+  // Money in the business that belongs to somebody else until they collect the
+  // goods. Worth its own tile: it flatters the cash position if you forget it.
+  const advances = useMemo(() => totalAdvances(customers, ledger), [customers, ledger]);
   const owingCount = rows.filter((r) => r.balance.outstanding > 0).length;
   const overLimit = useMemo(
     () => customers.filter((c) => customerBalance(c, ledger).overLimit).length,
@@ -91,6 +119,9 @@ function CustomersPage() {
 
   const selected = detail ? customers.find((c) => c.id === detail) : null;
   const selectedBalance = selected ? customerBalance(selected, ledger) : null;
+  const selectedEntries = selected ? customerLedger(selected, ledger) : [];
+  /** The supplier record for the same business, when they sit on both sides. */
+  const selectedPartner = selected ? linkedSupplier(selected, suppliers) : undefined;
   const history = useMemo(() => {
     if (!selected) return { orders: [], payments: [] };
     return {
@@ -102,7 +133,10 @@ function CustomersPage() {
   const openAdd = () => { setEditing(null); setForm(EMPTY); setFormOpen(true); };
   const openEdit = (c: Customer) => {
     setEditing(c);
-    setForm({ name: c.name, contact: c.contact, phone: c.phone, address: c.address, notes: c.notes, kind: c.kind, creditLimit: c.creditLimit });
+    setForm({
+      name: c.name, contact: c.contact, phone: c.phone, address: c.address, notes: c.notes,
+      kind: c.kind, creditLimit: c.creditLimit, linkedSupplierId: c.linkedSupplierId ?? "",
+    });
     setFormOpen(true);
   };
 
@@ -114,23 +148,39 @@ function CustomersPage() {
       return;
     }
     if (form.creditLimit < 0) { toast.error("Credit limit can't be negative"); return; }
+    // Stored as undefined rather than "" so the column stays null in Postgres
+    // and the "is this party linked" check is a simple truthiness test.
+    const linkedSupplierId = form.linkedSupplierId || undefined;
     if (editing) {
-      updateCustomer({ ...editing, ...form, name });
+      updateCustomer({ ...editing, ...form, name, linkedSupplierId });
       toast.success("Customer updated");
     } else {
-      addCustomer({ ...form, name, active: true });
+      addCustomer({ ...form, name, linkedSupplierId, active: true });
       toast.success(`${name} added`);
     }
     setFormOpen(false);
   };
 
+  /**
+   * Taking money in from a customer.
+   *
+   * No longer refused when nothing is outstanding: a trade buyer who hands over
+   * a lump sum on the 1st and draws stock against it all month is doing exactly
+   * that, and turning them away meant the shop had no way to record real money
+   * it had actually received.
+   */
   const openPayment = (c: Customer) => {
     const balance = customerBalance(c, ledger);
-    if (balance.outstanding <= 0) { toast.info(`${c.name} has nothing outstanding`); return; }
     setPayEditing(null);
     setPayFor(c);
     // Default to settling the lot; part-payments are the edit, not the norm.
-    setPay({ amount: balance.outstanding, method: "Cash", note: "", shopId: user?.shopId ?? shops[0]?.id ?? "" });
+    // With nothing owed it opens blank, because an advance has no obvious size.
+    setPay({
+      amount: balance.outstanding,
+      method: "Cash",
+      note: balance.outstanding > 0 ? "" : "Advance against future purchases",
+      shopId: user?.shopId ?? shops[0]?.id ?? "",
+    });
   };
 
   /** The same dialog, loaded with a receipt that was already recorded. */
@@ -144,16 +194,12 @@ function CustomersPage() {
     if (!payFor) return;
     const balance = customerBalance(payFor, ledger);
     if (pay.amount <= 0) { toast.error("Enter an amount"); return; }
-    // Accepting more than is owed would leave a negative balance that reads as
-    // the business owing the customer, which is not a thing this app models.
-    // When correcting a receipt, the amount it already contributes is part of
-    // what's settled, so it has to be added back before the comparison.
-    const ceiling = balance.outstanding + (payEditing?.amount ?? 0);
-    if (pay.amount > ceiling) {
-      toast.error(`That's more than the ${formatRs(ceiling, currency)} outstanding`);
-      return;
-    }
     if (!pay.shopId) { toast.error("Pick which shop received the money"); return; }
+    // Anything over what is owed is an advance rather than an error. When
+    // correcting a receipt the amount it already contributes is part of what is
+    // settled, so it has to be added back before working out the excess.
+    const ceiling = balance.outstanding + (payEditing?.amount ?? 0);
+    const advance = Math.max(0, pay.amount - ceiling);
     if (payEditing) {
       updateCustomerPayment({
         ...payEditing,
@@ -176,7 +222,11 @@ function CustomersPage() {
       note: pay.note.trim(),
       receivedBy: user?.name ?? "Unknown",
     });
-    toast.success(`${formatRs(pay.amount, currency)} received from ${payFor.name}`);
+    toast.success(
+      advance > 0
+        ? `${formatRs(pay.amount, currency)} received — ${formatRs(advance, currency)} held as an advance`
+        : `${formatRs(pay.amount, currency)} received from ${payFor.name}`,
+    );
     setPayFor(null);
   };
 
@@ -226,12 +276,18 @@ function CustomersPage() {
       <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4 mb-4">
         <StatCard label="Customers" value={String(customers.length)} sub={`${customers.filter((c) => c.kind === "wholesale").length} trade buyers`} icon={<Users className="h-5 w-5" />} tone="primary" />
         <StatCard label="Total outstanding" value={formatRs(owed, currency)} sub={`${owingCount} owing`} icon={<Wallet className="h-5 w-5" />} tone="warning" />
-        <StatCard label="At credit limit" value={String(overLimit)} sub={overLimit > 0 ? "no more credit" : "all within limit"} icon={<AlertTriangle className="h-5 w-5" />} tone={overLimit > 0 ? "warning" : "default"} />
+        <StatCard
+          label="Advances held"
+          value={formatRs(advances, currency)}
+          sub={advances > 0 ? "paid ahead, not yet drawn" : "none held"}
+          icon={<PiggyBank className="h-5 w-5" />}
+          tone={advances > 0 ? "primary" : "default"}
+        />
         {isAdmin && (
           <StatCard
             label="Collected"
             value={formatRs(customerPayments.reduce((a, p) => a + p.amount, 0), currency)}
-            sub="all time"
+            sub={`all time · ${overLimit} at limit`}
             icon={<HandCoins className="h-5 w-5" />}
             tone="success"
           />
@@ -253,6 +309,7 @@ function CustomersPage() {
             <SelectContent>
               <SelectItem value="all">All customers</SelectItem>
               <SelectItem value="owing">Owing money</SelectItem>
+              <SelectItem value="advance">Paid in advance</SelectItem>
               <SelectItem value="wholesale">Trade buyers</SelectItem>
             </SelectContent>
           </Select>
@@ -272,11 +329,18 @@ function CustomersPage() {
               onClick={() => setDetail(c.id)}
               title={c.name}
               subtitle={c.contact || c.phone}
-              right={b.outstanding > 0 ? formatRs(b.outstanding, currency) : "Settled"}
-              rightSub={b.outstanding > 0 ? "outstanding" : "settled"}
+              right={
+                b.outstanding > 0
+                  ? formatRs(b.outstanding, currency)
+                  : b.advance > 0
+                    ? formatRs(b.advance, currency)
+                    : "Settled"
+              }
+              rightSub={b.outstanding > 0 ? "outstanding" : b.advance > 0 ? "in advance" : "settled"}
               badges={
                 <>
                   <StatusPill status={c.kind === "wholesale" ? "Trade" : "Retail"} />
+                  {b.advance > 0 && <StatusPill status="Advance" />}
                   {b.overLimit && <StatusPill status="OUT" />}
                 </>
               }
@@ -287,8 +351,9 @@ function CustomersPage() {
               ]}
               actions={
                 <>
-                  <Button size="sm" variant="outline" disabled={b.outstanding <= 0} onClick={() => openPayment(c)}>
-                    <HandCoins className="h-3.5 w-3.5 mr-1.5" />Receive
+                  <Button size="sm" variant="outline" onClick={() => openPayment(c)}>
+                    <HandCoins className="h-3.5 w-3.5 mr-1.5" />
+                    {b.outstanding > 0 ? "Receive" : "Take advance"}
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => openEdit(c)}>
                     <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
@@ -308,6 +373,7 @@ function CustomersPage() {
                 <th className="px-4 py-3 font-medium text-right">Orders</th>
                 <th className="px-4 py-3 font-medium text-right">Lifetime</th>
                 <th className="px-4 py-3 font-medium text-right">Outstanding</th>
+                <th className="px-4 py-3 font-medium text-right">In advance</th>
                 <th className="px-4 py-3 font-medium text-right">Limit</th>
                 <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
@@ -333,11 +399,23 @@ function CustomersPage() {
                   <td className={`px-4 py-3 text-right font-semibold ${b.outstanding > 0 ? "text-warning-strong" : "text-muted-foreground"}`}>
                     {b.outstanding > 0 ? formatRs(b.outstanding, currency) : "Settled"}
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    {b.advance > 0 ? (
+                      <span className="font-medium text-accent-strong">{formatRs(b.advance, currency)}</span>
+                    ) : (
+                      <span className="text-muted-foreground">None held</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-right text-muted-foreground">
                     {c.creditLimit ? formatRs(c.creditLimit, currency) : "none"}
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                    <Button size="sm" variant="ghost" disabled={b.outstanding <= 0} onClick={() => openPayment(c)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => openPayment(c)}
+                      title={b.outstanding > 0 ? "Receive payment" : "Take an advance"}
+                    >
                       <HandCoins className="h-3.5 w-3.5" />
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => openEdit(c)}>
@@ -347,7 +425,7 @@ function CustomersPage() {
                 </tr>
               ))}
               {rows.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">No customers match.</td></tr>
+                <tr><td colSpan={9} className="px-4 py-12 text-center text-sm text-muted-foreground">No customers match.</td></tr>
               )}
             </tbody>
           </table>
@@ -399,6 +477,33 @@ function CustomersPage() {
               <Label>Notes</Label>
               <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="e.g. Buys every Monday, pays within a week" />
             </div>
+            {/*
+              The same business on both sides of the books.
+
+              Common in trade: he takes stock from you on account and supplies
+              you on account. Linking the two records is what lets the app offer
+              to cancel the debts against each other instead of two payments
+              crossing in opposite directions.
+            */}
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Do you also buy from them?</Label>
+              <Select
+                value={form.linkedSupplierId || "__none__"}
+                onValueChange={(v) => setForm({ ...form, linkedSupplierId: v === "__none__" ? "" : v })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No — they only buy from us</SelectItem>
+                  {suppliers.map((sup) => (
+                    <SelectItem key={sup.id} value={sup.id}>Yes — they are {sup.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Link them to their supplier record and what they owe you can be cancelled against what
+                you owe them, instead of both being paid in full.
+              </p>
+            </div>
             <p className="sm:col-span-2 text-xs text-muted-foreground">
               A credit limit stops the till putting more on this customer's account once they reach it.
               Leave it at 0 if you don't want a cap.
@@ -417,7 +522,10 @@ function CustomersPage() {
           <DialogHeader>
             <DialogTitle>{payEditing ? "Correct payment" : "Receive payment"}</DialogTitle>
             <DialogDescription>
-              {payFor && `${payFor.name} owes ${formatRs(customerBalance(payFor, ledger).outstanding, currency)}.`}
+              {payFor &&
+                (customerBalance(payFor, ledger).outstanding > 0
+                  ? `${payFor.name} owes ${formatRs(customerBalance(payFor, ledger).outstanding, currency)}.`
+                  : `${payFor.name} owes nothing — anything taken now is an advance they can draw stock against.`)}
               {payEditing && ` Taken ${shortDay(payEditing.date)} by ${payEditing.receivedBy || "staff"}.`}
             </DialogDescription>
           </DialogHeader>
@@ -463,6 +571,18 @@ function CustomersPage() {
                 Cash goes into that shop's drawer, so tonight's cash count will expect it.
               </p>
             )}
+            {/* Said before the money is taken, not after: whether this is a
+                settlement or an advance changes what the shop tells the buyer. */}
+            {payFor && pay.amount > customerBalance(payFor, ledger).outstanding + (payEditing?.amount ?? 0) && (
+              <p className="sm:col-span-2 text-xs text-accent-strong">
+                {formatRs(
+                  pay.amount - customerBalance(payFor, ledger).outstanding - (payEditing?.amount ?? 0),
+                  currency,
+                )}{" "}
+                more than is owed — that part is held as an advance and comes off their next purchases
+                on account.
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setPayFor(null); setPayEditing(null); }}>Cancel</Button>
@@ -489,9 +609,19 @@ function CustomersPage() {
               <div className="mt-6 space-y-5">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-lg border p-3">
-                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Outstanding</div>
-                    <div className={`font-semibold text-lg mt-1 ${selectedBalance.outstanding > 0 ? "text-warning-strong" : ""}`}>
-                      {formatRs(selectedBalance.outstanding, currency)}
+                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                      {selectedBalance.advance > 0 ? "Advance held" : "Outstanding"}
+                    </div>
+                    <div
+                      className={`font-semibold text-lg mt-1 ${
+                        selectedBalance.outstanding > 0
+                          ? "text-warning-strong"
+                          : selectedBalance.advance > 0
+                            ? "text-accent-strong"
+                            : ""
+                      }`}
+                    >
+                      {formatRs(selectedBalance.outstanding || selectedBalance.advance, currency)}
                     </div>
                   </div>
                   <div className="rounded-lg border p-3">
@@ -503,7 +633,16 @@ function CustomersPage() {
                 <div className="rounded-lg border p-3 space-y-2 text-sm">
                   <div className="flex justify-between"><span className="text-muted-foreground">Put on account</span><span>{formatRs(selectedBalance.creditSales, currency)}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Paid back</span><span>− {formatRs(selectedBalance.paid, currency)}</span></div>
-                  <div className="flex justify-between border-t pt-2 font-semibold"><span>Still owed</span><span>{formatRs(selectedBalance.outstanding, currency)}</span></div>
+                  {selectedBalance.setOff > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Set off against what you owe them</span>
+                      <span>− {formatRs(selectedBalance.setOff, currency)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between border-t pt-2 font-semibold">
+                    <span>{selectedBalance.advance > 0 ? "Advance held for them" : "Still owed"}</span>
+                    <span>{formatRs(selectedBalance.outstanding || selectedBalance.advance, currency)}</span>
+                  </div>
                   {selected.creditLimit > 0 && (
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>Credit limit</span>
@@ -516,14 +655,57 @@ function CustomersPage() {
                   <p className="text-sm text-muted-foreground italic">{selected.notes}</p>
                 )}
 
+                {/*
+                  They buy from you and you buy from them. Surfaced here because
+                  the money that can be cancelled is real money, and nobody
+                  thinks to cross-check two tabs to find it.
+                */}
+                {selectedPartner && (
+                  <div className="rounded-lg border border-accent/40 bg-accent/5 p-3 text-sm">
+                    <div className="flex items-center gap-2 font-medium">
+                      <ArrowLeftRight className="h-4 w-4" />
+                      Also a supplier: {selectedPartner.name}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Anything owed in both directions can be cancelled instead of paid twice.
+                    </p>
+                    <Button size="sm" className="mt-2" onClick={() => { setDetail(null); setSettleFor(selected); }}>
+                      Set off the two balances
+                    </Button>
+                  </div>
+                )}
+
                 <div className="flex gap-2">
-                  <Button className="flex-1" disabled={selectedBalance.outstanding <= 0} onClick={() => { setDetail(null); openPayment(selected); }}>
-                    <HandCoins className="h-4 w-4 mr-1.5" />Receive payment
+                  <Button className="flex-1" onClick={() => { setDetail(null); openPayment(selected); }}>
+                    <HandCoins className="h-4 w-4 mr-1.5" />
+                    {selectedBalance.outstanding > 0 ? "Receive payment" : "Take an advance"}
                   </Button>
                   {selected.phone && (
                     <Button variant="outline" asChild>
                       <a href={`tel:${selected.phone}`}><Phone className="h-4 w-4" /></a>
                     </Button>
+                  )}
+                </div>
+
+                {/*
+                  The statement, oldest first — the thing you read out when
+                  somebody disputes what they owe. Only credit sales appear:
+                  a cash sale was never part of the account.
+                */}
+                <div>
+                  <h4 className="font-semibold text-sm mb-2">Account statement</h4>
+                  <LedgerTable
+                    entries={selectedEntries}
+                    debitLabel="Taken on account"
+                    creditLabel="Paid / set off"
+                    balanceLabel="Owes"
+                    empty="Nothing on account — every purchase was settled at the counter."
+                  />
+                  {selectedBalance.advance > 0 && (
+                    <p className="mt-2 text-xs text-accent-strong">
+                      The balance is negative because they have paid ahead: {formatRs(selectedBalance.advance, currency)}
+                      {" "}is held against purchases they have yet to make.
+                    </p>
                   )}
                 </div>
 
@@ -609,6 +791,12 @@ function CustomersPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      <SetOffDialog
+        customer={settleFor}
+        supplier={settleFor ? linkedSupplier(settleFor, suppliers) ?? null : null}
+        onClose={() => setSettleFor(null)}
+      />
     </div>
   );
 }

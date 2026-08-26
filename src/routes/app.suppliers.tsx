@@ -1,6 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useStore, formatRs, type Supplier } from "@/lib/store";
+import {
+  useStore, formatRs, supplierBalance, supplierLedger, linkedCustomer, purchaseSettlement,
+  type Supplier, type SupplierPayment,
+} from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { StatusPill } from "@/components/Stat";
 import { Card } from "@/components/ui/card";
@@ -13,7 +16,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Confirm } from "@/components/Confirm";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
-import { Plus, Download, Search, Pencil, Truck, Phone, Mail, MapPin, PackagePlus } from "lucide-react";
+import { SupplierPaymentDialog } from "@/components/SupplierPaymentDialog";
+import { SetOffDialog } from "@/components/SetOffDialog";
+import { LedgerTable } from "@/components/LedgerTable";
+import {
+  Plus, Download, Search, Pencil, Truck, Phone, Mail, MapPin, PackagePlus,
+  Wallet, ArrowLeftRight, Trash2,
+} from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
 
@@ -105,15 +114,29 @@ function SupplierDialog({
 }
 
 function SuppliersPage() {
-  const { user, suppliers, purchases, returns, products, shops, settings } = useStore();
+  const {
+    user, suppliers, purchases, returns, products, shops, settings,
+    sales, customers, customerPayments, supplierPayments, setOffs, deleteSupplierPayment,
+  } = useStore();
   const isAdmin = user?.role === "admin";
   const navigate = useNavigate();
   const [q, setQ] = useState("");
+  const [filter, setFilter] = useState<"all" | "owing">("all");
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Supplier | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  /** The supplier being paid, and the receipt being corrected if it is one. */
+  const [payFor, setPayFor] = useState<Supplier | null>(null);
+  const [payEditing, setPayEditing] = useState<SupplierPayment | null>(null);
+  const [settleFor, setSettleFor] = useState<Supplier | null>(null);
 
   const money = (n: number) => formatRs(n, settings.currency);
+
+  /** Everything the ledger helpers read, assembled once per render. */
+  const ledgerData = useMemo(
+    () => ({ sales, customerPayments, purchases, supplierPayments, returns, setOffs }),
+    [sales, customerPayments, purchases, supplierPayments, returns, setOffs],
+  );
 
   /** Bills belong to a supplier by id, falling back to the name on older records. */
   const billsFor = (s: Supplier) =>
@@ -138,6 +161,7 @@ function SuppliersPage() {
           spent: bills.reduce((a, b) => a + b.total, 0),
           credited: credits.reduce((a, r) => a + r.refund, 0),
           lastPurchase: last,
+          balance: supplierBalance(s, ledgerData),
         };
       })
       .filter((r) =>
@@ -147,12 +171,36 @@ function SuppliersPage() {
             r.supplier.phone.includes(term)
           : true,
       )
-      .sort((a, b) => b.spent - a.spent || a.supplier.name.localeCompare(b.supplier.name));
-  }, [suppliers, purchases, returns, q]);
+      .filter((r) => (filter === "owing" ? r.balance.outstanding > 0 : true))
+      // Whoever is owed the most comes first: that is the cheque that has to be
+      // written next, which is a more useful ordering than lifetime spend.
+      .sort(
+        (a, b) =>
+          b.balance.outstanding - a.balance.outstanding ||
+          b.spent - a.spent ||
+          a.supplier.name.localeCompare(b.supplier.name),
+      );
+  }, [suppliers, purchases, returns, q, filter, ledgerData]);
+
+  const totals = useMemo(() => {
+    const all = suppliers.map((s) => supplierBalance(s, ledgerData));
+    return {
+      payable: all.reduce((a, b) => a + b.outstanding, 0),
+      advance: all.reduce((a, b) => a + b.advance, 0),
+      owing: all.filter((b) => b.outstanding > 0).length,
+    };
+  }, [suppliers, ledgerData]);
 
   const open = openId ? suppliers.find((s) => s.id === openId) ?? null : null;
   const openBills = open ? billsFor(open).slice().sort((a, b) => b.date.localeCompare(a.date)) : [];
   const openReturns = open ? returnsFor(open) : [];
+  const openBalance = open ? supplierBalance(open, ledgerData) : null;
+  const openEntries = open ? supplierLedger(open, ledgerData) : [];
+  const openPayments = open
+    ? supplierPayments.filter((p) => p.supplierId === open.id).sort((a, b) => b.date.localeCompare(a.date))
+    : [];
+  /** The customer record for the same business, when they sit on both sides. */
+  const openPartner = open ? linkedCustomer(open, customers) : undefined;
 
   /** Everything ever bought from this supplier, rolled up per product. */
   const openItems = useMemo(() => {
@@ -226,8 +274,27 @@ function SuppliersPage() {
             <Input placeholder="Name, contact or phone…" className="pl-9 w-full sm:w-64" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
         </div>
-        <div className="text-xs text-muted-foreground sm:ml-auto">
-          {rows.length} suppliers · {money(rows.reduce((a, r) => a + r.spent, 0))} spent
+        <div className="space-y-1.5">
+          <Label className="text-xs">Show</Label>
+          <div className="flex gap-1.5">
+            {(["all", "owing"] as const).map((f) => (
+              <Button
+                key={f}
+                size="sm"
+                variant={filter === f ? "default" : "outline"}
+                onClick={() => setFilter(f)}
+              >
+                {f === "all" ? "All" : `Owed money (${totals.owing})`}
+              </Button>
+            ))}
+          </div>
+        </div>
+        <div className="text-xs text-muted-foreground sm:ml-auto sm:text-right">
+          <div>{rows.length} suppliers · {money(rows.reduce((a, r) => a + r.spent, 0))} spent</div>
+          <div className="mt-0.5">
+            You owe <span className="font-medium text-warning-strong">{money(totals.payable)}</span>
+            {totals.advance > 0 && <> · {money(totals.advance)} sitting with them as advances</>}
+          </div>
         </div>
       </Card>
 
@@ -241,19 +308,30 @@ function SuppliersPage() {
               onClick={() => setOpenId(r.supplier.id)}
               title={r.supplier.name}
               subtitle={[r.supplier.contact, r.supplier.phone].filter(Boolean).join(" · ") || "No contact details"}
-              right={money(r.spent)}
-              rightSub="total spent"
-              badges={<StatusPill status={r.supplier.active ? "Active" : "Disabled"} />}
+              right={r.balance.outstanding > 0 ? money(r.balance.outstanding) : money(r.spent)}
+              rightSub={r.balance.outstanding > 0 ? "you owe" : "total spent"}
+              badges={
+                <>
+                  <StatusPill status={r.supplier.active ? "Active" : "Disabled"} />
+                  {r.balance.outstanding > 0 && <StatusPill status="You owe" />}
+                  {r.balance.advance > 0 && <StatusPill status="Advance" />}
+                </>
+              }
               fields={[
                 { label: "Bills", value: r.bills },
-                { label: "Items", value: r.distinctItems },
-                { label: "Units", value: r.units },
+                { label: "Open bills", value: r.balance.unpaidBills },
+                { label: "Total spent", value: money(r.spent) },
                 { label: "Last purchase", value: r.lastPurchase ?? "Never" },
               ]}
               actions={
-                <Button size="sm" variant="outline" onClick={() => setEditing(r.supplier)}>
-                  <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
-                </Button>
+                <>
+                  <Button size="sm" variant="outline" onClick={() => setEditing(r.supplier)}>
+                    <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
+                  </Button>
+                  <Button size="sm" onClick={() => { setPayEditing(null); setPayFor(r.supplier); }}>
+                    <Wallet className="h-3.5 w-3.5 mr-1.5" />Pay
+                  </Button>
+                </>
               }
             />
           )}
@@ -266,9 +344,10 @@ function SuppliersPage() {
                 <th className="px-4 py-3 font-medium">Contact</th>
                 <th className="px-4 py-3 font-medium">Phone</th>
                 <th className="px-4 py-3 font-medium text-right">Bills</th>
-                <th className="px-4 py-3 font-medium text-right">Items</th>
+                <th className="px-4 py-3 font-medium text-right">Open</th>
                 <th className="px-4 py-3 font-medium text-right">Units</th>
                 <th className="px-4 py-3 font-medium text-right">Total spent</th>
+                <th className="px-4 py-3 font-medium text-right">You owe</th>
                 <th className="px-4 py-3 font-medium">Last purchase</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium text-right">Actions</th>
@@ -285,12 +364,30 @@ function SuppliersPage() {
                   <td className="px-4 py-3 text-muted-foreground">{r.supplier.contact || "Not given"}</td>
                   <td className="px-4 py-3 text-muted-foreground">{r.supplier.phone || "Not given"}</td>
                   <td className="px-4 py-3 text-right">{r.bills}</td>
-                  <td className="px-4 py-3 text-right">{r.distinctItems}</td>
+                  <td className="px-4 py-3 text-right">
+                    {r.balance.unpaidBills > 0 ? (
+                      r.balance.unpaidBills
+                    ) : (
+                      <span className="text-muted-foreground">None open</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-right">{r.units}</td>
                   <td className="px-4 py-3 text-right font-medium">{money(r.spent)}</td>
+                  <td className="px-4 py-3 text-right">
+                    {r.balance.outstanding > 0 ? (
+                      <span className="font-medium text-warning-strong">{money(r.balance.outstanding)}</span>
+                    ) : r.balance.advance > 0 ? (
+                      <span className="text-accent-strong">{money(r.balance.advance)} ahead</span>
+                    ) : (
+                      <span className="text-muted-foreground">Settled</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">{r.lastPurchase ?? "Never"}</td>
                   <td className="px-4 py-3"><StatusPill status={r.supplier.active ? "Active" : "Disabled"} /></td>
                   <td className="px-4 py-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    <Button size="sm" variant="ghost" onClick={() => { setPayEditing(null); setPayFor(r.supplier); }} title="Record a payment">
+                      <Wallet className="h-3.5 w-3.5" />
+                    </Button>
                     <Button size="sm" variant="ghost" onClick={() => setEditing(r.supplier)}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
@@ -298,7 +395,7 @@ function SuppliersPage() {
                 </tr>
               ))}
               {rows.length === 0 && (
-                <tr><td colSpan={10} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                <tr><td colSpan={11} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   {q ? `No supplier matches “${q}”.` : "No suppliers yet — add your first one."}
                 </td></tr>
               )}
@@ -328,14 +425,47 @@ function SuppliersPage() {
                   <Info icon={<MapPin className="h-3.5 w-3.5" />} label="Address" value={open.address || "Not given"} />
                 </div>
 
+                {/*
+                  What you owe leads, because it is the only figure on this
+                  screen anyone is ever in a hurry to know. Lifetime spend is
+                  history; the balance is a decision.
+                */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <Stat label="Bills" value={String(openBills.length)} />
-                  <Stat label="Units bought" value={String(openBills.reduce((a, b) => a + b.lines.reduce((x, l) => x + l.qty, 0), 0))} />
+                  <Stat
+                    label={openBalance && openBalance.advance > 0 ? "Advance with them" : "You owe"}
+                    value={money(openBalance ? openBalance.outstanding || openBalance.advance : 0)}
+                  />
+                  <Stat label="Open bills" value={String(openBalance?.unpaidBills ?? 0)} />
                   <Stat label="Total spent" value={money(openBills.reduce((a, b) => a + b.total, 0))} />
-                  <Stat label="Returned credit" value={money(openReturns.reduce((a, r) => a + r.refund, 0))} />
+                  <Stat label="Paid so far" value={money((openBalance?.paidOnBills ?? 0) + (openBalance?.paidLater ?? 0))} />
                 </div>
 
+                {/*
+                  The same business on both sides of the books. Shown here
+                  rather than left for the owner to notice, because the money
+                  that can be cancelled is real money and nobody thinks to
+                  cross-check two different tabs.
+                */}
+                {openPartner && (
+                  <div className="rounded-lg border border-accent/40 bg-accent/5 p-3 text-sm">
+                    <div className="flex items-center gap-2 font-medium">
+                      <ArrowLeftRight className="h-4 w-4" />
+                      Also a customer: {openPartner.name}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      You buy from them and sell to them. Anything owed in both directions can be
+                      cancelled off rather than paid twice.
+                    </p>
+                    <Button size="sm" className="mt-2" onClick={() => setSettleFor(open)}>
+                      Set off the two balances
+                    </Button>
+                  </div>
+                )}
+
                 <div className="flex flex-wrap gap-2">
+                  <Button size="sm" onClick={() => { setPayEditing(null); setPayFor(open); }}>
+                    <Wallet className="h-3.5 w-3.5 mr-1.5" />Record payment
+                  </Button>
                   <Button size="sm" variant="outline" onClick={() => setEditing(open)}>
                     <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit details
                   </Button>
@@ -348,6 +478,69 @@ function SuppliersPage() {
                 </div>
 
                 <Separator />
+
+                {/*
+                  The statement, oldest first, exactly as it would be read out
+                  over the phone when someone disputes a figure.
+                */}
+                <section>
+                  <h4 className="font-semibold text-sm mb-2">Account statement</h4>
+                  <LedgerTable
+                    entries={openEntries}
+                    debitLabel="Billed"
+                    creditLabel="Paid / credited"
+                    balanceLabel="You owe"
+                    empty="Nothing on account — no bills and no payments."
+                  />
+                </section>
+
+                <section>
+                  <h4 className="font-semibold text-sm mb-2">Payments made</h4>
+                  {openPayments.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4">
+                      Nothing paid to them yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {openPayments.map((pay) => (
+                        <div key={pay.id} className="border rounded-lg p-3 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-medium">{money(pay.amount)}</div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {pay.date} · {pay.method} ·{" "}
+                              {pay.shopId ? shops.find((x) => x.id === pay.shopId)?.name ?? "a shop" : "Head office"}
+                              {pay.note ? ` · ${pay.note}` : ""}
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => { setPayEditing(pay); setPayFor(open); }}
+                              aria-label="Correct this payment"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Confirm
+                              title="Delete this payment?"
+                              description={`${money(pay.amount)} paid on ${pay.date} will be removed, and what you owe ${open.name} goes back up by that much.`}
+                              confirmLabel="Delete payment"
+                              onConfirm={() => {
+                                deleteSupplierPayment(pay.id);
+                                toast.success("Payment deleted");
+                              }}
+                              trigger={
+                                <Button size="sm" variant="ghost" aria-label="Delete this payment">
+                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                                </Button>
+                              }
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
 
                 <section>
                   <h4 className="font-semibold text-sm mb-2">Items bought from this supplier</h4>
@@ -394,7 +587,14 @@ function SuppliersPage() {
                           <div className="flex items-center justify-between gap-3">
                             <div className="font-mono text-xs">{b.billNo}</div>
                             <div className="text-xs text-muted-foreground">{b.date}</div>
-                            <div className="font-medium">{money(b.total)}</div>
+                            <div className="text-right">
+                              <div className="font-medium">{money(b.total)}</div>
+                              {purchaseSettlement(b).balance > 0 && (
+                                <div className="text-xs text-warning-strong">
+                                  {money(purchaseSettlement(b).balance)} still owed
+                                </div>
+                              )}
+                            </div>
                           </div>
                           <div className="mt-1.5 text-xs text-muted-foreground">
                             {b.lines.map((l) => {
@@ -437,6 +637,17 @@ function SuppliersPage() {
 
       <SupplierDialog open={adding} onClose={() => setAdding(false)} />
       <SupplierDialog open={!!editing} initial={editing} onClose={() => setEditing(null)} />
+
+      <SupplierPaymentDialog
+        supplier={payFor}
+        editing={payEditing}
+        onClose={() => { setPayFor(null); setPayEditing(null); }}
+      />
+      <SetOffDialog
+        customer={settleFor ? linkedCustomer(settleFor, customers) ?? null : null}
+        supplier={settleFor}
+        onClose={() => setSettleFor(null)}
+      />
     </div>
   );
 }

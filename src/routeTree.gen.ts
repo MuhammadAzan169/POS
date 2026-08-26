@@ -23,6 +23,7 @@ import { Route as AppPurchasesRouteImport } from './routes/app.purchases'
 import { Route as AppProductsRouteImport } from './routes/app.products'
 import { Route as AppPosRouteImport } from './routes/app.pos'
 import { Route as AppMessagesRouteImport } from './routes/app.messages'
+import { Route as AppLedgerRouteImport } from './routes/app.ledger'
 import { Route as AppInventoryRouteImport } from './routes/app.inventory'
 import { Route as AppExpensesRouteImport } from './routes/app.expenses'
 import { Route as AppDiscountsRouteImport } from './routes/app.discounts'
@@ -103,6 +104,11 @@ const AppMessagesRoute = AppMessagesRouteImport.update({
   path: '/messages',
   getParentRoute: () => AppRoute,
 } as any)
+const AppLedgerRoute = AppLedgerRouteImport.update({
+  id: '/ledger',
+  path: '/ledger',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppInventoryRoute = AppInventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
@@ -161,6 +167,7 @@ export interface FileRoutesByFullPath {
   '/app/discounts': typeof AppDiscountsRoute
   '/app/expenses': typeof AppExpensesRoute
   '/app/inventory': typeof AppInventoryRoute
+  '/app/ledger': typeof AppLedgerRoute
   '/app/messages': typeof AppMessagesRoute
   '/app/pos': typeof AppPosRoute
   '/app/products': typeof AppProductsRoute
@@ -186,6 +193,7 @@ export interface FileRoutesByTo {
   '/app/discounts': typeof AppDiscountsRoute
   '/app/expenses': typeof AppExpensesRoute
   '/app/inventory': typeof AppInventoryRoute
+  '/app/ledger': typeof AppLedgerRoute
   '/app/messages': typeof AppMessagesRoute
   '/app/pos': typeof AppPosRoute
   '/app/products': typeof AppProductsRoute
@@ -212,6 +220,7 @@ export interface FileRoutesById {
   '/app/discounts': typeof AppDiscountsRoute
   '/app/expenses': typeof AppExpensesRoute
   '/app/inventory': typeof AppInventoryRoute
+  '/app/ledger': typeof AppLedgerRoute
   '/app/messages': typeof AppMessagesRoute
   '/app/pos': typeof AppPosRoute
   '/app/products': typeof AppProductsRoute
@@ -239,6 +248,7 @@ export interface FileRouteTypes {
     | '/app/discounts'
     | '/app/expenses'
     | '/app/inventory'
+    | '/app/ledger'
     | '/app/messages'
     | '/app/pos'
     | '/app/products'
@@ -264,6 +274,7 @@ export interface FileRouteTypes {
     | '/app/discounts'
     | '/app/expenses'
     | '/app/inventory'
+    | '/app/ledger'
     | '/app/messages'
     | '/app/pos'
     | '/app/products'
@@ -289,6 +300,7 @@ export interface FileRouteTypes {
     | '/app/discounts'
     | '/app/expenses'
     | '/app/inventory'
+    | '/app/ledger'
     | '/app/messages'
     | '/app/pos'
     | '/app/products'
@@ -408,6 +420,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppMessagesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/ledger': {
+      id: '/app/ledger'
+      path: '/ledger'
+      fullPath: '/app/ledger'
+      preLoaderRoute: typeof AppLedgerRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/inventory': {
       id: '/app/inventory'
       path: '/inventory'
@@ -484,6 +503,7 @@ interface AppRouteChildren {
   AppDiscountsRoute: typeof AppDiscountsRoute
   AppExpensesRoute: typeof AppExpensesRoute
   AppInventoryRoute: typeof AppInventoryRoute
+  AppLedgerRoute: typeof AppLedgerRoute
   AppMessagesRoute: typeof AppMessagesRoute
   AppPosRoute: typeof AppPosRoute
   AppProductsRoute: typeof AppProductsRoute
@@ -508,6 +528,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDiscountsRoute: AppDiscountsRoute,
   AppExpensesRoute: AppExpensesRoute,
   AppInventoryRoute: AppInventoryRoute,
+  AppLedgerRoute: AppLedgerRoute,
   AppMessagesRoute: AppMessagesRoute,
   AppPosRoute: AppPosRoute,
   AppProductsRoute: AppProductsRoute,

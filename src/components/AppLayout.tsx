@@ -33,6 +33,7 @@ import {
   CalendarClock,
   Contact,
   MessagesSquare,
+  Scale,
 } from "lucide-react";
 import { useStore, formatRs, openSessionFor, shortDay, isUnreadFor } from "@/lib/store";
 import { migrationFilesFor, migrationFeaturesFor } from "@/lib/notifications";
@@ -55,6 +56,10 @@ const ADMIN_NAV: NavItem[] = [
   { to: "/app/transfers", label: "Transfers", icon: <ArrowLeftRight className="h-4 w-4" /> },
   { to: "/app/customers", label: "Customers", icon: <Contact className="h-4 w-4" /> },
   { to: "/app/suppliers", label: "Suppliers", icon: <Truck className="h-4 w-4" /> },
+  // Credit runs in both directions, and the two halves used to live on
+  // different tabs with nothing tying them together. This is the whole
+  // position: who owes you, who you owe, and what simply cancels out.
+  { to: "/app/ledger", label: "Ledgers", icon: <Scale className="h-4 w-4" /> },
   { to: "/app/products", label: "Products", icon: <ScanLine className="h-4 w-4" /> },
   { to: "/app/inventory", label: "Inventory", icon: <Boxes className="h-4 w-4" /> },
   { to: "/app/alerts", label: "Stock Alerts", icon: <BellRing className="h-4 w-4" /> },

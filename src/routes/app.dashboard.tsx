@@ -7,6 +7,7 @@ import {
   openSessionFor,
   paymentMix,
   totalOutstanding,
+  totalPayable,
   customerBalance,
   summarizeSession,
   shopKind,
@@ -58,7 +59,10 @@ export const Route = createFileRoute("/app/dashboard")({
 });
 
 function Dashboard() {
-  const { user, sales, expenses, shops, products, inventory, daySessions, customers, customerPayments, settings } = useStore();
+  const {
+    user, sales, expenses, shops, products, inventory, daySessions, customers, customerPayments,
+    suppliers, purchases, supplierPayments, returns, setOffs, settings,
+  } = useStore();
   const { range, previous, rangeLabel, shopScope, isAllTime } = useScope();
 
   // No early return before the hooks below — signing out flips `user` to null and
@@ -127,9 +131,16 @@ function Dashboard() {
 
   const mix = useMemo(() => paymentMix(periodSales), [periodSales]);
 
-  /** Standing debt across all customers — deliberately not date-filtered. */
-  const ledger = useMemo(() => ({ sales, customerPayments }), [sales, customerPayments]);
+  /** Standing debt in both directions — deliberately not date-filtered. */
+  const ledger = useMemo(
+    () => ({ sales, customerPayments, purchases, supplierPayments, returns, setOffs }),
+    [sales, customerPayments, purchases, supplierPayments, returns, setOffs],
+  );
   const owedToYou = useMemo(() => totalOutstanding(customers, ledger), [customers, ledger]);
+  // The other direction, which the dashboard never showed: money owed OUT is
+  // just as much a claim on the till as money owed in, and a cash position that
+  // counts only one of them reads better than the business actually is.
+  const youOwe = useMemo(() => totalPayable(suppliers, ledger), [suppliers, ledger]);
   const owingCustomers = useMemo(
     () => customers.filter((c) => customerBalance(c, ledger).outstanding > 0).length,
     [customers, ledger],
@@ -187,7 +198,11 @@ function Dashboard() {
           return {
             shop: s,
             session,
-            cash: session ? summarizeSession(session, { sales, expenses, returns: [], customerPayments }) : null,
+            cash: session
+              ? summarizeSession(session, {
+                  sales, expenses, returns: [], customerPayments, supplierPayments, purchases,
+                })
+              : null,
           };
         }),
     [shops, inScope, daySessions, sales, expenses, customerPayments],
@@ -377,6 +392,32 @@ function Dashboard() {
             </div>
             <Button variant="outline" size="sm" asChild>
               <Link to="/app/customers">Collect <ArrowRight className="h-3.5 w-3.5 ml-1" /></Link>
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* The mirror image, and the one that used to be invisible: stock taken
+          on account is money already spent, it just has not left yet. */}
+      {isAdmin && youOwe > 0 && (
+        <Card className="mt-4 p-4 flex flex-wrap items-center justify-between gap-3 border-destructive/30 bg-destructive/5">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-destructive/15 text-destructive flex items-center justify-center shrink-0">
+              <Wallet className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="text-sm font-medium">Owed by you to suppliers</div>
+              <div className="text-xs text-muted-foreground">
+                stock already delivered · not yet paid for
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="font-display text-2xl font-bold text-destructive">
+              {formatRs(youOwe, currency)}
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/app/ledger">Ledgers <ArrowRight className="h-3.5 w-3.5 ml-1" /></Link>
             </Button>
           </div>
         </Card>

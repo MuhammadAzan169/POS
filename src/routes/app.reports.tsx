@@ -27,7 +27,10 @@ import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianG
 export const Route = createFileRoute("/app/reports")({ component: ReportsPage });
 
 function ReportsPage() {
-  const { user, sales, expenses, shops, products, inventory, daySessions, returns, customers, customerPayments, settings } = useStore();
+  const {
+    user, sales, expenses, shops, products, inventory, daySessions, returns, customers,
+    customerPayments, purchases, supplierPayments, settings,
+  } = useStore();
   const { range, rangeLabel, shopScope } = useScope();
   const isAdmin = user?.role === "admin";
   const currency = settings.currency;
@@ -140,7 +143,9 @@ function ReportsPage() {
         .map((s) => ({
           session: s,
           shop: shops.find((x) => x.id === s.shopId),
-          cash: summarizeSession(s, { sales, expenses, returns, customerPayments }),
+          cash: summarizeSession(s, {
+            sales, expenses, returns, customerPayments, supplierPayments, purchases,
+          }),
         })),
     [daySessions, inScope, range, shops, sales, expenses, returns, customerPayments],
   );

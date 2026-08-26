@@ -56,6 +56,7 @@ const timeOnly = (iso?: string) =>
 function DayBookPage() {
   const {
     user, shops, users, sales, expenses, returns, customerPayments, daySessions,
+    supplierPayments, purchases,
     openDay, closeDay, updateDaySession, reopenDay, deleteDaySession, settings, pendingMigration,
   } = useStore();
   const isAdmin = user?.role === "admin";
@@ -82,9 +83,12 @@ function DayBookPage() {
   const active = openSessionFor(daySessions, shopId);
   const history = useMemo(() => (shopId ? sessionsFor(daySessions, shopId) : []), [daySessions, shopId]);
 
+  // Supplier payments and bills belong here because cash also leaves the till
+  // going the other way: a shopkeeper who pays a delivery man out of the drawer
+  // has less to count that night, and a count that ignores it always reads short.
   const data = useMemo(
-    () => ({ sales, expenses, returns, customerPayments }),
-    [sales, expenses, returns, customerPayments],
+    () => ({ sales, expenses, returns, customerPayments, supplierPayments, purchases }),
+    [sales, expenses, returns, customerPayments, supplierPayments, purchases],
   );
   const live = active ? summarizeSession(active, data) : null;
 
@@ -229,11 +233,14 @@ function DayBookPage() {
       `day-book-${new Date().toISOString().slice(0, 10)}.csv`,
       ["Trading day", "Shop", "Opened", "Closed", "Opening cash", "Cash sales", "Card sales", "Online sales",
         "Credit sales", "Collected on credit", "Total sales", "Invoices", "Refunds", "Expenses",
+        "Bills paid in cash", "Paid to suppliers", "Bought on account",
         "Expected cash", "Counted cash", "Variance", "Owner took", "Left in shop", ...(isAdmin ? ["Profit"] : [])],
       rows.map(({ session: s, cash: c, shop: sh }) => [
         s.businessDate, sh?.name ?? "", at(s.openedAt), at(s.closedAt),
         c.openingCash, c.cashSales, c.cardSales, c.onlineSales, c.creditSales, c.creditCollected,
-        c.totalSales, c.invoices, c.refunds, c.drawerExpenses, c.expectedCash, c.countedCash ?? "", c.variance ?? "",
+        c.totalSales, c.invoices, c.refunds, c.drawerExpenses,
+        c.billCashPaid, c.supplierCashPaid, c.creditPurchases,
+        c.expectedCash, c.countedCash ?? "", c.variance ?? "",
         c.cashTakenByOwner, c.cashLeftInShop, ...(isAdmin ? [c.profit] : []),
       ]),
     );
@@ -434,6 +441,15 @@ function DayBookPage() {
               <Line label="Cash collected on old credit" value={live.creditCollected} currency={settings.currency} sign="+" />
               <Line label="Refunds paid out" value={-live.refunds} currency={settings.currency} sign="−" />
               <Line label="Expenses paid from the till" value={-live.drawerExpenses} currency={settings.currency} sign="−" />
+              {/* Cash also leaves the drawer going the other way. A shopkeeper
+                  who pays a delivery man from the till has less to count that
+                  night, and a count that ignores it always reads short. */}
+              {live.billCashPaid > 0 && (
+                <Line label="Bills paid in cash on delivery" value={-live.billCashPaid} currency={settings.currency} sign="−" />
+              )}
+              {live.supplierCashPaid > 0 && (
+                <Line label="Cash paid to suppliers" value={-live.supplierCashPaid} currency={settings.currency} sign="−" />
+              )}
               <div className="flex justify-between border-t pt-2 font-semibold">
                 <dt>Cash that should be in the drawer</dt>
                 <dd>{formatRs(live.expectedCash, settings.currency)}</dd>
@@ -443,6 +459,14 @@ function DayBookPage() {
               Card and online takings never touch the drawer, so they are excluded here — they are counted in
               sales, not in cash. Credit sales are excluded for the same reason: the goods went out but no money
               came in, so the till is not short by {formatRs(live.creditSales, settings.currency)} — it is owed.
+              {live.creditPurchases > 0 && (
+                <>
+                  {" "}
+                  Stock bought on account today works the same way in reverse:{" "}
+                  {formatRs(live.creditPurchases, settings.currency)} arrived without leaving the drawer, so it
+                  is owed to the supplier rather than missing from the till.
+                </>
+              )}
             </p>
           </Card>
         </>
@@ -544,6 +568,12 @@ function DayBookPage() {
                 <Line label="Collected on credit" value={live.creditCollected} currency={settings.currency} sign="+" />
                 <Line label="Refunds" value={-live.refunds} currency={settings.currency} sign="−" />
                 <Line label="Till expenses" value={-live.drawerExpenses} currency={settings.currency} sign="−" />
+                {live.billCashPaid > 0 && (
+                  <Line label="Bills paid on delivery" value={-live.billCashPaid} currency={settings.currency} sign="−" />
+                )}
+                {live.supplierCashPaid > 0 && (
+                  <Line label="Paid to suppliers" value={-live.supplierCashPaid} currency={settings.currency} sign="−" />
+                )}
                 <div className="flex justify-between border-t pt-2 font-semibold">
                   <span>Expected in drawer</span>
                   <span>{formatRs(live.expectedCash, settings.currency)}</span>

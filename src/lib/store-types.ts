@@ -251,6 +251,17 @@ export interface Customer {
   kind: "retail" | "wholesale";
   /** Most they may owe at once. 0 means no limit is enforced. */
   creditLimit: number;
+  /**
+   * The supplier record for the SAME business, when you both buy from and sell
+   * to them.
+   *
+   * This is common in trade: Bilal Traders takes stock from you on account, and
+   * you take stock from them on account. Without the link the two balances sit
+   * in different tabs and nobody notices they cancel out. With it, the app can
+   * offer a set-off — "he owes me 50,000, I owe him 30,000, settle 30,000 and
+   * he still owes 20,000" — which is exactly how it gets done at the counter.
+   */
+  linkedSupplierId?: string;
   active: boolean;
 }
 
@@ -273,10 +284,24 @@ export interface CustomerPayment {
 export interface CustomerBalance {
   /** Total ever put on account. */
   creditSales: number;
-  /** Total ever paid back. */
+  /** Total ever paid back, advances included. */
   paid: number;
-  /** Still owed: creditSales − paid. */
+  /** Settled against what you owe THEM, rather than with money. */
+  setOff: number;
+  /** Still owed to you. Never negative — money in hand shows as `advance`. */
   outstanding: number;
+  /**
+   * Money of theirs you are holding: they have paid in more than they have
+   * taken out.
+   *
+   * The month-start payer does exactly this — hands over 100,000 on the 1st and
+   * draws goods against it all month. Each of those sales is booked on account,
+   * and the advance is what pays for them, so the balance walks down to zero
+   * instead of the shop having to remember an informal "he's in credit".
+   */
+  advance: number;
+  /** outstanding − advance: positive is owed to you, negative is held for them. */
+  net: number;
   /** Every sale, on account or not. */
   orders: number;
   /** Lifetime value across all payment methods. */
@@ -346,8 +371,124 @@ export interface Purchase {
    * head-office buying apart from a shop restocking on its own account.
    */
   createdByShopId?: string;
-  /** How the bill was settled. Unpaid bills are what the shop still owes. */
+  /**
+   * Legacy settlement flag, kept so bills raised before part-payment existed
+   * still read correctly. Never read it directly — `purchaseSettlement()` folds
+   * it into the same shape as a modern bill.
+   */
   paid?: boolean;
+  /**
+   * How the bill was settled at the moment it was raised.
+   *
+   * "Credit" is the one that matters: the stock arrived, the money did not, and
+   * the supplier is owed until somebody pays them. Cash/Card/Online mean it was
+   * settled there and then — and if it was cash out of a shop's own till, the
+   * evening count has to expect that money to be gone.
+   */
+  payment?: PaymentMethod;
+  /**
+   * Paid against this bill up front. Less than `total` is a part payment — "I
+   * gave him twenty thousand now, the rest at the end of the month" — which is
+   * far more common than either extreme.
+   */
+  amountPaid?: number;
+  /** When the balance falls due, for the overdue list. */
+  dueDate?: string;
+  /** The till the up-front cash came out of, so the day's count reconciles. */
+  sessionId?: string;
+}
+
+/** A bill's settlement, with legacy rows folded into the modern shape. */
+export function purchaseSettlement(p: Purchase): {
+  method: PaymentMethod;
+  paid: number;
+  balance: number;
+  status: "Paid" | "Part paid" | "Unpaid";
+} {
+  const total = p.total;
+  // A bill from before part-payments carries only `paid`, so it was all or
+  // nothing; `paid !== false` keeps the old default of "settled" for rows that
+  // never had the flag at all.
+  const legacy = p.paid !== false ? total : 0;
+  const paid = Math.max(0, Math.min(total, p.amountPaid ?? legacy));
+  const balance = Math.max(0, total - paid);
+  const method = p.payment ?? (paid >= total && total > 0 ? "Cash" : "Credit");
+  return {
+    method,
+    paid,
+    balance,
+    status: balance === 0 ? "Paid" : paid > 0 ? "Part paid" : "Unpaid",
+  };
+}
+
+/**
+ * Money paid out to a supplier, against their bills or ahead of them.
+ *
+ * The mirror image of `CustomerPayment`, and deliberately the same shape: both
+ * sides of the business run on the same "goods now, money later" arrangement,
+ * so one screen's worth of thinking covers both.
+ */
+export interface SupplierPayment {
+  id: string;
+  supplierId: string;
+  date: string;
+  amount: number;
+  method: SettledMethod;
+  /**
+   * Which till the money came out of. Empty means head office paid it — by
+   * bank transfer or from the owner's own cash — so no shop's drawer is short
+   * because of it.
+   */
+  shopId: string;
+  /** Set when paid out of an open trading day, so the till reconciles. */
+  sessionId?: string;
+  note: string;
+  paidBy: string;
+}
+
+/**
+ * A set-off: two debts between the same business cancelled against each other.
+ *
+ * No money moves. He owed you 50,000 for stock you sold him; you owed him
+ * 30,000 for stock you bought from him; you agree to call 30,000 of it square
+ * and he pays the remaining 20,000. Recording it as its own row rather than as
+ * a fake payment on each side means the statement says what actually happened,
+ * and undoing it puts both balances back exactly.
+ */
+export interface SetOff {
+  id: string;
+  date: string;
+  customerId: string;
+  supplierId: string;
+  /** Cancelled off BOTH balances. Never more than the smaller of the two. */
+  amount: number;
+  note: string;
+  createdBy: string;
+}
+
+/** What you owe one supplier, and what you have already put their way. */
+export interface SupplierBalance {
+  /** Total of every bill from them. */
+  billed: number;
+  /** Settled at the counter when the bill was raised. */
+  paidOnBills: number;
+  /** Paid since, against the account. */
+  paidLater: number;
+  /** Cancelled against what they owe you. */
+  setOff: number;
+  /** Credit they owe you for goods you sent back. */
+  returnCredit: number;
+  /** Still owed to them. Never negative — money ahead shows as `advance`. */
+  outstanding: number;
+  /** Money you have put their way ahead of any bill. */
+  advance: number;
+  /** outstanding − advance: positive is owed to them, negative is held by them. */
+  net: number;
+  bills: number;
+  /** Bills with anything still on them. */
+  unpaidBills: number;
+  lastPurchase?: string;
+  lastPayment?: string;
 }
 
 export interface Expense {
@@ -406,7 +547,11 @@ export interface SessionCash {
   onlineSales: number;
   /** Sold on account. Counts as a sale; contributes nothing to the drawer. */
   creditSales: number;
-  /** Cash taken today against OLD credit. Real money in, but not a sale today. */
+  /**
+   * Cash taken today against a customer's account — settling old credit, or
+   * handed over as an advance against goods they have yet to collect. Real
+   * money into the drawer either way, but not a sale made today.
+   */
   creditCollected: number;
   /** Card/online settlements of old credit — money in, but not into the drawer. */
   creditCollectedOther: number;
@@ -417,9 +562,22 @@ export interface SessionCash {
   refunds: number;
   drawerExpenses: number;
   /**
+   * Cash handed to suppliers out of this till today — settling an old bill, or
+   * paying one on the spot. The stock arrives at the shop and the money leaves
+   * the shop's drawer, so a count that ignores it reads short every time a
+   * shopkeeper pays a delivery man in cash.
+   */
+  supplierCashPaid: number;
+  /** Bills paid in cash at the moment they were raised, out of this till. */
+  billCashPaid: number;
+  /** Bought on account today: stock in, money still owed. */
+  creditPurchases: number;
+  /**
    * What SHOULD be in the drawer:
-   *   opening + cash sales + cash collected on old credit − refunds − expenses.
-   * Credit SALES are deliberately absent — no money changed hands.
+   *   opening + cash sales + cash taken on account
+   *   − refunds − expenses − cash paid to suppliers.
+   * Credit SALES and credit PURCHASES are both deliberately absent — in neither
+   * case did money change hands.
    */
   expectedCash: number;
   /** What was counted, once the session is closed. */

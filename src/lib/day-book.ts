@@ -19,10 +19,14 @@ import type {
   CustomerPayment,
   DaySession,
   Expense,
+  Purchase,
   ReturnRec,
   Sale,
   SessionCash,
+  SetOff,
+  SupplierPayment,
 } from "./store-types";
+import { purchaseSettlement } from "./store-types";
 
 /** The open session for a shop, if it has one. At most one is ever open. */
 export function openSessionFor(sessions: DaySession[], shopId: string | undefined) {
@@ -83,7 +87,14 @@ function belongsTo(session: DaySession, rec: { sessionId?: string; date: string 
  */
 export function summarizeSession(
   session: DaySession,
-  data: { sales: Sale[]; expenses: Expense[]; returns: ReturnRec[]; customerPayments?: CustomerPayment[] },
+  data: {
+    sales: Sale[];
+    expenses: Expense[];
+    returns: ReturnRec[];
+    customerPayments?: CustomerPayment[];
+    supplierPayments?: SupplierPayment[];
+    purchases?: Purchase[];
+  },
 ): SessionCash {
   const sales = data.sales.filter(
     (s) => s.shopId === session.shopId && belongsTo(session, s, true) && s.status !== "Returned",
@@ -116,7 +127,25 @@ export function summarizeSession(
     .filter((e) => e.shopId === session.shopId && belongsTo(session, e, true))
     .reduce((a, e) => a + e.amount, 0);
 
-  const expectedCash = session.openingCash + cashSales + creditCollected - refunds - drawerExpenses;
+  // Money handed to suppliers from this till. Head-office payments carry no
+  // shopId and so never reach a shop's count.
+  const supplierCashPaid = (data.supplierPayments ?? [])
+    .filter((p) => p.method === "Cash" && p.shopId === session.shopId && belongsTo(session, p, true))
+    .reduce((a, p) => a + p.amount, 0);
+
+  // A bill the shopkeeper raised and settled in cash on the spot. Matched on
+  // the shop that RAISED it, not the shop the stock landed at: a bill entered
+  // at head office is paid from head office however the goods are distributed.
+  const shopBills = (data.purchases ?? []).filter(
+    (b) => b.createdByShopId === session.shopId && belongsTo(session, b, true),
+  );
+  const billCashPaid = shopBills
+    .filter((b) => purchaseSettlement(b).method === "Cash")
+    .reduce((a, b) => a + purchaseSettlement(b).paid, 0);
+  const creditPurchases = shopBills.reduce((a, b) => a + purchaseSettlement(b).balance, 0);
+
+  const expectedCash =
+    session.openingCash + cashSales + creditCollected - refunds - drawerExpenses - supplierCashPaid - billCashPaid;
   const countedCash = session.status === "closed" ? session.countedCash ?? 0 : null;
 
   return {
@@ -133,6 +162,9 @@ export function summarizeSession(
     profit: sales.reduce((a, s) => a + s.profit, 0),
     refunds,
     drawerExpenses,
+    supplierCashPaid,
+    billCashPaid,
+    creditPurchases,
     expectedCash,
     countedCash,
     variance: countedCash === null ? null : countedCash - expectedCash,
@@ -174,7 +206,7 @@ export function paymentMix(sales: Sale[]) {
  */
 export function customerBalance(
   customer: Pick<Customer, "id" | "creditLimit">,
-  data: { sales: Sale[]; customerPayments: CustomerPayment[] },
+  data: { sales: Sale[]; customerPayments: CustomerPayment[]; setOffs?: SetOff[] },
 ): CustomerBalance {
   const mine = data.sales.filter((s) => s.customerId === customer.id && s.status !== "Returned");
   // A returned credit sale is cancelled, so it stops being owed — which is why
@@ -182,7 +214,16 @@ export function customerBalance(
   const creditSales = mine.filter((s) => s.payment === "Credit").reduce((a, s) => a + s.total, 0);
   const payments = data.customerPayments.filter((p) => p.customerId === customer.id);
   const paid = payments.reduce((a, p) => a + p.amount, 0);
-  const outstanding = Math.max(0, creditSales - paid);
+  const setOff = (data.setOffs ?? [])
+    .filter((x) => x.customerId === customer.id)
+    .reduce((a, x) => a + x.amount, 0);
+
+  // Signed first, then split. Paying in more than you have taken out is not an
+  // error to be clamped away — it is the month-start advance, and the shop has
+  // to be able to see it sitting there.
+  const net = creditSales - paid - setOff;
+  const outstanding = Math.max(0, net);
+  const advance = Math.max(0, -net);
 
   const latest = (xs: { date: string }[]) =>
     xs.length === 0 ? undefined : xs.reduce((a, x) => (x.date > a ? x.date : a), xs[0].date);
@@ -190,7 +231,10 @@ export function customerBalance(
   return {
     creditSales,
     paid,
+    setOff,
     outstanding,
+    advance,
+    net,
     orders: mine.length,
     lifetime: mine.reduce((a, s) => a + s.total, 0),
     lastPurchase: latest(mine),
@@ -202,9 +246,17 @@ export function customerBalance(
 /** Total owed to the business across every customer. */
 export function totalOutstanding(
   customers: Customer[],
-  data: { sales: Sale[]; customerPayments: CustomerPayment[] },
+  data: { sales: Sale[]; customerPayments: CustomerPayment[]; setOffs?: SetOff[] },
 ) {
   return customers.reduce((a, c) => a + customerBalance(c, data).outstanding, 0);
+}
+
+/** Advances held across every customer — money in the drawer that isn't yours. */
+export function totalAdvances(
+  customers: Customer[],
+  data: { sales: Sale[]; customerPayments: CustomerPayment[]; setOffs?: SetOff[] },
+) {
+  return customers.reduce((a, c) => a + customerBalance(c, data).advance, 0);
 }
 
 /**
@@ -213,8 +265,11 @@ export function totalOutstanding(
  */
 export function creditHeadroom(
   customer: Pick<Customer, "id" | "creditLimit">,
-  data: { sales: Sale[]; customerPayments: CustomerPayment[] },
+  data: { sales: Sale[]; customerPayments: CustomerPayment[]; setOffs?: SetOff[] },
 ) {
+  const bal = customerBalance(customer, data);
+  // An advance is spending money, not borrowing it, so it is always available
+  // however low the limit is set.
   if (customer.creditLimit <= 0) return Infinity;
-  return Math.max(0, customer.creditLimit - customerBalance(customer, data).outstanding);
+  return Math.max(0, customer.creditLimit - bal.outstanding) + bal.advance;
 }

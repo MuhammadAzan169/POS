@@ -60,8 +60,8 @@ parts.push(insert("inventory", ["product_id", "shop_id", "qty"], seed.genInvento
   (r) => [q(r.productId), q(r.shopId), q(r.qty)]));
 
 // Customers come before sales, which reference them.
-parts.push(insert("customers", ["id", "name", "contact", "phone", "address", "notes", "kind", "credit_limit", "active"], seed.CUSTOMERS,
-  (c) => [q(c.id), q(c.name), q(c.contact), q(c.phone), q(c.address), q(c.notes), q(c.kind), q(c.creditLimit), q(c.active)]));
+parts.push(insert("customers", ["id", "name", "contact", "phone", "address", "notes", "kind", "credit_limit", "linked_supplier_id", "active"], seed.CUSTOMERS,
+  (c) => [q(c.id), q(c.name), q(c.contact), q(c.phone), q(c.address), q(c.notes), q(c.kind), q(c.creditLimit), q(c.linkedSupplierId ?? null), q(c.active)]));
 
 // Day sessions come before sales and expenses, which reference them.
 parts.push(insert(
@@ -78,8 +78,21 @@ parts.push(insert("sales", ["id", "invoice", "shop_id", "date", "business_date",
 parts.push(insert("customer_payments", ["id", "customer_id", "date", "amount", "method", "shop_id", "session_id", "note", "received_by"], seed.genCustomerPayments(),
   (p) => [q(p.id), q(p.customerId), q(p.date), q(p.amount), q(p.method), q(p.shopId), q(p.sessionId ?? null), q(p.note), q(p.receivedBy)]));
 
-parts.push(insert("purchases", ["id", "bill_no", "supplier", "supplier_id", "date", "lines", "total", "created_by", "created_by_shop_id", "paid"], seed.genPurchases(),
-  (p) => [q(p.id), q(p.billNo), q(p.supplier), q(p.supplierId ?? null), q(p.date), json(p.lines), q(p.total), q(p.createdBy ?? ""), q(p.createdByShopId ?? null), q(p.paid ?? true)]));
+// `paid` is derived rather than taken from the row: a part-paid bill has no
+// honest boolean, and the app keeps the legacy column in step the same way.
+parts.push(insert(
+  "purchases",
+  ["id", "bill_no", "supplier", "supplier_id", "date", "lines", "total", "created_by", "created_by_shop_id", "paid", "payment", "amount_paid", "due_date", "session_id"],
+  seed.genPurchases(),
+  (p) => [q(p.id), q(p.billNo), q(p.supplier), q(p.supplierId ?? null), q(p.date), json(p.lines), q(p.total),
+    q(p.createdBy ?? ""), q(p.createdByShopId ?? null), q((p.amountPaid ?? p.total) >= p.total),
+    q(p.payment ?? null), q(p.amountPaid ?? null), q(p.dueDate ?? null), q(p.sessionId ?? null)]));
+
+parts.push(insert("supplier_payments", ["id", "supplier_id", "date", "amount", "method", "shop_id", "session_id", "note", "paid_by"], seed.genSupplierPayments(),
+  (p) => [q(p.id), q(p.supplierId), q(p.date), q(p.amount), q(p.method), q(p.shopId || null), q(p.sessionId ?? null), q(p.note), q(p.paidBy)]));
+
+parts.push(insert("set_offs", ["id", "date", "customer_id", "supplier_id", "amount", "note", "created_by"], seed.genSetOffs(),
+  (x) => [q(x.id), q(x.date), q(x.customerId), q(x.supplierId), q(x.amount), q(x.note), q(x.createdBy)]));
 
 parts.push(insert("expenses", ["id", "date", "shop_id", "category", "description", "amount", "added_by", "session_id"], seed.genExpenses(),
   (e) => [q(e.id), q(e.date), q(e.shopId), q(e.category), q(e.description), q(e.amount), q(e.addedBy), q(e.sessionId ?? null)]));
@@ -106,6 +119,8 @@ const counts = {
   sales: seed.genSales().length,
   customer_payments: seed.genCustomerPayments().length,
   purchases: seed.genPurchases().length,
+  supplier_payments: seed.genSupplierPayments().length,
+  set_offs: seed.genSetOffs().length,
   expenses: seed.genExpenses().length,
   messages: seed.genMessages().length,
 };

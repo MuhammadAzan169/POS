@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { dayOf, todayISO } from "./dates";
 import { customerBalance, openSessionFor, summarizeSession } from "./day-book";
+import { openBills } from "./ledger";
 import { isUnreadFor } from "./store-types";
 import type {
   Customer,
@@ -24,10 +25,13 @@ import type {
   InventoryRow,
   Message,
   Product,
+  Purchase,
   ReturnRec,
   Role,
   Sale,
+  SetOff,
   Shop,
+  SupplierPayment,
   User,
 } from "./store-types";
 
@@ -64,6 +68,9 @@ interface Source {
   daySessions: DaySession[];
   customers: Customer[];
   customerPayments: CustomerPayment[];
+  supplierPayments: SupplierPayment[];
+  purchases: Purchase[];
+  setOffs: SetOff[];
   messages: Message[];
   pendingMigration: string[] | null;
 }
@@ -93,6 +100,11 @@ const MIGRATIONS: { match: string[]; file: string; feature: string }[] = [
     match: ["messages"],
     file: "004_messages.sql",
     feature: "messaging",
+  },
+  {
+    match: ["supplier_payments", "set_offs", "purchases.amount_paid"],
+    file: "005_payables_and_setoffs.sql",
+    feature: "credit purchases and supplier balances",
   },
 ];
 
@@ -229,6 +241,8 @@ export function buildNotifications(s: Source): AppNotification[] {
         expenses: s.expenses,
         returns: s.returns,
         customerPayments: s.customerPayments,
+        supplierPayments: s.supplierPayments,
+        purchases: s.purchases,
       });
       if (cash.variance === null || cash.variance >= 0) return;
       out.push({
@@ -278,7 +292,14 @@ export function buildNotifications(s: Source): AppNotification[] {
 
   /* ------------------------------------------------------------------ money */
 
-  const ledger = { sales: s.sales, customerPayments: s.customerPayments };
+  const ledger = {
+    sales: s.sales,
+    customerPayments: s.customerPayments,
+    purchases: s.purchases,
+    supplierPayments: s.supplierPayments,
+    returns: s.returns,
+    setOffs: s.setOffs,
+  };
   s.customers
     .filter((c) => c.active && c.creditLimit > 0)
     .forEach((c) => {
@@ -297,6 +318,32 @@ export function buildNotifications(s: Source): AppNotification[] {
         at: balance.lastPurchase,
       });
     });
+
+  /*
+    A bill past the date you agreed to pay it.
+
+    Worth the bell rather than a number on a page: a supplier who is not paid
+    stops delivering, and the whole reason a due date is recorded is so that
+    nobody has to remember it. Announced once per bill per amount, so paying
+    part of it produces a fresh, quieter reminder rather than the same one
+    every morning.
+  */
+  if (isAdmin) {
+    const overdue = openBills(ledger, today).filter((b) => b.overdueDays > 0);
+    if (overdue.length > 0) {
+      const total = overdue.reduce((a, b) => a + b.balance, 0);
+      const worst = overdue.reduce((a, b) => (b.overdueDays > a.overdueDays ? b : a), overdue[0]);
+      out.push({
+        id: `bills-overdue:${overdue.length}:${total}`,
+        group: "Money",
+        tone: "warning",
+        title: `${overdue.length} supplier bill${overdue.length === 1 ? " is" : "s are"} overdue`,
+        detail: `${total.toLocaleString()} in total. ${worst.purchase.supplier} has been waiting ${worst.overdueDays} days on ${worst.purchase.billNo}.`,
+        to: "/app/ledger",
+        at: worst.purchase.date,
+      });
+    }
+  }
 
   // Unpaid supplier bills are the owner's problem, not the shop's.
   if (isAdmin) {

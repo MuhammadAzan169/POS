@@ -109,6 +109,9 @@ create table if not exists customers (
   notes        text default '',
   kind         text not null default 'retail' check (kind in ('retail', 'wholesale')),
   credit_limit numeric(12,2) not null default 0,
+  -- The supplier record for the SAME business, when you both buy from and sell
+  -- to them. What makes a set-off possible.
+  linked_supplier_id text references suppliers(id) on delete set null,
   active       boolean not null default true
 );
 
@@ -125,6 +128,39 @@ create table if not exists customer_payments (
   session_id  text references day_sessions(id) on delete set null,
   note        text default '',
   received_by text default ''
+);
+
+-- Money paid OUT to a supplier — settling their bills, or placed with them
+-- ahead of a delivery. The mirror image of customer_payments, and deliberately
+-- the same shape: both sides of the business run on "goods now, money later".
+--
+-- shop_id is nullable on purpose: head office pays most bills by transfer, with
+-- no till behind it. A payment that names a shop is cash out of that drawer and
+-- the evening count has to expect it to be gone.
+create table if not exists supplier_payments (
+  id          text primary key,
+  supplier_id text not null references suppliers(id) on delete cascade,
+  date        date not null,
+  amount      numeric(12,2) not null default 0,
+  method      text not null default 'Cash' check (method in ('Cash', 'Card', 'Online')),
+  shop_id     text references shops(id) on delete set null,
+  session_id  text references day_sessions(id) on delete set null,
+  note        text default '',
+  paid_by     text default ''
+);
+
+-- Two debts between the same business cancelled against each other. No money
+-- moves, which is exactly why it is its own row rather than a fake payment on
+-- each side: the statement should say what happened, and deleting it has to put
+-- both balances back exactly as they were.
+create table if not exists set_offs (
+  id          text primary key,
+  date        date not null,
+  customer_id text not null references customers(id) on delete cascade,
+  supplier_id text not null references suppliers(id) on delete cascade,
+  amount      numeric(12,2) not null default 0,
+  note        text default '',
+  created_by  text default ''
 );
 
 -- One message thread per SHOP rather than per person: a shop is a place with a
@@ -191,7 +227,16 @@ create table if not exists purchases (
   total               numeric(12,2) not null default 0,
   created_by          text default '',
   created_by_shop_id  text references shops(id) on delete set null,
-  paid                boolean not null default true
+  -- Legacy all-or-nothing flag. Kept in step with amount_paid by the app so
+  -- anything still reading it stays correct.
+  paid                boolean not null default true,
+  -- How the bill was settled. 'Credit' is stock in with the money still owed.
+  payment             text check (payment is null or payment in ('Cash', 'Card', 'Online', 'Credit')),
+  -- Paid up front. Less than total is a part payment, which is the common case.
+  amount_paid         numeric(12,2),
+  due_date            date,
+  -- Set when a shopkeeper raised and paid the bill out of an open till.
+  session_id          text references day_sessions(id) on delete set null
 );
 
 -- `session_id` marks money that came out of the till while the day was open, so
@@ -242,6 +287,11 @@ create index if not exists expenses_session_idx   on expenses (session_id);
 create index if not exists sales_customer_idx     on sales (customer_id, date desc);
 create index if not exists cust_pay_customer_idx  on customer_payments (customer_id, date desc);
 create index if not exists cust_pay_session_idx   on customer_payments (session_id);
+create index if not exists sup_pay_supplier_idx   on supplier_payments (supplier_id, date desc);
+create index if not exists sup_pay_session_idx    on supplier_payments (session_id);
+create index if not exists set_off_customer_idx   on set_offs (customer_id, date desc);
+create index if not exists set_off_supplier_idx   on set_offs (supplier_id, date desc);
+create index if not exists purchases_supplier_idx on purchases (supplier_id, date desc);
 create index if not exists purchases_supplier_idx on purchases (supplier_id);
 create index if not exists purchases_date_idx     on purchases (date desc);
 create index if not exists expenses_shop_date_idx on expenses (shop_id, date desc);
@@ -283,7 +333,7 @@ alter table messages replica identity full;
 do $$
 declare t text;
 begin
-  foreach t in array array['shops','users','suppliers','products','inventory','sales','purchases','expenses','returns','day_sessions','transfers','customers','customer_payments','messages','app_state']
+  foreach t in array array['shops','users','suppliers','products','inventory','sales','purchases','expenses','returns','day_sessions','transfers','customers','customer_payments','supplier_payments','set_offs','messages','app_state']
   loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists "demo_open_access" on %I', t);

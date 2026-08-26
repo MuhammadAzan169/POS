@@ -64,6 +64,18 @@ export function StatusPill({ status }: { status: string }) {
     Cash: "bg-muted text-muted-foreground border-border",
     Card: "bg-muted text-muted-foreground border-border",
     Online: "bg-muted text-muted-foreground border-border",
+    // Where a supplier bill stands. Same three-step scale as stock levels, so
+    // the colours mean the same thing wherever they appear.
+    Paid: "bg-success/15 text-success-strong border-success/30",
+    "Part paid": "bg-warning/20 text-warning-strong border-warning/40",
+    Unpaid: "bg-destructive/10 text-destructive border-destructive/30",
+    Overdue: "bg-destructive/10 text-destructive border-destructive/30",
+    // Which way a party balance points. "Advance" is money you are holding for
+    // someone, which is a liability, not a win — hence the neutral tint.
+    Owes: "bg-warning/20 text-warning-strong border-warning/40",
+    "You owe": "bg-destructive/10 text-destructive border-destructive/30",
+    Advance: "bg-accent/15 text-accent-strong border-accent/30",
+    Settled: "bg-success/15 text-success-strong border-success/30",
   };
   return (
     <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border", map[status] ?? "bg-muted text-muted-foreground border-border")}>

@@ -23,12 +23,15 @@ import {
   type Purchase,
   type ReturnRec,
   type Sale,
+  type SetOff,
   type Settings,
   type Shop,
   type Supplier,
+  type SupplierPayment,
   type Transfer,
   type User,
 } from "./store-types";
+import { purchaseSettlement } from "./store-types";
 import { DEFAULT_SETTINGS } from "./seed-data";
 
 /** Everything the app holds in memory, loaded in one go. */
@@ -46,6 +49,8 @@ export interface Snapshot {
   transfers: Transfer[];
   customers: Customer[];
   customerPayments: CustomerPayment[];
+  supplierPayments: SupplierPayment[];
+  setOffs: SetOff[];
   messages: Message[];
   settings: Settings;
   discounts: DiscountRules;
@@ -117,12 +122,22 @@ const rowToPurchase = (r: any): Purchase => ({
   date: r.date, lines: r.lines ?? [], total: Number(r.total),
   createdBy: r.created_by ?? undefined, createdByShopId: r.created_by_shop_id ?? undefined,
   paid: r.paid ?? undefined,
+  payment: r.payment ?? undefined,
+  amountPaid: r.amount_paid === null || r.amount_paid === undefined ? undefined : Number(r.amount_paid),
+  dueDate: r.due_date ?? undefined,
+  sessionId: r.session_id ?? undefined,
 });
 const purchaseToRow = (p: Purchase) => ({
   id: p.id, bill_no: p.billNo, supplier: p.supplier, supplier_id: p.supplierId ?? null,
   date: p.date, lines: p.lines, total: p.total,
   created_by: p.createdBy ?? null, created_by_shop_id: p.createdByShopId ?? null,
-  paid: p.paid ?? true,
+  // The old boolean is kept in step with the new numbers so a database still
+  // reading `paid` — or a report written against it — never disagrees.
+  paid: purchaseSettlement(p).balance === 0,
+  payment: p.payment ?? null,
+  amount_paid: p.amountPaid ?? null,
+  due_date: p.dueDate ?? null,
+  session_id: p.sessionId ?? null,
 });
 
 const rowToExpense = (r: any): Expense => ({
@@ -154,11 +169,13 @@ const daySessionToRow = (s: DaySession) => ({
 const rowToCustomer = (r: any): Customer => ({
   id: r.id, name: r.name, contact: r.contact ?? "", phone: r.phone ?? "", address: r.address ?? "",
   notes: r.notes ?? "", kind: r.kind === "wholesale" ? "wholesale" : "retail",
-  creditLimit: Number(r.credit_limit ?? 0), active: r.active,
+  creditLimit: Number(r.credit_limit ?? 0), linkedSupplierId: r.linked_supplier_id ?? undefined,
+  active: r.active,
 });
 const customerToRow = (c: Customer) => ({
   id: c.id, name: c.name, contact: c.contact, phone: c.phone, address: c.address, notes: c.notes,
-  kind: c.kind, credit_limit: c.creditLimit, active: c.active,
+  kind: c.kind, credit_limit: c.creditLimit, linked_supplier_id: c.linkedSupplierId ?? null,
+  active: c.active,
 });
 
 const rowToCustomerPayment = (r: any): CustomerPayment => ({
@@ -168,6 +185,26 @@ const rowToCustomerPayment = (r: any): CustomerPayment => ({
 const customerPaymentToRow = (p: CustomerPayment) => ({
   id: p.id, customer_id: p.customerId, date: p.date, amount: p.amount, method: p.method,
   shop_id: p.shopId, session_id: p.sessionId ?? null, note: p.note, received_by: p.receivedBy,
+});
+
+const rowToSupplierPayment = (r: any): SupplierPayment => ({
+  id: r.id, supplierId: r.supplier_id, date: r.date, amount: Number(r.amount), method: r.method,
+  shopId: r.shop_id ?? "", sessionId: r.session_id ?? undefined, note: r.note ?? "", paidBy: r.paid_by ?? "",
+});
+const supplierPaymentToRow = (p: SupplierPayment) => ({
+  id: p.id, supplier_id: p.supplierId, date: p.date, amount: p.amount, method: p.method,
+  // Head office pays with no till behind it, and an empty string is not a shop
+  // id — storing null keeps the foreign key honest.
+  shop_id: p.shopId || null, session_id: p.sessionId ?? null, note: p.note, paid_by: p.paidBy,
+});
+
+const rowToSetOff = (r: any): SetOff => ({
+  id: r.id, date: r.date, customerId: r.customer_id, supplierId: r.supplier_id,
+  amount: Number(r.amount), note: r.note ?? "", createdBy: r.created_by ?? "",
+});
+const setOffToRow = (x: SetOff) => ({
+  id: x.id, date: x.date, customer_id: x.customerId, supplier_id: x.supplierId,
+  amount: x.amount, note: x.note, created_by: x.createdBy,
 });
 
 const rowToMessage = (r: any): Message => ({
@@ -257,7 +294,8 @@ export async function loadSnapshot(): Promise<Snapshot> {
 
   const missing: string[] = [];
 
-  const [core, daySessions, transfers, customers, customerPayments, messages] = await Promise.all([
+  const [core, daySessions, transfers, customers, customerPayments, supplierPayments, setOffs, messages] =
+    await Promise.all([
     Promise.all([
       supabase.from("shops").select("*").order("name"),
       supabase.from("users").select("*").order("name"),
@@ -294,6 +332,18 @@ export async function loadSnapshot(): Promise<Snapshot> {
       rowToCustomerPayment,
       missing,
     ),
+    selectOptional(
+      "supplier_payments",
+      () => supabase!.from("supplier_payments").select("*").order("date", { ascending: false }),
+      rowToSupplierPayment,
+      missing,
+    ),
+    selectOptional(
+      "set_offs",
+      () => supabase!.from("set_offs").select("*").order("date", { ascending: false }),
+      rowToSetOff,
+      missing,
+    ),
     // Only the recent tail: a thread is read newest-first and nobody scrolls a
     // year back, so the whole history is not worth loading on every boot.
     selectOptional(
@@ -302,7 +352,7 @@ export async function loadSnapshot(): Promise<Snapshot> {
       rowToMessage,
       missing,
     ),
-  ]);
+    ]);
 
   const [shops, users, products, inventory, sales, purchases, suppliers, expenses, returns, appState] = core;
 
@@ -317,6 +367,10 @@ export async function loadSnapshot(): Promise<Snapshot> {
   const saleRows = (sales.data ?? []) as any[];
   if (saleRows.length > 0 && !("business_date" in saleRows[0])) missing.push("sales.business_date");
   if (saleRows.length > 0 && !("customer_id" in saleRows[0])) missing.push("sales.customer_id");
+  // Part-paid bills need somewhere to record how much was paid; without the
+  // column every bill still reads as all-or-nothing through `paid`.
+  const purchaseRows = (purchases.data ?? []) as any[];
+  if (purchaseRows.length > 0 && !("amount_paid" in purchaseRows[0])) missing.push("purchases.amount_paid");
 
   return {
     shops: shopRows.map(rowToShop),
@@ -324,7 +378,7 @@ export async function loadSnapshot(): Promise<Snapshot> {
     products: (products.data ?? []).map(rowToProduct),
     inventory: (inventory.data ?? []).map(rowToInventory),
     sales: saleRows.map(rowToSale),
-    purchases: (purchases.data ?? []).map(rowToPurchase),
+    purchases: purchaseRows.map(rowToPurchase),
     suppliers: (suppliers.data ?? []).map(rowToSupplier),
     expenses: (expenses.data ?? []).map(rowToExpense),
     returns: (returns.data ?? []).map(rowToReturn),
@@ -332,6 +386,8 @@ export async function loadSnapshot(): Promise<Snapshot> {
     transfers,
     customers,
     customerPayments,
+    supplierPayments,
+    setOffs,
     // Oldest first: a conversation reads downwards, so the UI never has to
     // reverse it and the two orderings can't drift apart.
     messages: [...messages].reverse(),
@@ -388,6 +444,14 @@ export const db = {
     run(() => supabase!.from("customer_payments").upsert(customerPaymentToRow(p))),
   deleteCustomerPayment: (id: string) =>
     run(() => supabase!.from("customer_payments").delete().eq("id", id)),
+
+  upsertSupplierPayment: (p: SupplierPayment) =>
+    run(() => supabase!.from("supplier_payments").upsert(supplierPaymentToRow(p))),
+  deleteSupplierPayment: (id: string) =>
+    run(() => supabase!.from("supplier_payments").delete().eq("id", id)),
+
+  upsertSetOff: (x: SetOff) => run(() => supabase!.from("set_offs").upsert(setOffToRow(x))),
+  deleteSetOff: (id: string) => run(() => supabase!.from("set_offs").delete().eq("id", id)),
 
   /** Inventory is keyed by (product_id, shop_id), so upsert needs that conflict target. */
   upsertInventory: (rows: InventoryRow[]) =>

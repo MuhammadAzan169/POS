@@ -19,9 +19,11 @@ import type {
   Role,
   Sale,
   SaleLine,
+  SetOff,
   Settings,
   Shop,
   Supplier,
+  SupplierPayment,
   Transfer,
   User,
 } from "./store-types";
@@ -29,12 +31,14 @@ import { DEFAULT_DISCOUNTS, DEFAULT_RECEIPT } from "./store-types";
 import { openSessionFor } from "./day-book";
 import { dayOf, todayISO } from "./dates";
 import { db, loadSnapshot, subscribeToMessages } from "./db";
+import { maxSetOff } from "./ledger";
 import { isSupabaseConfigured } from "./supabase";
 
 // Calendar helpers moved to dates.ts so day-book.ts can share them; re-exported
 // here because every screen imports them from "@/lib/store".
 export * from "./dates";
 export * from "./day-book";
+export * from "./ledger";
 
 interface StoreState {
   user: User | null;
@@ -63,6 +67,10 @@ interface StoreState {
   transfers: Transfer[];
   customers: Customer[];
   customerPayments: CustomerPayment[];
+  /** Money paid out to suppliers, against their bills or ahead of them. */
+  supplierPayments: SupplierPayment[];
+  /** Debts cancelled against each other with a partner you both buy from and sell to. */
+  setOffs: SetOff[];
   /** The owner↔shop conversation, oldest first, live over a websocket. */
   messages: Message[];
   settings: Settings;
@@ -137,6 +145,21 @@ interface StoreState {
   updateCustomerPayment: (p: CustomerPayment) => void;
   deleteCustomerPayment: (id: string) => void;
 
+  /* ------------------------------------------------- suppliers and payables */
+  /** Records money paid to a supplier — settling old bills, or an advance. */
+  addSupplierPayment: (p: Omit<SupplierPayment, "id">) => void;
+  updateSupplierPayment: (p: SupplierPayment) => void;
+  deleteSupplierPayment: (id: string) => void;
+
+  /**
+   * Cancels what a partner owes you against what you owe them. Refuses, and
+   * returns null, when the amount exceeds what is actually available on either
+   * side — a set-off cannot create a debt that was never there.
+   */
+  addSetOff: (x: Omit<SetOff, "id">) => SetOff | null;
+  updateSetOff: (x: SetOff) => void;
+  deleteSetOff: (id: string) => void;
+
   /* ---------------------------------------------------------------- messages */
   /** Posts a message into one shop's thread. Returns the stored message. */
   sendMessage: (input: { shopId: string; body: string }) => Message | null;
@@ -209,6 +232,8 @@ import {
   genMessages,
   genPurchases,
   genSales,
+  genSetOffs,
+  genSupplierPayments,
 } from "./seed-data";
 
 const StoreContext = createContext<StoreState | null>(null);
@@ -235,6 +260,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [customers, setCustomers] = useState<Customer[]>(CUSTOMERS);
   const [customerPayments, setCustomerPayments] = useState<CustomerPayment[]>(() => genCustomerPayments());
+  const [supplierPayments, setSupplierPayments] = useState<SupplierPayment[]>(() => genSupplierPayments());
+  const [setOffs, setSetOffs] = useState<SetOff[]>(() => genSetOffs());
   const [messages, setMessages] = useState<Message[]>(() => genMessages());
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [discounts, setDiscounts] = useState<DiscountRules>(DEFAULT_DISCOUNTS);
@@ -281,6 +308,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setTransfers(snap.transfers);
           setCustomers(snap.customers);
           setCustomerPayments(snap.customerPayments);
+          setSupplierPayments(snap.supplierPayments);
+          setSetOffs(snap.setOffs);
           setMessages(snap.messages);
           setSettings(snap.settings);
           setDiscounts(snap.discounts);
@@ -366,6 +395,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       transfers,
       customers,
       customerPayments,
+      supplierPayments,
+      setOffs,
       messages,
       settings,
       discounts,
@@ -467,7 +498,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
       },
       addPurchase: (p) => {
-        const purchase: Purchase = { ...p, id: `pur-${Date.now()}` };
+        // A bill raised at a shop while its day is open is stamped with that
+        // session, so cash handed to the delivery man leaves the drawer on the
+        // right trading day — including after midnight, when the calendar date
+        // has already moved on but the day has not.
+        const session = p.createdByShopId ? openSessionFor(daySessions, p.createdByShopId) : undefined;
+        const purchase: Purchase = {
+          ...p,
+          id: `pur-${Date.now()}`,
+          sessionId: p.sessionId ?? session?.id,
+        };
         setPurchases((prev) => [purchase, ...prev]);
         persist("the purchase", () => db.upsertPurchase(purchase));
         // The purchase form promises "latest cost will update for <product>";
@@ -971,6 +1011,63 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         persist("the deletion", () => db.deleteCustomerPayment(id));
       },
 
+      /* --------------------------------------------- suppliers and payables */
+
+      addSupplierPayment: (p) => {
+        // Cash paid out of a shop's till has to leave that day's count, so the
+        // payment is attached by session id exactly as a receipt is. Head-office
+        // payments carry no shop and so touch no drawer.
+        const session = p.shopId ? openSessionFor(daySessions, p.shopId) : undefined;
+        const attach = session && dayOf(p.date) <= session.businessDate ? session.id : undefined;
+        const payment: SupplierPayment = {
+          ...p,
+          id: `spay-${Date.now()}`,
+          sessionId: p.sessionId ?? attach,
+        };
+        setSupplierPayments((prev) => [payment, ...prev]);
+        persist("the supplier payment", () => db.upsertSupplierPayment(payment));
+      },
+
+      updateSupplierPayment: (p) => {
+        setSupplierPayments((prev) => prev.map((x) => (x.id === p.id ? p : x)));
+        persist("the supplier payment", () => db.upsertSupplierPayment(p));
+      },
+
+      deleteSupplierPayment: (id) => {
+        setSupplierPayments((prev) => prev.filter((x) => x.id !== id));
+        persist("the deletion", () => db.deleteSupplierPayment(id));
+      },
+
+      addSetOff: (x) => {
+        const customer = customers.find((c) => c.id === x.customerId);
+        const supplier = suppliers.find((sp) => sp.id === x.supplierId);
+        if (!customer || !supplier) return null;
+
+        // Both balances are derived, so the ceiling has to be recomputed here
+        // rather than trusted from whatever the form last rendered — another
+        // till may have taken a payment in between.
+        const available = maxSetOff(customer, supplier, {
+          sales, customerPayments, purchases, supplierPayments, returns, setOffs,
+        });
+        const amount = Math.round(Math.min(x.amount, available));
+        if (amount <= 0) return null;
+
+        const rec: SetOff = { ...x, amount, id: `off-${Date.now()}` };
+        setSetOffs((prev) => [rec, ...prev]);
+        persist("the set-off", () => db.upsertSetOff(rec));
+        return rec;
+      },
+
+      updateSetOff: (x) => {
+        setSetOffs((prev) => prev.map((y) => (y.id === x.id ? x : y)));
+        persist("the set-off", () => db.upsertSetOff(x));
+      },
+
+      deleteSetOff: (id) => {
+        setSetOffs((prev) => prev.filter((x) => x.id !== id));
+        persist("the deletion", () => db.deleteSetOff(id));
+      },
+
       /* -------------------------------------------------------- messages */
 
       sendMessage: ({ shopId, body }) => {
@@ -1036,7 +1133,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return count;
       },
     }),
-    [user, ready, usingSupabase, dbError, pendingMigration, online, shops, users, products, inventory, sales, purchases, suppliers, expenses, returns, daySessions, transfers, customers, customerPayments, messages, settings, discounts],
+    [user, ready, usingSupabase, dbError, pendingMigration, online, shops, users, products, inventory, sales, purchases, suppliers, expenses, returns, daySessions, transfers, customers, customerPayments, supplierPayments, setOffs, messages, settings, discounts],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

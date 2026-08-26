@@ -21,9 +21,11 @@ import {
   type Purchase,
   type Sale,
   type SaleLine,
+  type SetOff,
   type Settings,
   type Shop,
   type Supplier,
+  type SupplierPayment,
   type User,
 } from "./store-types";
 import { localDay } from "./dates";
@@ -53,7 +55,7 @@ export const USERS: User[] = [
 
 /** Wholesale rates sit roughly midway between cost and the retail price. */
 export const PRODUCTS: Product[] = [
-  { id: "p1", barcode: "8901001", name: "Matte Lipstick — Ruby 02", category: "Cosmetics", brand: "Glow", size: "—", color: "Ruby", cost: 280, price: 450, wholesalePrice: 360, lowAlert: 6, active: true },
+  { id: "p1", barcode: "8901001", name: "Matte Lipstick — Ruby 02", category: "Cosmetics", brand: "Glow", color: "Ruby", cost: 280, price: 450, wholesalePrice: 360, lowAlert: 6, active: true },
   { id: "p2", barcode: "8901002", name: "Kajal Pencil — Black", category: "Cosmetics", brand: "Glow", cost: 80, price: 150, wholesalePrice: 115, lowAlert: 10, active: true },
   { id: "p3", barcode: "8901003", name: "Foundation Stick — Beige", category: "Cosmetics", brand: "Luxe", color: "Beige", cost: 620, price: 1100, wholesalePrice: 860, lowAlert: 4, active: true },
   { id: "p4", barcode: "8901004", name: "Compact Powder", category: "Cosmetics", brand: "Luxe", cost: 480, price: 850, wholesalePrice: 665, lowAlert: 5, active: true },
@@ -86,9 +88,15 @@ export const SUPPLIERS: Supplier[] = [
  * be saved as a customer too, without any credit line.
  */
 export const CUSTOMERS: Customer[] = [
-  { id: "c1", name: "Bilal Traders", contact: "Bilal Ahmed", phone: "0321-4567890", address: "Hall Road, Lahore", notes: "Buys every Monday. Reliable payer.", kind: "wholesale", creditLimit: 150000, active: true },
+  // Bilal is on both sides of the business: he buys stock from the wholesale
+  // counter AND supplies cosmetics to it, which is why his customer record is
+  // linked to supplier `sup1`. The Ledgers tab collapses the two into one line
+  // and offers to set the debts off against each other.
+  { id: "c1", name: "Bilal Traders", contact: "Bilal Ahmed", phone: "0321-4567890", address: "Hall Road, Lahore", notes: "Buys every Monday. Also supplies us — see Glow Cosmetics.", kind: "wholesale", creditLimit: 150000, linkedSupplierId: "sup1", active: true },
   { id: "c2", name: "Noor Kirana Store", contact: "Noor Ul Haq", phone: "0300-7654321", address: "Shadman, Lahore", notes: "Small orders, pays within a week.", kind: "wholesale", creditLimit: 60000, active: true },
-  { id: "c3", name: "Hassan General Store", contact: "Hassan Raza", phone: "0333-2233445", address: "Johar Town, Lahore", notes: "Seasonal buyer.", kind: "wholesale", creditLimit: 80000, active: true },
+  // Pays for the whole month up front on the 1st and draws stock against it —
+  // the advance case, which shows as money held rather than money owed.
+  { id: "c3", name: "Hassan General Store", contact: "Hassan Raza", phone: "0333-2233445", address: "Johar Town, Lahore", notes: "Pays at the start of the month, then draws stock against it.", kind: "wholesale", creditLimit: 80000, active: true },
   { id: "c4", name: "Mehran Cosmetics", contact: "Sadia Mehran", phone: "0345-9988776", address: "Anarkali, Lahore", notes: "Cash only — no credit line.", kind: "wholesale", creditLimit: 0, active: true },
   { id: "c5", name: "Ayesha K.", contact: "Ayesha Khan", phone: "0301-1122334", address: "Gulberg, Lahore", notes: "Regular retail customer.", kind: "retail", creditLimit: 0, active: true },
 ];
@@ -191,6 +199,22 @@ export function genCustomerPayments(): CustomerPayment[] {
     });
   });
 
+  // Hassan pays for the whole month on the 1st and then draws stock against it.
+  // The figure is deliberately larger than what he has taken so far, so his
+  // balance reads as an advance you are HOLDING rather than a debt he owes —
+  // which is the case the Customers tab could not previously express at all.
+  const monthStart = `${localDay(new Date()).slice(0, 7)}-01`;
+  out.push({
+    id: "pay-advance-c3",
+    customerId: "c3",
+    date: monthStart,
+    amount: 120000,
+    method: "Online",
+    shopId: WHOLESALE_SHOP.id,
+    note: "Month advance — draws stock against it",
+    receivedBy: "Wholesale Counter",
+  });
+
   return out;
 }
 
@@ -284,6 +308,7 @@ export function genDaySessions(): DaySession[] {
   const sales = genSales();
   const expenses = genExpenses();
   const payments = genCustomerPayments();
+  const bills = genPurchases();
 
   // Every outlet keeps a day book, the wholesale counter included — it takes
   // cash and collects on old credit just like the branches do.
@@ -312,6 +337,18 @@ export function genDaySessions(): DaySession[] {
         .filter((e) => e.shopId === shop.id && e.date === businessDate)
         .reduce((a, e) => a + e.amount, 0);
 
+      // A bill the shopkeeper raised and settled in cash on the spot: the stock
+      // arrives, the money goes out of this drawer. Bills raised by the owner
+      // are paid from head office and never touch a shop's count.
+      const dayBillCash = bills
+        .filter(
+          (b) =>
+            b.createdByShopId === shop.id &&
+            b.date === businessDate &&
+            (b.payment ?? "Cash") === "Cash",
+        )
+        .reduce((a, b) => a + (b.amountPaid ?? b.total), 0);
+
       const openedAt = new Date(day);
       openedAt.setHours(9, 30, 0, 0);
       const closedAt = new Date(day);
@@ -319,7 +356,7 @@ export function genDaySessions(): DaySession[] {
 
       // The demo tills balance exactly, so any variance you see in the app is
       // one you created rather than noise baked into the seed.
-      const counted = Math.max(0, float + dayCash + dayCollected - dayExpenses);
+      const counted = Math.max(0, float + dayCash + dayCollected - dayExpenses - dayBillCash);
       // The owner leaves a round float behind and takes the rest.
       const leftBehind = Math.min(counted, 5000);
       const taken = counted - leftBehind;
@@ -380,9 +417,144 @@ export function genPurchases(): Purchase[] {
       total,
       createdBy: byShop ? `${target.name} Cashier` : "Owner",
       createdByShopId: byShop ? target.id : undefined,
-      paid: i % 4 !== 1,
+      ...settlementFor(i, total, date),
     };
   });
+}
+
+/**
+ * The four ways a bill actually gets settled, one of each so every state in the
+ * Purchases tab has something in it: paid on the spot, part paid, wholly on
+ * account, and paid on account but already overdue.
+ */
+function settlementFor(i: number, total: number, date: Date) {
+  const due = new Date(date);
+  due.setDate(due.getDate() + 30);
+  const overdue = new Date(date);
+  overdue.setDate(overdue.getDate() - 5);
+
+  switch (i % 4) {
+    case 0:
+      return { payment: "Cash" as const, amountPaid: total };
+    case 1:
+      // Part payment: something now, the rest at the end of the month.
+      return { payment: "Credit" as const, amountPaid: Math.round(total * 0.4), dueDate: localDay(due) };
+    case 2:
+      return { payment: "Credit" as const, amountPaid: 0, dueDate: localDay(due) };
+    default:
+      // Due date already gone by, so the overdue list is not empty on first run.
+      return { payment: "Credit" as const, amountPaid: 0, dueDate: localDay(overdue) };
+  }
+}
+
+/**
+ * Money paid back to suppliers, plus one advance placed ahead of any bill.
+ *
+ * Deliberately less than what is owed, so Payables opens with real balances
+ * rather than a column of zeros — the same reasoning as the customer payments.
+ */
+export function genSupplierPayments(): SupplierPayment[] {
+  const bills = genPurchases();
+  const out: SupplierPayment[] = [];
+
+  // An advance placed with a supplier before the season's stock is delivered.
+  // Deliberately more than their bills come to, so one row on the Payables list
+  // reads "money sitting with them" rather than "money owed".
+  const seasonal = bills
+    .filter((b) => b.supplierId === "sup3")
+    .reduce((a, b) => a + b.total - (b.amountPaid ?? 0), 0);
+  const ahead = new Date();
+  ahead.setDate(ahead.getDate() - 1);
+  out.push({
+    id: "spay-advance",
+    supplierId: "sup3",
+    date: localDay(ahead),
+    amount: seasonal + 30000,
+    method: "Online",
+    shopId: "",
+    note: "Advance against the coming season's order",
+    paidBy: "Owner",
+  });
+
+  SUPPLIERS.forEach((supplier, i) => {
+    // Already paid ahead; a further part payment would only muddle the row.
+    if (supplier.id === "sup3") return;
+    const theirs = bills.filter((b) => b.supplierId === supplier.id);
+    const owed = theirs.reduce((a, b) => a + b.total - (b.amountPaid ?? 0), 0);
+    if (owed <= 0) return;
+
+    const date = new Date();
+    date.setDate(date.getDate() - (3 + i * 2));
+    out.push({
+      id: `spay-${i + 1}`,
+      supplierId: supplier.id,
+      date: localDay(date),
+      // Roughly a third of what is owed, so a balance always remains.
+      amount: Math.round(owed / 3),
+      method: i % 2 === 0 ? "Online" : "Cash",
+      // Paid by the owner from head office, so no shop's drawer is touched.
+      shopId: "",
+      note: "Part settlement of outstanding bills",
+      paidBy: "Owner",
+    });
+  });
+
+  return out;
+}
+
+/**
+ * What one supplier is still owed, from the records alone.
+ *
+ * Used by the generators below to size an advance and a set-off against real
+ * figures rather than round numbers that happen to overshoot — a hardcoded
+ * 25,000 set-off against a 13,000 balance quietly turned a debt into an advance
+ * and left the demo with nothing to demonstrate.
+ */
+function owedToSupplier(supplierId: string) {
+  const bills = genPurchases().filter((b) => b.supplierId === supplierId);
+  const billed = bills.reduce((a, b) => a + b.total - (b.amountPaid ?? 0), 0);
+  const paid = genSupplierPayments()
+    .filter((x) => x.supplierId === supplierId)
+    .reduce((a, x) => a + x.amount, 0);
+  return Math.max(0, billed - paid);
+}
+
+/** What one customer still owes, before any set-off. */
+function owedByCustomer(customerId: string) {
+  const credit = genCreditSales()
+    .filter((x) => x.customerId === customerId)
+    .reduce((a, x) => a + x.total, 0);
+  const paid = genCustomerPayments()
+    .filter((x) => x.customerId === customerId)
+    .reduce((a, x) => a + x.amount, 0);
+  return Math.max(0, credit - paid);
+}
+
+/**
+ * One set-off, against the partner who sits on both sides of the business.
+ *
+ * Sized at HALF of what could be cancelled rather than all of it, so both
+ * balances survive it. Cancelling the lot would leave one side at zero, the
+ * Ledgers tab showing nothing left to set off, and the feature invisible on a
+ * first run — which is the opposite of what the demo data is for.
+ */
+export function genSetOffs(): SetOff[] {
+  const date = new Date();
+  date.setDate(date.getDate() - 2);
+  const available = Math.min(owedByCustomer("c1"), owedToSupplier("sup1"));
+  const amount = Math.round(available / 2);
+  if (amount <= 0) return [];
+  return [
+    {
+      id: "off-1",
+      date: localDay(date),
+      customerId: "c1",
+      supplierId: "sup1",
+      amount,
+      note: "Agreed against his last delivery",
+      createdBy: "Owner",
+    },
+  ];
 }
 
 export function genExpenses(): Expense[] {
