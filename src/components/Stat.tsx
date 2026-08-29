@@ -1,5 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { Link } from "@tanstack/react-router";
+import { ArrowUpRight } from "lucide-react";
 import type { ReactNode } from "react";
 
 export function StatCard({
@@ -8,6 +10,8 @@ export function StatCard({
   sub,
   icon,
   tone = "default",
+  to,
+  onClick,
 }: {
   label: string;
   value: string;
@@ -15,6 +19,14 @@ export function StatCard({
   sub?: ReactNode;
   icon?: ReactNode;
   tone?: "default" | "success" | "warning" | "accent" | "primary";
+  /**
+   * Where the figure came from. A card that states a number the user then has
+   * to go and find by hand is half a feature: given a destination the whole
+   * card becomes the link, with the arrow saying so before it is clicked.
+   */
+  to?: string;
+  /** For a card whose detail is on this same page — switching to a tab, say. */
+  onClick?: () => void;
 }) {
   const toneStyles: Record<string, string> = {
     default: "bg-muted/60 text-foreground",
@@ -23,25 +35,58 @@ export function StatCard({
     accent: "bg-accent/20 text-accent-strong",
     primary: "bg-primary/10 text-primary",
   };
-  return (
-    // Two of these sit side by side on a phone, so the padding, the figure and
-    // the icon all step down a size below sm; min-w-0 + break-words stop a long
-    // amount ("Rs 1,234,567") from forcing the card wider than its grid column.
-    <Card className="p-4 sm:p-5">
-      <div className="flex items-start justify-between gap-2 sm:gap-3">
-        <div className="min-w-0">
-          <div className="text-[11px] sm:text-xs uppercase tracking-wider text-muted-foreground font-medium">{label}</div>
-          <div className="font-display text-xl sm:text-2xl md:text-3xl font-bold mt-1.5 sm:mt-2 break-words">{value}</div>
-          {sub && <div className="text-xs text-muted-foreground mt-1.5">{sub}</div>}
-        </div>
+  const interactive = Boolean(to || onClick);
+
+  const body = (
+    <div className="flex items-start justify-between gap-2 sm:gap-3">
+      <div className="min-w-0">
+        <div className="text-[11px] sm:text-xs uppercase tracking-wider text-muted-foreground font-medium">{label}</div>
+        <div className="font-display text-xl sm:text-2xl md:text-3xl font-bold mt-1.5 sm:mt-2 break-words">{value}</div>
+        {sub && <div className="text-xs text-muted-foreground mt-1.5">{sub}</div>}
+      </div>
+      <div className="flex flex-col items-end gap-1.5 shrink-0">
         {icon && (
-          <div className={cn("h-9 w-9 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center shrink-0", toneStyles[tone])}>
+          <div className={cn("h-9 w-9 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center", toneStyles[tone])}>
             {icon}
           </div>
         )}
+        {interactive && (
+          // Opacity rather than display, so the arrow reserves its space and the
+          // card does not shift under the cursor on hover.
+          <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground opacity-40 group-hover:opacity-100 transition-opacity" />
+        )}
       </div>
-    </Card>
+    </div>
   );
+
+  // Two of these sit side by side on a phone, so the padding, the figure and
+  // the icon all step down a size below sm; min-w-0 + break-words stop a long
+  // amount ("Rs 1,234,567") from forcing the card wider than its grid column.
+  const className = cn(
+    "p-4 sm:p-5 h-full",
+    interactive &&
+      "group cursor-pointer transition-colors hover:bg-muted/40 hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+  );
+
+  if (to) {
+    return (
+      <Link to={to} className="block rounded-xl">
+        <Card className={className}>{body}</Card>
+      </Link>
+    );
+  }
+
+  if (onClick) {
+    return (
+      // A button, not a div with a handler: the keyboard and a screen reader
+      // both need to know this is something you can activate.
+      <button type="button" onClick={onClick} className="block w-full text-left rounded-xl">
+        <Card className={className}>{body}</Card>
+      </button>
+    );
+  }
+
+  return <Card className={className}>{body}</Card>;
 }
 
 export function StatusPill({ status }: { status: string }) {

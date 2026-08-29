@@ -1,11 +1,11 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import {
   useStore, formatRs, supplierBalance, supplierLedger, linkedCustomer, purchaseSettlement,
   type Supplier, type SupplierPayment,
 } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
-import { StatusPill } from "@/components/Stat";
+import { StatCard, StatusPill } from "@/components/Stat";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,7 @@ import { AdjustBalanceDialog } from "@/components/AdjustBalanceDialog";
 import { LedgerTable } from "@/components/LedgerTable";
 import {
   Plus, Download, Search, Pencil, Truck, Phone, Mail, MapPin, PackagePlus,
-  Wallet, ArrowLeftRight, Trash2, Scale,
+  Wallet, ArrowLeftRight, Trash2, Scale, PiggyBank,
 } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
@@ -191,6 +191,7 @@ function SuppliersPage() {
       payable: all.reduce((a, b) => a + b.outstanding, 0),
       advance: all.reduce((a, b) => a + b.advance, 0),
       owing: all.filter((b) => b.outstanding > 0).length,
+      unpaidBills: all.reduce((a, b) => a + b.unpaidBills, 0),
     };
   }, [suppliers, ledgerData]);
 
@@ -269,6 +270,47 @@ function SuppliersPage() {
         }
       />
 
+      {/*
+        The same four figures the Customers page leads with, pointing the other
+        way. "What do I owe, and to whom" was previously a line of small print
+        under the search box; it is the reason the owner opens this page, so it
+        now reads as the headline and each card opens what it counts.
+      */}
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4 mb-4">
+        <StatCard
+          label="Suppliers"
+          value={String(suppliers.length)}
+          sub={`${suppliers.filter((s) => s.active).length} active`}
+          icon={<Truck className="h-5 w-5" />}
+          tone="primary"
+          onClick={() => setFilter("all")}
+        />
+        <StatCard
+          label="Total payables"
+          value={money(totals.payable)}
+          sub={totals.owing > 0 ? `${totals.owing} supplier${totals.owing === 1 ? "" : "s"} waiting` : "all settled"}
+          icon={<Wallet className="h-5 w-5" />}
+          tone={totals.payable > 0 ? "warning" : "success"}
+          onClick={() => setFilter("owing")}
+        />
+        <StatCard
+          label="Advances placed"
+          value={money(totals.advance)}
+          sub={totals.advance > 0 ? "paid ahead, not yet billed" : "none placed"}
+          icon={<PiggyBank className="h-5 w-5" />}
+          tone={totals.advance > 0 ? "accent" : "default"}
+          to="/app/ledger"
+        />
+        <StatCard
+          label="Bills to settle"
+          value={String(totals.unpaidBills)}
+          sub="open supplier bills"
+          icon={<Scale className="h-5 w-5" />}
+          tone={totals.unpaidBills > 0 ? "warning" : "default"}
+          to="/app/purchases"
+        />
+      </div>
+
       <Card className="p-3 sm:p-4 mb-4 grid gap-3 sm:flex sm:flex-wrap sm:items-end">
         <div className="space-y-1.5">
           <Label className="text-xs">Search</Label>
@@ -295,7 +337,10 @@ function SuppliersPage() {
         <div className="text-xs text-muted-foreground sm:ml-auto sm:text-right">
           <div>{rows.length} suppliers · {money(rows.reduce((a, r) => a + r.spent, 0))} spent</div>
           <div className="mt-0.5">
-            You owe <span className="font-medium text-warning-strong">{money(totals.payable)}</span>
+            You owe{" "}
+            <Link to="/app/ledger" className="font-medium text-warning-strong hover:underline">
+              {money(totals.payable)}
+            </Link>
             {totals.advance > 0 && <> · {money(totals.advance)} sitting with them as advances</>}
           </div>
         </div>

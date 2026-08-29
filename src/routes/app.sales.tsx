@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   useStore, formatRs, todayISO, daysAgoISO, dayOf, discountSplitOf, allocateSale,
@@ -137,6 +137,11 @@ function SalesPage() {
       average: live.length > 0 ? Math.round(revenue / live.length) : 0,
       returned: returned.length,
       returnedValue: returned.reduce((a, s) => a + s.total, 0),
+      // Sales that took no money. They are already in `revenue`, which is what
+      // was BILLED, not what was banked — this says how much of it is still a
+      // promise rather than cash.
+      credit: live.filter((s) => s.payment === "Credit").reduce((a, s) => a + s.total, 0),
+      creditCount: live.filter((s) => s.payment === "Credit").length,
     };
   }, [rows]);
 
@@ -259,7 +264,7 @@ function SalesPage() {
         so they stay aligned as the filters change.
       */}
       <Card className="mb-4 overflow-hidden">
-        <dl className="grid grid-cols-2 divide-x divide-y sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
+        <dl className="grid grid-cols-2 divide-x divide-y sm:grid-cols-3 lg:grid-cols-7 lg:divide-y-0">
           <Metric label="Invoices" value={stats.invoices.toLocaleString()} />
           <Metric label="Revenue" value={formatRs(stats.revenue, settings.currency)} emphasis />
           <Metric label="Items sold" value={stats.items.toLocaleString()} />
@@ -275,6 +280,13 @@ function SalesPage() {
                 ? `${formatRs(stats.itemDiscount, settings.currency)} item · ${formatRs(stats.billDiscount, settings.currency)} bill`
                 : undefined
             }
+          />
+          <Metric
+            label="On credit"
+            value={stats.credit === 0 ? "None" : formatRs(stats.credit, settings.currency)}
+            sub={stats.creditCount > 0 ? `${stats.creditCount} invoice${stats.creditCount === 1 ? "" : "s"} unpaid` : undefined}
+            tone={stats.credit > 0 ? "destructive" : undefined}
+            to={isAdmin ? "/app/ledger" : "/app/customers"}
           />
           {isAdmin ? (
             <Metric label="Profit" value={formatRs(stats.profit, settings.currency)} tone="success" />
@@ -804,6 +816,7 @@ function Metric({
   sub,
   emphasis,
   tone,
+  to,
 }: {
   label: string;
   value: string;
@@ -811,9 +824,11 @@ function Metric({
   sub?: string;
   emphasis?: boolean;
   tone?: "success" | "destructive";
+  /** Where the figure can be chased up, when that is somewhere other than here. */
+  to?: string;
 }) {
-  return (
-    <div className="px-4 py-3 sm:px-5 sm:py-4 min-w-0">
+  const inner = (
+    <>
       <dt className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{label}</dt>
       <dd
         className={cn(
@@ -826,6 +841,19 @@ function Metric({
         {value}
       </dd>
       {sub && <dd className="text-[11px] text-muted-foreground mt-0.5 tabular-nums break-words">{sub}</dd>}
+    </>
+  );
+
+  const padding = "px-4 py-3 sm:px-5 sm:py-4 min-w-0";
+  if (!to) return <div className={padding}>{inner}</div>;
+  return (
+    // The link is an overlay rather than a wrapper: <dt>/<dd> may only sit
+    // inside the <dl> or a plain <div>, so wrapping them in an <a> would be
+    // invalid markup. This keeps the structure and still makes the whole cell
+    // one target.
+    <div className={cn(padding, "relative transition-colors hover:bg-muted/50")}>
+      {inner}
+      <Link to={to} className="absolute inset-0" aria-label={`${label} — open details`} />
     </div>
   );
 }

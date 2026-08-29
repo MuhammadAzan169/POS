@@ -277,10 +277,11 @@ function CustomersPage() {
       )}
 
       <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4 mb-4">
-        <StatCard label="Customers" value={String(customers.length)} sub={`${customers.filter((c) => c.kind === "wholesale").length} trade buyers`} icon={<Users className="h-5 w-5" />} tone="primary" />
-        <StatCard label="Total outstanding" value={formatRs(owed, currency)} sub={`${owingCount} owing`} icon={<Wallet className="h-5 w-5" />} tone="warning" />
+        <StatCard label="Customers" value={String(customers.length)} sub={`${customers.filter((c) => c.kind === "wholesale").length} trade buyers`} icon={<Users className="h-5 w-5" />} tone="primary" onClick={() => setFilter("all")} />
+        <StatCard label="Total receivables" value={formatRs(owed, currency)} sub={`${owingCount} still to pay you`} icon={<Wallet className="h-5 w-5" />} tone="warning" onClick={() => setFilter("owing")} />
         <StatCard
           label="Advances held"
+          onClick={() => setFilter("advance")}
           value={formatRs(advances, currency)}
           sub={advances > 0 ? "paid ahead, not yet drawn" : "none held"}
           icon={<PiggyBank className="h-5 w-5" />}
@@ -289,6 +290,7 @@ function CustomersPage() {
         {isAdmin && (
           <StatCard
             label="Collected"
+            to="/app/ledger"
             value={formatRs(customerPayments.reduce((a, p) => a + p.amount, 0), currency)}
             sub={`all time · ${overLimit} at limit`}
             icon={<HandCoins className="h-5 w-5" />}

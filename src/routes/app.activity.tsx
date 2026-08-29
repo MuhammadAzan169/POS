@@ -150,6 +150,7 @@ function ActivityPage() {
 
       <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4 mb-4">
         <StatCard
+          onClick={() => { setWho("all"); setEntity("all"); setQ(""); }}
           label={`Deleted in ${RECENT_DAYS} days`}
           value={String(stats.recent)}
           sub={stats.recent > 0 ? `worth ${money(stats.recentValue)}` : "nothing removed"}
@@ -157,6 +158,7 @@ function ActivityPage() {
           tone={stats.recent > 0 ? "warning" : "default"}
         />
         <StatCard
+          onClick={() => { setWho("shop"); setEntity("all"); }}
           label="By shop staff"
           value={String(stats.byShops)}
           sub={stats.byShops > 0 ? "worth asking about" : "none"}
@@ -171,6 +173,7 @@ function ActivityPage() {
           tone={stats.awaiting > 0 ? "primary" : "default"}
         />
         <StatCard
+          onClick={() => { setWho("all"); setEntity("all"); setQ(""); }}
           label="Entries kept"
           value={String(activity.length)}
           sub="most recent 500"

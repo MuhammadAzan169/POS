@@ -338,6 +338,7 @@ function Dashboard() {
       <div className={isAdmin ? "grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-5" : "grid gap-3 sm:gap-4 grid-cols-2"}>
         <StatCard
           label="Total sales"
+          to="/app/sales"
           value={formatRs(totals.sales, currency)}
           sub={<span className="inline-flex items-center gap-1.5">{totals.invoices} invoices <DeltaBadge current={totals.sales} prior={prior.sales} label={vs} /></span>}
           icon={<ShoppingBag className="h-5 w-5" />}
@@ -346,6 +347,7 @@ function Dashboard() {
         {isAdmin && (
           <StatCard
             label="Total profit"
+            to="/app/reports"
             value={formatRs(totals.profit, currency)}
             sub={<DeltaBadge current={totals.profit} prior={prior.profit} label={vs} />}
             icon={<TrendingUp className="h-5 w-5" />}
@@ -354,6 +356,7 @@ function Dashboard() {
         )}
         <StatCard
           label="Items sold"
+          to="/app/sales"
           value={totals.items.toLocaleString()}
           sub={<DeltaBadge current={totals.items} prior={prior.items} label={vs} />}
           icon={<Receipt className="h-5 w-5" />}
@@ -361,6 +364,7 @@ function Dashboard() {
         {isAdmin && (
           <StatCard
             label="Expenses"
+            to="/app/expenses"
             value={formatRs(totals.expenses, currency)}
             sub={<DeltaBadge current={totals.expenses} prior={prior.expenses} label={vs} />}
             icon={<Wallet className="h-5 w-5" />}
@@ -370,6 +374,7 @@ function Dashboard() {
         {isAdmin && (
           <StatCard
             label="Net profit"
+            to="/app/reports"
             value={formatRs(totals.profit - totals.expenses, currency)}
             sub="sales profit − expenses"
             icon={<Wallet2 className="h-5 w-5" />}
@@ -381,7 +386,8 @@ function Dashboard() {
       {/* Owed money is not period-scoped: it's a standing balance, so it sits
           apart from the range-filtered figures above rather than inside them. */}
       {isAdmin && owedToYou > 0 && (
-        <Card className="mt-4 p-4 flex flex-wrap items-center justify-between gap-3 border-warning/40 bg-warning/5">
+        <Link to="/app/customers" className="block rounded-xl mt-4">
+        <Card className="p-4 flex flex-wrap items-center justify-between gap-3 border-warning/40 bg-warning/5 transition-colors hover:bg-warning/10">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg bg-warning/20 text-warning-strong flex items-center justify-center shrink-0">
               <HandCoins className="h-5 w-5" />
@@ -397,17 +403,22 @@ function Dashboard() {
             <div className="font-display text-2xl font-bold text-warning-strong">
               {formatRs(owedToYou, currency)}
             </div>
-            <Button variant="outline" size="sm" asChild>
-              <Link to="/app/customers">Collect <ArrowRight className="h-3.5 w-3.5 ml-1" /></Link>
-            </Button>
+            {/* The whole card is the link, so this only has to LOOK like the
+                button — a real <button> nested inside an <a> is invalid markup
+                and gives the card a second, competing tab stop. */}
+            <span className="inline-flex items-center h-9 px-3 rounded-md border bg-background text-sm font-medium shrink-0">
+              Collect <ArrowRight className="h-3.5 w-3.5 ml-1" />
+            </span>
           </div>
         </Card>
+        </Link>
       )}
 
       {/* The mirror image, and the one that used to be invisible: stock taken
           on account is money already spent, it just has not left yet. */}
       {isAdmin && youOwe > 0 && (
-        <Card className="mt-4 p-4 flex flex-wrap items-center justify-between gap-3 border-destructive/30 bg-destructive/5">
+        <Link to="/app/ledger" className="block rounded-xl mt-4">
+        <Card className="p-4 flex flex-wrap items-center justify-between gap-3 border-destructive/30 bg-destructive/5 transition-colors hover:bg-destructive/10">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg bg-destructive/15 text-destructive flex items-center justify-center shrink-0">
               <Wallet className="h-5 w-5" />
@@ -423,11 +434,12 @@ function Dashboard() {
             <div className="font-display text-2xl font-bold text-destructive">
               {formatRs(youOwe, currency)}
             </div>
-            <Button variant="outline" size="sm" asChild>
-              <Link to="/app/ledger">Ledgers <ArrowRight className="h-3.5 w-3.5 ml-1" /></Link>
-            </Button>
+            <span className="inline-flex items-center h-9 px-3 rounded-md border bg-background text-sm font-medium shrink-0">
+              Ledgers <ArrowRight className="h-3.5 w-3.5 ml-1" />
+            </span>
           </div>
         </Card>
+        </Link>
       )}
 
       {/* ------------------------------------------------ how customers paid */}
@@ -448,10 +460,10 @@ function Dashboard() {
               <div className="bg-[var(--color-chart-4)]" style={{ width: `${mix.pct(mix.credit)}%` }} />
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <PayTile icon={<Banknote className="h-4 w-4" />} label="Cash" value={mix.cash} pct={mix.pct(mix.cash)} count={mix.counts.Cash} currency={currency} />
-              <PayTile icon={<CreditCard className="h-4 w-4" />} label="Card" value={mix.card} pct={mix.pct(mix.card)} count={mix.counts.Card} currency={currency} />
-              <PayTile icon={<Smartphone className="h-4 w-4" />} label="Online" value={mix.online} pct={mix.pct(mix.online)} count={mix.counts.Online} currency={currency} />
-              <PayTile icon={<HandCoins className="h-4 w-4" />} label="On credit" value={mix.credit} pct={mix.pct(mix.credit)} count={mix.counts.Credit} currency={currency} />
+              <PayTile icon={<Banknote className="h-4 w-4" />} label="Cash" value={mix.cash} pct={mix.pct(mix.cash)} count={mix.counts.Cash} currency={currency} to="/app/sales" />
+              <PayTile icon={<CreditCard className="h-4 w-4" />} label="Card" value={mix.card} pct={mix.pct(mix.card)} count={mix.counts.Card} currency={currency} to="/app/sales" />
+              <PayTile icon={<Smartphone className="h-4 w-4" />} label="Online" value={mix.online} pct={mix.pct(mix.online)} count={mix.counts.Online} currency={currency} to="/app/sales" />
+              <PayTile icon={<HandCoins className="h-4 w-4" />} label="On credit" value={mix.credit} pct={mix.pct(mix.credit)} count={mix.counts.Credit} currency={currency} to={isAdmin ? "/app/ledger" : "/app/customers"} />
             </div>
           </>
         )}
@@ -605,6 +617,7 @@ function PayTile({
   pct,
   count,
   currency,
+  to,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -612,15 +625,24 @@ function PayTile({
   pct: number;
   count: number;
   currency: string;
+  /** Where this slice of the takings can be looked at line by line. */
+  to?: string;
 }) {
-  return (
-    <div className="min-w-0">
+  const body = (
+    <>
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         {icon}
         <span className="truncate">{label}</span>
       </div>
       <div className="font-semibold mt-1 break-words">{formatRs(value, currency)}</div>
       <div className="text-xs text-muted-foreground mt-0.5">{pct}% · {count} sale{count === 1 ? "" : "s"}</div>
-    </div>
+    </>
+  );
+
+  if (!to) return <div className="min-w-0">{body}</div>;
+  return (
+    <Link to={to} className="min-w-0 block rounded-lg -m-2 p-2 transition-colors hover:bg-muted/60">
+      {body}
+    </Link>
   );
 }

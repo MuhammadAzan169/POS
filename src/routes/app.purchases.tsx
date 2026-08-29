@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   useStore, formatRs, todayISO, shiftDay, matchProduct, purchaseSettlement,
@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Confirm } from "@/components/Confirm";
 import { SupplierPaymentDialog } from "@/components/SupplierPaymentDialog";
-import { Plus, Trash2, Download, PackagePlus, ScanLine, Truck, Pencil, Wallet, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Download, PackagePlus, ScanLine, Truck, Pencil, Wallet, AlertTriangle, ArrowRight } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
 
@@ -739,20 +739,37 @@ function PurchasesPage() {
           your suppliers was a boolean nobody could total up.
         */}
         <TabsContent value="owed" className="mt-4">
+          {/*
+            The first two open the party view of the same money — this tab lists
+            it bill by bill, which answers "what", while the owner's next
+            question is nearly always "who". Open bills stays put: the list it
+            counts is directly below it.
+          */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-            <Card className="p-4">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground">Still to pay</div>
-              <div className="mt-1 text-2xl font-semibold">{formatRs(owedTotal, settings.currency)}</div>
-            </Card>
-            <Card className="p-4">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground">Past its due date</div>
-              <div className={`mt-1 text-2xl font-semibold ${overdueTotal > 0 ? "text-destructive" : ""}`}>
-                {formatRs(overdueTotal, settings.currency)}
-              </div>
-            </Card>
+            <Link to="/app/suppliers" className="block rounded-xl">
+              <Card className="p-4 h-full transition-colors hover:bg-muted/40 hover:border-primary/40">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">Still to pay</div>
+                <div className="mt-1 text-2xl font-semibold tabular-nums">{formatRs(owedTotal, settings.currency)}</div>
+                <div className="text-xs text-primary mt-1 inline-flex items-center gap-0.5">
+                  By supplier <ArrowRight className="h-3 w-3" />
+                </div>
+              </Card>
+            </Link>
+            <Link to={isAdmin ? "/app/ledger" : "/app/suppliers"} className="block rounded-xl">
+              <Card className="p-4 h-full transition-colors hover:bg-muted/40 hover:border-primary/40">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">Past its due date</div>
+                <div className={`mt-1 text-2xl font-semibold tabular-nums ${overdueTotal > 0 ? "text-destructive" : ""}`}>
+                  {formatRs(overdueTotal, settings.currency)}
+                </div>
+                <div className="text-xs text-primary mt-1 inline-flex items-center gap-0.5">
+                  {isAdmin ? "Ledgers" : "Suppliers"} <ArrowRight className="h-3 w-3" />
+                </div>
+              </Card>
+            </Link>
             <Card className="p-4">
               <div className="text-xs uppercase tracking-wider text-muted-foreground">Open bills</div>
-              <div className="mt-1 text-2xl font-semibold">{owedBills.length}</div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums">{owedBills.length}</div>
+              <div className="text-xs text-muted-foreground mt-1">listed below</div>
             </Card>
           </div>
 

@@ -32,6 +32,7 @@ import {
   Search, Download, Wallet, HandCoins, ArrowLeftRight, AlertTriangle, Trash2, PiggyBank, Scale,
 } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/ledger")({ component: LedgerPage });
@@ -60,6 +61,10 @@ function LedgerPage() {
   const money = (n: number) => formatRs(n, currency);
 
   const [q, setQ] = useState("");
+  // Controlled rather than uncontrolled so the summary cards above can open the
+  // tab that explains them: a card stating "you owe 84,000" is only half an
+  // answer until it puts the list of who behind one click.
+  const [tab, setTab] = useState("parties");
   /** The party whose statement is open in the side sheet. */
   const [detail, setDetail] = useState<PartyPosition | null>(null);
   const [payFor, setPayFor] = useState<Supplier | null>(null);
@@ -99,6 +104,39 @@ function LedgerPage() {
 
   const bills = useMemo(() => openBills(data, todayISO()), [data]);
   const overdue = bills.filter((b) => b.overdueDays > 0);
+
+  /**
+   * Every sale put on a buyer's account, newest first.
+   *
+   * The other half of "Credit purchases": that tab shows what the business
+   * bought on credit, this one what it sold on credit. Both were only reachable
+   * before by opening one party at a time, so "what went out on account this
+   * week" was a question the owner could not ask.
+   *
+   * There is deliberately no per-invoice balance. Receipts are taken against
+   * the account as a whole, not against a numbered invoice, so an "owed" column
+   * here would be inventing an allocation the business never made — the party's
+   * standing balance is shown instead.
+   */
+  const creditSales = useMemo(
+    () =>
+      sales
+        .filter((s) => s.payment === "Credit" && s.status !== "Returned")
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .map((sale) => ({
+          sale,
+          shop: shops.find((sh) => sh.id === sale.shopId),
+          position: sale.customerId ? parties.find((p) => p.customer?.id === sale.customerId) : undefined,
+        })),
+    [sales, shops, parties],
+  );
+  const creditSalesTotal = creditSales.reduce((a, r) => a + r.sale.total, 0);
+
+  // The two directions named the way the owner asks for them. `receivable` is
+  // only ever the customer side of a party and `payable` only the supplier
+  // side, so these filters are exact — no party lands in the wrong list.
+  const toCollect = useMemo(() => parties.filter((p) => p.receivable > 0), [parties]);
+  const toPay = useMemo(() => parties.filter((p) => p.payable > 0), [parties]);
 
   const setOffRows = useMemo(
     () =>
@@ -192,6 +230,7 @@ function LedgerPage() {
 
       <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4 mb-4">
         <StatCard
+          onClick={() => setTab("receivable")}
           label="Owed to you"
           value={money(totals.receivable)}
           sub="across every customer"
@@ -199,6 +238,7 @@ function LedgerPage() {
           tone="warning"
         />
         <StatCard
+          onClick={() => setTab("payable")}
           label="You owe"
           value={money(totals.payable)}
           sub={overdue.length > 0 ? `${overdue.length} bill${overdue.length === 1 ? "" : "s"} overdue` : "nothing overdue"}
@@ -206,6 +246,7 @@ function LedgerPage() {
           tone={overdue.length > 0 ? "warning" : "default"}
         />
         <StatCard
+          onClick={() => setTab("parties")}
           label="Net position"
           value={money(Math.abs(totals.net))}
           sub={totals.net >= 0 ? "in your favour" : "against you"}
@@ -213,6 +254,7 @@ function LedgerPage() {
           tone={totals.net >= 0 ? "success" : "warning"}
         />
         <StatCard
+          onClick={() => setTab("parties")}
           label="Can be set off"
           value={money(totals.settleable)}
           sub={totals.settleable > 0 ? "no money need change hands" : "no mutual debts"}
@@ -242,20 +284,65 @@ function LedgerPage() {
         </Card>
       )}
 
-      <Tabs defaultValue="parties">
-        <TabsList>
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="parties">Everyone ({parties.length})</TabsTrigger>
-          <TabsTrigger value="receivable">They owe you ({parties.filter((p) => p.receivable > 0).length})</TabsTrigger>
-          <TabsTrigger value="payable">You owe ({parties.filter((p) => p.payable > 0).length})</TabsTrigger>
-          <TabsTrigger value="bills">Open bills ({bills.length})</TabsTrigger>
+          <TabsTrigger value="receivable">Customers to collect from ({toCollect.length})</TabsTrigger>
+          <TabsTrigger value="payable">Suppliers to pay ({toPay.length})</TabsTrigger>
+          <TabsTrigger value="creditsales">Credit sales ({creditSales.length})</TabsTrigger>
+          <TabsTrigger value="bills">Credit purchases ({bills.length})</TabsTrigger>
           <TabsTrigger value="payments">Payments out ({payments.length})</TabsTrigger>
           <TabsTrigger value="setoffs">Set-offs ({setOffRows.length})</TabsTrigger>
           <TabsTrigger value="adjustments">Adjustments ({adjustmentRows.length})</TabsTrigger>
         </TabsList>
 
         {/* ------------------------------------------------------ parties */}
-        {(["parties", "receivable", "payable"] as const).map((tab) => (
-          <TabsContent key={tab} value={tab} className="mt-4">
+        {(["parties", "receivable", "payable"] as const).map((pane) => (
+          <TabsContent key={pane} value={pane} className="mt-4">
+            {/*
+              Each direction says what it is in words before it shows a table.
+              "Receivable" and "payable" are the accountant's names for these;
+              the owner's question is "who still has to pay me" and "who am I
+              behind with", so that is what the heading answers.
+            */}
+            {pane !== "parties" && (
+              <Card
+                className={cn(
+                  "p-4 mb-4 flex flex-wrap items-center justify-between gap-3",
+                  pane === "receivable" ? "border-warning/40 bg-warning/5" : "border-destructive/30 bg-destructive/5",
+                )}
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className={cn(
+                      "h-10 w-10 rounded-lg flex items-center justify-center shrink-0",
+                      pane === "receivable" ? "bg-warning/20 text-warning-strong" : "bg-destructive/15 text-destructive",
+                    )}
+                  >
+                    {pane === "receivable" ? <HandCoins className="h-5 w-5" /> : <Wallet className="h-5 w-5" />}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-sm">
+                      {pane === "receivable" ? "Customers who still have to pay me" : "Suppliers I still have to pay"}
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5 max-w-prose">
+                      {pane === "receivable"
+                        ? `${toCollect.length} account${toCollect.length === 1 ? "" : "s"} with money outstanding. Open one to see every invoice and receipt behind the figure, then record what comes in on the Customers page.`
+                        : `${toPay.length} supplier${toPay.length === 1 ? " has" : "s have"} money still on their bills${overdue.length > 0 ? `, ${overdue.length} of which ${overdue.length === 1 ? "is" : "are"} past the agreed date` : ""}. Open one to see the bills, or use Pay to record a payment.`}
+                    </p>
+                  </div>
+                </div>
+                <div
+                  className={cn(
+                    "font-display text-2xl font-bold tabular-nums",
+                    pane === "receivable" ? "text-warning-strong" : "text-destructive",
+                  )}
+                >
+                  {money(pane === "receivable" ? totals.receivable : totals.payable)}
+                </div>
+              </Card>
+            )}
+
             <Card className="p-3 sm:p-4 mb-4 flex flex-wrap items-end gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">Search</Label>
@@ -276,7 +363,7 @@ function LedgerPage() {
 
             <PartyList
               parties={filtered.filter((p) =>
-                tab === "receivable" ? p.receivable > 0 : tab === "payable" ? p.payable > 0 : true,
+                pane === "receivable" ? p.receivable > 0 : pane === "payable" ? p.payable > 0 : true,
               )}
               currency={currency}
               onOpen={setDetail}
@@ -286,7 +373,83 @@ function LedgerPage() {
           </TabsContent>
         ))}
 
-        {/* -------------------------------------------------- open bills */}
+        {/* ------------------------------------------------ credit sales */}
+        <TabsContent value="creditsales" className="mt-4">
+          <Card className="p-4 mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-sm">Sold on account</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Every invoice handed over without payment, across all shops. Receipts are taken against the
+                account rather than a single invoice, so the balance shown is the customer's whole position.
+              </p>
+            </div>
+            <div className="font-display text-2xl font-bold text-warning-strong tabular-nums">
+              {money(creditSalesTotal)}
+            </div>
+          </Card>
+
+          <Card className="overflow-hidden">
+            <MobileCards
+              items={creditSales}
+              keyOf={(r) => r.sale.id}
+              empty="Nothing has been sold on credit."
+              render={(r) => (
+                <ListCard
+                  title={<span className="font-mono">{r.sale.invoice}</span>}
+                  subtitle={`${r.sale.customer} · ${shortDay(r.sale.date)}`}
+                  right={money(r.sale.total)}
+                  rightSub="on account"
+                  fields={[
+                    { label: "Shop", value: r.shop?.name ?? "—" },
+                    { label: "Items", value: String(r.sale.lines.length) },
+                    { label: "They now owe", value: r.position ? money(r.position.receivable) : "—" },
+                  ]}
+                />
+              )}
+            />
+            <TableWrap>
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 sticky top-0 z-10">
+                  <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+                    <th className="px-4 py-3 font-medium">Invoice</th>
+                    <th className="px-4 py-3 font-medium">Customer</th>
+                    <th className="px-4 py-3 font-medium">Shop</th>
+                    <th className="px-4 py-3 font-medium">Dated</th>
+                    <th className="px-4 py-3 font-medium text-right">Items</th>
+                    <th className="px-4 py-3 font-medium text-right">On account</th>
+                    <th className="px-4 py-3 font-medium text-right">They now owe</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {creditSales.map((r) => (
+                    <tr
+                      key={r.sale.id}
+                      className={cn("border-t", r.position && "hover:bg-muted/40 cursor-pointer")}
+                      onClick={() => r.position && setDetail(r.position)}
+                    >
+                      <td className="px-4 py-3 font-mono text-xs">{r.sale.invoice}</td>
+                      <td className="px-4 py-3">{r.sale.customer}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{r.shop?.name ?? "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{shortDay(r.sale.date)}</td>
+                      <td className="px-4 py-3 text-right text-muted-foreground">{r.sale.lines.length}</td>
+                      <td className="px-4 py-3 text-right font-medium">{money(r.sale.total)}</td>
+                      <td className="px-4 py-3 text-right text-warning-strong">
+                        {r.position ? money(r.position.receivable) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                  {creditSales.length === 0 && (
+                    <tr><td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                      Nothing has been sold on credit.
+                    </td></tr>
+                  )}
+                </tbody>
+              </table>
+            </TableWrap>
+          </Card>
+        </TabsContent>
+
+        {/* --------------------------------------------- credit purchases */}
         <TabsContent value="bills" className="mt-4">
           {overdue.length > 0 && (
             <Card className="p-4 mb-4 border-destructive/40 bg-destructive/5 flex items-start gap-3">

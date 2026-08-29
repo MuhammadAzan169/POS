@@ -30,7 +30,7 @@ import type {
   Transfer,
   User,
 } from "./store-types";
-import { DEFAULT_DISCOUNTS, DEFAULT_RECEIPT, isRestorable } from "./store-types";
+import { DEFAULT_DISCOUNTS, DEFAULT_RECEIPT, discountSplitOf, isRestorable } from "./store-types";
 import { openSessionFor } from "./day-book";
 import { dayOf, todayISO } from "./dates";
 import { db, loadSnapshot, subscribeToMessages } from "./db";
@@ -250,9 +250,14 @@ function touchedRows(rows: InventoryRow[], moves: StockMove[]) {
  *
  * A returned sale has its profit zeroed; undoing that return has to put a real
  * figure back, and the lines are the only record of what it was.
+ *
+ * A discount given on the whole bill belongs to no line, so it is taken off
+ * separately — without that, restoring a sale that had a counter discount would
+ * put back the profit it WOULD have made at full price.
  */
 function profitOf(sale: Sale) {
-  return sale.lines.reduce((a, l) => a + l.qty * (l.price - l.cost) - l.discount, 0);
+  const lines = sale.lines.reduce((a, l) => a + l.qty * (l.price - l.cost) - l.discount, 0);
+  return lines - discountSplitOf(sale).bill;
 }
 // The demo dataset now lives in seed-data.ts so the SQL seed generator can
 // emit exactly the same rows the UI shows.

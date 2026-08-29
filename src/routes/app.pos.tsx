@@ -74,6 +74,14 @@ function POS() {
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [newCustomer, setNewCustomer] = useState<{ name: string; phone: string } | null>(null);
   const [payment, setPayment] = useState<Sale["payment"]>("Cash");
+  /**
+   * A discount the cashier decides on at the counter, on top of whatever the
+   * Discounts rules already took off. Kept as the typed figure plus the unit it
+   * was typed in, so switching between "10%" and "Rs 10" re-reads the same box
+   * rather than silently converting one into the other.
+   */
+  const [manualMode, setManualMode] = useState<"amount" | "percent">("amount");
+  const [manualInput, setManualInput] = useState(0);
   const [tendered, setTendered] = useState(0);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [lastSale, setLastSale] = useState<ReceiptData | null>(null);
@@ -162,7 +170,19 @@ function POS() {
   const cartUnits = cart.reduce((a, l) => a + l.qty, 0);
   const subtotal = cart.reduce((a, l) => a + l.qty * unitPrice(l.product), 0);
   // Discounts come from the Discounts tab: a product's own rate, else the overall rate.
-  const discount = cart.reduce((a, l) => a + discountAmountFor(l.product.id, unitPrice(l.product), l.qty, discounts), 0);
+  const autoDiscount = cart.reduce((a, l) => a + discountAmountFor(l.product.id, unitPrice(l.product), l.qty, discounts), 0);
+  /**
+   * The counter discount applies to what is left AFTER the automatic rules, so
+   * "10%" never quietly takes ten percent of a figure the customer was never
+   * charged. It is capped at that remainder: a bill cannot go below zero, and
+   * letting it try would produce change owed on a sale nobody paid for.
+   */
+  const afterAuto = Math.max(0, subtotal - autoDiscount);
+  const manualDiscount =
+    manualMode === "percent"
+      ? Math.round((afterAuto * Math.min(100, Math.max(0, manualInput))) / 100)
+      : Math.min(afterAuto, Math.max(0, Math.round(manualInput)));
+  const discount = autoDiscount + manualDiscount;
   const total = Math.max(0, subtotal - discount);
   const change = Math.max(0, tendered - total);
 
@@ -273,6 +293,7 @@ function POS() {
     setCheckoutOpen(false);
     setCart([]);
     setTendered(0);
+    setManualInput(0);
     setCustomer("Walk-in");
     setCustomerId(null);
     setPayment("Cash");
@@ -391,6 +412,71 @@ function POS() {
         </div>
       )}
 
+      {/*
+        Shopkeeper's own discount, given at the counter for this one sale.
+        Two units because both are asked for by name: "give them ten percent"
+        and "knock off two hundred" are different instructions, and making the
+        cashier convert one into the other in their head is where the mistakes
+        come from.
+      */}
+      <div className="space-y-1.5">
+        <label className="text-xs text-muted-foreground">Counter discount</label>
+        <div className="flex gap-2">
+          <div className="flex rounded-md border p-0.5 shrink-0">
+            {(["amount", "percent"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setManualMode(m)}
+                className={cn(
+                  "px-3 h-9 text-sm rounded-[5px] transition-colors tabular-nums",
+                  manualMode === m ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted",
+                )}
+              >
+                {m === "amount" ? settings.currency : "%"}
+              </button>
+            ))}
+          </div>
+          <Input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            max={manualMode === "percent" ? 100 : undefined}
+            value={manualInput || ""}
+            placeholder="0"
+            onChange={(e) => setManualInput(Math.max(0, Number(e.target.value) || 0))}
+            className="tabular-nums h-10"
+          />
+          {manualInput > 0 && (
+            <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" onClick={() => setManualInput(0)} aria-label="Clear discount">
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+        {manualMode === "percent" && (
+          <div className="grid grid-cols-4 gap-1.5">
+            {[5, 10, 15, 20].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setManualInput(n)}
+                className="text-xs py-1.5 rounded-md border hover:bg-muted transition-colors tabular-nums"
+              >
+                {n}%
+              </button>
+            ))}
+          </div>
+        )}
+        {manualDiscount > 0 && (
+          <p className="text-xs text-success-strong">
+            − {formatRs(manualDiscount, settings.currency)} off this sale
+          </p>
+        )}
+        {manualMode === "amount" && Math.round(manualInput) > manualDiscount && (
+          <p className="text-xs text-warning-strong">Capped at the bill total.</p>
+        )}
+      </div>
+
       <div className="space-y-1.5">
         <label className="text-xs text-muted-foreground">Payment</label>
         <PaymentPicker
@@ -455,10 +541,19 @@ function POS() {
         <span className="text-muted-foreground">Subtotal</span>
         <span className="tabular-nums">{formatRs(subtotal, settings.currency)}</span>
       </div>
-      {discounts.enabled && discount > 0 && (
+      {discounts.enabled && autoDiscount > 0 && (
         <div className="flex justify-between text-success-strong">
           <span>Discount</span>
-          <span className="tabular-nums">− {formatRs(discount, settings.currency)}</span>
+          <span className="tabular-nums">− {formatRs(autoDiscount, settings.currency)}</span>
+        </div>
+      )}
+      {manualDiscount > 0 && (
+        <div className="flex justify-between text-success-strong">
+          <span>
+            Counter discount
+            {manualMode === "percent" && <span className="text-muted-foreground"> ({Math.min(100, Math.max(0, manualInput))}%)</span>}
+          </span>
+          <span className="tabular-nums">− {formatRs(manualDiscount, settings.currency)}</span>
         </div>
       )}
       {cartUnits > 0 && (

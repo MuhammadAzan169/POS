@@ -420,11 +420,12 @@ function DayBookPage() {
           </Card>
 
           <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            <StatCard label="Cash sales" value={formatRs(live.cashSales, settings.currency)} sub={`${live.invoices} invoices total`} icon={<Banknote className="h-5 w-5" />} tone="success" />
-            <StatCard label="Card sales" value={formatRs(live.cardSales, settings.currency)} icon={<CreditCard className="h-5 w-5" />} tone="primary" />
-            <StatCard label="Online sales" value={formatRs(live.onlineSales, settings.currency)} icon={<Smartphone className="h-5 w-5" />} tone="accent" />
+            <StatCard label="Cash sales" to="/app/sales" value={formatRs(live.cashSales, settings.currency)} sub={`${live.invoices} invoices total`} icon={<Banknote className="h-5 w-5" />} tone="success" />
+            <StatCard label="Card sales" to="/app/sales" value={formatRs(live.cardSales, settings.currency)} icon={<CreditCard className="h-5 w-5" />} tone="primary" />
+            <StatCard label="Online sales" to="/app/sales" value={formatRs(live.onlineSales, settings.currency)} icon={<Smartphone className="h-5 w-5" />} tone="accent" />
             <StatCard
               label="On credit"
+              to="/app/ledger"
               value={formatRs(live.creditSales, settings.currency)}
               sub="goods out, unpaid"
               icon={<HandCoins className="h-5 w-5" />}

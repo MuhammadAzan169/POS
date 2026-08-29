@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import {
   useStore,
@@ -6,6 +6,7 @@ import {
   businessDayOf,
   paymentMix,
   totalOutstanding,
+  totalPayable,
   summarizeSession,
   shortDay,
   daysInRange,
@@ -19,7 +20,7 @@ import { ScopeBar } from "@/components/ScopeBar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Download, Printer, Banknote, CreditCard, Smartphone, Wallet, HandCoins } from "lucide-react";
+import { Download, Printer, Banknote, CreditCard, Smartphone, Wallet, HandCoins, ArrowRight } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend } from "recharts";
@@ -29,7 +30,7 @@ export const Route = createFileRoute("/app/reports")({ component: ReportsPage })
 function ReportsPage() {
   const {
     user, sales, expenses, shops, products, inventory, daySessions, returns, customers,
-    customerPayments, purchases, supplierPayments, settings,
+    customerPayments, purchases, supplierPayments, suppliers, setOffs, adjustments, settings,
   } = useStore();
   const { range, rangeLabel, shopScope } = useScope();
   const isAdmin = user?.role === "admin";
@@ -132,6 +133,15 @@ function ReportsPage() {
   const owedToYou = useMemo(
     () => totalOutstanding(customers, { sales, customerPayments }),
     [customers, sales, customerPayments],
+  );
+  /**
+   * The other direction. Reports stated what customers owed and stopped there,
+   * which reads as a healthier position than the business is actually in — the
+   * bills waiting to be paid are a claim on the same money.
+   */
+  const youOwe = useMemo(
+    () => totalPayable(suppliers, { sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments }),
+    [suppliers, sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments],
   );
 
   /** Closed days in the period, with the cash actually handed over. */
@@ -342,17 +352,50 @@ function ReportsPage() {
 
           {/* Standing debt, not period figures — kept visually separate so it is
               never mistaken for money taken during the selected range. */}
-          <Card className="p-4 mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="font-semibold text-sm">Outstanding on account</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Total owed by customers right now, across all time — not limited to {rangeLabel.toLowerCase()}.
-              </p>
-            </div>
-            <div className="font-display text-2xl font-bold text-warning-strong">
-              {formatRs(owedToYou, currency)}
-            </div>
-          </Card>
+          {/*
+            Both directions, side by side. Each opens the list of who is behind
+            the figure — a standing balance is only useful once you can get from
+            it to the names it is made of.
+          */}
+          <div className="grid gap-3 sm:grid-cols-2 mb-4">
+            <Link to="/app/ledger" className="block rounded-xl">
+              <Card className="p-4 h-full flex flex-wrap items-center justify-between gap-3 border-warning/40 bg-warning/5 transition-colors hover:bg-warning/10">
+                <div>
+                  <h3 className="font-semibold text-sm inline-flex items-center gap-1.5">
+                    <HandCoins className="h-4 w-4 text-warning-strong" />Total receivables
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Owed by customers right now, across all time — not limited to {rangeLabel.toLowerCase()}.
+                  </p>
+                  <span className="text-xs text-primary mt-1 inline-flex items-center gap-0.5">
+                    Who owes it <ArrowRight className="h-3 w-3" />
+                  </span>
+                </div>
+                <div className="font-display text-2xl font-bold text-warning-strong tabular-nums">
+                  {formatRs(owedToYou, currency)}
+                </div>
+              </Card>
+            </Link>
+
+            <Link to="/app/ledger" className="block rounded-xl">
+              <Card className="p-4 h-full flex flex-wrap items-center justify-between gap-3 border-destructive/30 bg-destructive/5 transition-colors hover:bg-destructive/10">
+                <div>
+                  <h3 className="font-semibold text-sm inline-flex items-center gap-1.5">
+                    <Wallet className="h-4 w-4 text-destructive" />Total payables
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Still owed to suppliers on delivered stock — also all time, not {rangeLabel.toLowerCase()}.
+                  </p>
+                  <span className="text-xs text-primary mt-1 inline-flex items-center gap-0.5">
+                    Who to pay <ArrowRight className="h-3 w-3" />
+                  </span>
+                </div>
+                <div className="font-display text-2xl font-bold text-destructive tabular-nums">
+                  {formatRs(youOwe, currency)}
+                </div>
+              </Card>
+            </Link>
+          </div>
 
           <Card className="overflow-hidden">
             <div className="px-4 sm:px-5 py-3.5 border-b flex items-center justify-between gap-3">
