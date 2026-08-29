@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/AppLayout";
 import { ScopeBar, DeltaBadge } from "@/components/ScopeBar";
 import { StatCard, StatusPill } from "@/components/Stat";
+import { CustomerName } from "@/components/CustomerName";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -563,7 +564,7 @@ function Dashboard() {
                 rightSub={isAdmin ? <span className="text-success-strong">{formatRs(s.profit, currency)} profit</span> : undefined}
                 badges={<StatusPill status={s.status} />}
                 fields={[
-                  { label: "Customer", value: s.customer },
+                  { label: "Customer", value: <CustomerName sale={s} /> },
                   { label: "Payment", value: s.payment },
                   { label: "Trading day", value: shortDay(businessDayOf(s)) },
                 ]}
@@ -591,7 +592,7 @@ function Dashboard() {
                   <td className="px-5 py-3 font-mono text-xs">{s.invoice}</td>
                   <td className="px-5 py-3 whitespace-nowrap">{shortDay(businessDayOf(s))}</td>
                   <td className="px-5 py-3">{shops.find((sh) => sh.id === s.shopId)?.name}</td>
-                  <td className="px-5 py-3">{s.customer}</td>
+                  <td className="px-5 py-3"><CustomerName sale={s} /></td>
                   <td className="px-5 py-3">{s.payment}</td>
                   <td className="px-5 py-3 text-right font-medium">{formatRs(s.total, currency)}</td>
                   {isAdmin && <td className="px-5 py-3 text-right text-success-strong font-medium">{formatRs(s.profit, currency)}</td>}

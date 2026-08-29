@@ -7,6 +7,7 @@ import {
   openSessionFor,
   priceFor,
   shopKind,
+  WALK_IN,
   shortDay,
   matchProduct,
   customerBalance,
@@ -69,7 +70,15 @@ function POS() {
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("all");
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [customer, setCustomer] = useState("Walk-in");
+  /**
+   * A name typed straight onto the receipt for a shopper with no account.
+   *
+   * Empty by default rather than pre-filled with "Walk-in": most shoppers give
+   * no name, and a pre-filled field made the common case the one you had to
+   * clear before you could type. Blank is saved as WALK_IN, so a sale is always
+   * a complete record either way.
+   */
+  const [customer, setCustomer] = useState("");
   /** Set when the buyer was picked from the saved list rather than typed. */
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [newCustomer, setNewCustomer] = useState<{ name: string; phone: string } | null>(null);
@@ -88,7 +97,19 @@ function POS() {
   // Below lg the checkout panel is a bottom sheet reached from the sticky total
   // bar, rather than a column the cashier has to scroll past the catalogue for.
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  /**
+   * The tile just added, ringed for a moment so the tap is visibly acknowledged.
+   * A plain id rather than an animation: at a till the next tap comes fast, and
+   * anything that has to finish playing first gets in the way.
+   */
+  const [flashId, setFlashId] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!flashId) return;
+    const t = window.setTimeout(() => setFlashId(null), 600);
+    return () => window.clearTimeout(t);
+  }, [flashId]);
 
   useEffect(() => { searchRef.current?.focus(); }, []);
 
@@ -149,9 +170,37 @@ function POS() {
       }
       return [...prev, { product: p, qty: 1, discount: 0 }];
     });
+    setFlashId(p.id);
     setQ("");
     searchRef.current?.focus();
   };
+
+  /**
+   * Move one cart line by ±1, or drop it when the last unit goes.
+   *
+   * Shared by the cart list and the product tile so a product's count can be
+   * changed from wherever the cashier happens to be looking, and both places
+   * enforce the same shelf limit.
+   */
+  const stepLine = (i: number, by: 1 | -1) => {
+    setCart((prev) => {
+      const line = prev[i];
+      if (!line) return prev;
+      if (by === -1) {
+        return line.qty === 1
+          ? prev.filter((_, j) => j !== i)
+          : prev.map((x, j) => (j === i ? { ...x, qty: x.qty - 1 } : x));
+      }
+      const stock = stockFor(line.product.id);
+      if (line.qty >= stock) {
+        toast.error(`Only ${stock} of ${line.product.name} in stock`);
+        return prev;
+      }
+      return prev.map((x, j) => (j === i ? { ...x, qty: x.qty + 1 } : x));
+    });
+  };
+
+  const removeLine = (i: number) => setCart((prev) => prev.filter((_, j) => j !== i));
 
   // Barcode scanners type the code then send Enter — without this, scanning did nothing.
   const onSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -210,7 +259,7 @@ function POS() {
   }, [selectedCustomer, payment]);
 
   const pickCustomer = (id: string) => {
-    if (id === "__walkin__") { setCustomerId(null); setCustomer("Walk-in"); return; }
+    if (id === "__walkin__") { setCustomerId(null); setCustomer(""); return; }
     if (id === "__new__") { setNewCustomer({ name: "", phone: "" }); return; }
     const c = customers.find((x) => x.id === id);
     if (!c) return;
@@ -261,7 +310,7 @@ function POS() {
     const profit = lines.reduce((a, l) => a + l.qty * (l.price - l.cost), 0) - discount;
     const sale = addSale({
       shopId, date: new Date().toISOString(),
-      customer: selectedCustomer?.name ?? (customer.trim() || "Walk-in"),
+      customer: selectedCustomer?.name ?? (customer.trim() || WALK_IN),
       customerId: selectedCustomer?.id,
       cashier: user?.name ?? "Shop",
       // The open session decides the trading day, so a sale rung up at 01:30
@@ -294,7 +343,7 @@ function POS() {
     setCart([]);
     setTendered(0);
     setManualInput(0);
-    setCustomer("Walk-in");
+    setCustomer("");
     setCustomerId(null);
     setPayment("Cash");
   };
@@ -336,59 +385,151 @@ function POS() {
     );
   }
 
-  // The checkout form is identical in the desktop column and the mobile sheet.
-  const checkoutFields = (
-    <div className="space-y-3">
-      <div className="space-y-1.5">
-        <label className="text-xs text-muted-foreground">Customer</label>
-        {!customersUnavailable && (
-          <Select value={customerId ?? "__walkin__"} onValueChange={pickCustomer}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__walkin__">Walk-in (no account)</SelectItem>
-              {/* Trade buyers first at a wholesale counter — they're who you serve. */}
-              {[...customers]
-                .filter((c) => c.active)
-                .sort((a, b) =>
-                  isWholesale && a.kind !== b.kind
-                    ? a.kind === "wholesale" ? -1 : 1
-                    : a.name.localeCompare(b.name),
-                )
-                .map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              <SelectItem value="__new__">+ Add new customer…</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
 
-        {/* An untracked walk-in can still have a name printed on the receipt. */}
-        {!selectedCustomer && (
-          <Input
-            value={customer}
-            onChange={(e) => setCustomer(e.target.value)}
-            placeholder="Name for the receipt (optional)"
-          />
-        )}
+  /* ------------------------------------------------------------- cart panel */
 
-        {selectedCustomer && balance && (
-          <div className="text-xs text-muted-foreground">
-            {balance.outstanding > 0 ? (
-              <>
-                Already owes <span className="text-warning-strong font-medium">{formatRs(balance.outstanding, settings.currency)}</span>
-                {selectedCustomer.creditLimit > 0 && ` of ${formatRs(selectedCustomer.creditLimit, settings.currency)}`}
-              </>
-            ) : (
-              "Account settled"
-            )}
-          </div>
-        )}
+  /**
+   * The running sale. This used to sit UNDER the product grid, which meant the
+   * cashier scrolled past a dozen tiles to see what they had rung up and again
+   * to reach the total. It is now the right-hand column on desktop and never
+   * moves: products scroll inside their own pane, the sale does not.
+   */
+  const cartHeader = (extra?: string) => (
+    <div className={cn("px-4 py-3 border-b flex items-center justify-between gap-3 shrink-0", extra)}>
+      <div className="min-w-0">
+        <h3 className="font-semibold flex items-center gap-2">
+          <ShoppingCart className="h-4 w-4 text-primary" />
+          Current sale
+        </h3>
+        <p className="text-xs text-muted-foreground tabular-nums mt-0.5">
+          {cartUnits === 0
+            ? "No items yet"
+            : `${cartUnits} item${cartUnits === 1 ? "" : "s"} · ${cart.length} line${cart.length === 1 ? "" : "s"}`}
+        </p>
       </div>
+      {cart.length > 0 && (
+        <Confirm
+          title="Clear the cart?"
+          description={`All ${cart.length} line${cart.length === 1 ? "" : "s"} will be removed. This can't be undone.`}
+          confirmLabel="Clear cart"
+          destructive
+          onConfirm={() => { setCart([]); setTendered(0); toast.success("Cart cleared"); }}
+          trigger={
+            <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground hover:text-destructive">
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />Clear
+            </Button>
+          }
+        />
+      )}
+    </div>
+  );
+
+  const cartLines =
+    cart.length === 0 ? (
+      <div className="px-6 py-10 text-center">
+        <div className="mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
+          <ShoppingCart className="h-5 w-5 text-muted-foreground" />
+        </div>
+        <p className="text-sm font-medium">Your cart is empty</p>
+        <p className="text-xs text-muted-foreground mt-1 max-w-[15rem] mx-auto">
+          Scan a barcode, or tap <strong>Add to cart</strong> on a product to start this sale.
+        </p>
+      </div>
+    ) : (
+      <ul className="divide-y">
+        {cart.map((l, i) => (
+          <li key={l.product.id} className="p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-sm font-medium leading-snug break-words">{l.product.name}</div>
+                <div className="text-xs text-muted-foreground tabular-nums mt-0.5">
+                  {formatRs(unitPrice(l.product), settings.currency)} each
+                  {l.discount > 0 && (
+                    <span className="ml-1.5 text-success-strong">− {formatRs(l.discount, settings.currency)}</span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => removeLine(i)}
+                aria-label={`Remove ${l.product.name}`}
+                className="h-7 w-7 -mt-1 -mr-1 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="flex items-center justify-between gap-3 mt-2">
+              <Stepper
+                qty={l.qty}
+                onDecrease={() => stepLine(i, -1)}
+                onIncrease={() => stepLine(i, 1)}
+                canIncrease={availableFor(l.product.id) > 0}
+                name={l.product.name}
+              />
+              <div className="font-semibold tabular-nums text-right">
+                {formatRs(l.qty * unitPrice(l.product) - l.discount, settings.currency)}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    );
+
+  /* --------------------------------------------------- who, and any discount */
+
+  const customerBlock = (
+    <div className="p-3 space-y-2 border-t bg-muted/20">
+      <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Customer</label>
+      {!customersUnavailable && (
+        <Select value={customerId ?? "__walkin__"} onValueChange={pickCustomer}>
+          <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__walkin__">Walk-in (no account)</SelectItem>
+            {/* Trade buyers first at a wholesale counter — they're who you serve. */}
+            {[...customers]
+              .filter((c) => c.active)
+              .sort((a, b) =>
+                isWholesale && a.kind !== b.kind
+                  ? a.kind === "wholesale" ? -1 : 1
+                  : a.name.localeCompare(b.name),
+              )
+              .map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            <SelectItem value="__new__">+ Add new customer…</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
+
+      {/* An untracked walk-in can still have a name printed on the receipt. */}
+      {!selectedCustomer && (
+        <Input
+          value={customer}
+          onChange={(e) => setCustomer(e.target.value)}
+          placeholder={`${WALK_IN} — name for the receipt (optional)`}
+          className="h-10"
+        />
+      )}
+
+      {selectedCustomer && balance && (
+        <div className="text-xs text-muted-foreground">
+          {balance.outstanding > 0 ? (
+            <>
+              Already owes{" "}
+              <span className="text-warning-strong font-medium">
+                {formatRs(balance.outstanding, settings.currency)}
+              </span>
+              {selectedCustomer.creditLimit > 0 && ` of ${formatRs(selectedCustomer.creditLimit, settings.currency)}`}
+            </>
+          ) : (
+            "Account settled"
+          )}
+        </div>
+      )}
 
       {/* Inline rather than a nested dialog: a second Dialog portals outside this
           one, so clicking in it counts as an outside click and dismisses the sale. */}
       {newCustomer && (
-        <div className="border rounded-lg p-3 space-y-2 bg-muted/30">
+        <div className="border rounded-lg p-3 space-y-2 bg-card">
           <div className="text-sm font-medium">New customer</div>
           <Input
             autoFocus
@@ -419,179 +560,212 @@ function POS() {
         cashier convert one into the other in their head is where the mistakes
         come from.
       */}
-      <div className="space-y-1.5">
-        <label className="text-xs text-muted-foreground">Counter discount</label>
-        <div className="flex gap-2">
-          <div className="flex rounded-md border p-0.5 shrink-0">
-            {(["amount", "percent"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setManualMode(m)}
-                className={cn(
-                  "px-3 h-9 text-sm rounded-[5px] transition-colors tabular-nums",
-                  manualMode === m ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted",
-                )}
-              >
-                {m === "amount" ? settings.currency : "%"}
-              </button>
-            ))}
-          </div>
-          <Input
-            type="number"
-            inputMode="decimal"
-            min={0}
-            max={manualMode === "percent" ? 100 : undefined}
-            value={manualInput || ""}
-            placeholder="0"
-            onChange={(e) => setManualInput(Math.max(0, Number(e.target.value) || 0))}
-            className="tabular-nums h-10"
-          />
-          {manualInput > 0 && (
-            <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" onClick={() => setManualInput(0)} aria-label="Clear discount">
-              <X className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-        {manualMode === "percent" && (
-          <div className="grid grid-cols-4 gap-1.5">
-            {[5, 10, 15, 20].map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setManualInput(n)}
-                className="text-xs py-1.5 rounded-md border hover:bg-muted transition-colors tabular-nums"
-              >
-                {n}%
-              </button>
-            ))}
-          </div>
-        )}
-        {manualDiscount > 0 && (
-          <p className="text-xs text-success-strong">
-            − {formatRs(manualDiscount, settings.currency)} off this sale
-          </p>
-        )}
-        {manualMode === "amount" && Math.round(manualInput) > manualDiscount && (
-          <p className="text-xs text-warning-strong">Capped at the bill total.</p>
-        )}
-      </div>
-
-      <div className="space-y-1.5">
-        <label className="text-xs text-muted-foreground">Payment</label>
-        <PaymentPicker
-          value={payment}
-          onChange={setPayment}
-          allowCredit={Boolean(selectedCustomer) && !customersUnavailable}
-          creditDisabledReason={creditBlockedReason}
-        />
-      </div>
-
-      {payment === "Cash" && (
-        <div className="space-y-1.5">
-          <label className="text-xs text-muted-foreground">Cash received</label>
-          <Input
-            type="number"
-            inputMode="decimal"
-            value={tendered || ""}
-            placeholder="0"
-            onChange={(e) => setTendered(Number(e.target.value) || 0)}
-            className="text-lg font-semibold tabular-nums h-11"
-          />
-          {/* Counting out change from a note is the commonest thing that happens
-              at a till, so the common notes are one tap instead of typing. */}
-          <div className="grid grid-cols-4 gap-1.5">
+      <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium block pt-1">
+        Counter discount
+      </label>
+      <div className="flex gap-2">
+        <div className="flex rounded-md border bg-card p-0.5 shrink-0">
+          {(["amount", "percent"] as const).map((m) => (
             <button
+              key={m}
               type="button"
-              onClick={() => setTendered(total)}
-              disabled={total <= 0}
-              className="text-xs py-1.5 rounded-md border hover:bg-muted disabled:opacity-40 transition-colors"
+              onClick={() => setManualMode(m)}
+              className={cn(
+                "px-3 h-9 text-sm rounded-[5px] transition-colors tabular-nums",
+                manualMode === m ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted",
+              )}
             >
-              Exact
+              {m === "amount" ? settings.currency : "%"}
             </button>
-            {[500, 1000, 5000].map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setTendered((t) => t + n)}
-                className="text-xs py-1.5 rounded-md border hover:bg-muted transition-colors tabular-nums"
-              >
-                +{n.toLocaleString()}
-              </button>
-            ))}
-          </div>
+          ))}
+        </div>
+        <Input
+          type="number"
+          inputMode="decimal"
+          min={0}
+          max={manualMode === "percent" ? 100 : undefined}
+          value={manualInput || ""}
+          placeholder="0"
+          onChange={(e) => setManualInput(Math.max(0, Number(e.target.value) || 0))}
+          className="tabular-nums h-10"
+        />
+        {manualInput > 0 && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 shrink-0"
+            onClick={() => setManualInput(0)}
+            aria-label="Clear discount"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+      {manualMode === "percent" && (
+        <div className="grid grid-cols-4 gap-1.5">
+          {[5, 10, 15, 20].map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setManualInput(n)}
+              className="text-xs py-1.5 rounded-md border bg-card hover:bg-muted transition-colors tabular-nums"
+            >
+              {n}%
+            </button>
+          ))}
         </div>
       )}
-
-      {payment === "Credit" && selectedCustomer && balance && (
-        <div className="rounded-md bg-warning/10 border border-warning/40 p-2.5 text-xs space-y-1">
-          <div className="flex justify-between"><span className="text-muted-foreground">Owes now</span><span>{formatRs(balance.outstanding, settings.currency)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">This sale</span><span>+ {formatRs(total, settings.currency)}</span></div>
-          <div className="flex justify-between font-semibold border-t border-warning/30 pt-1">
-            <span>Will owe</span><span>{formatRs(balance.outstanding + total, settings.currency)}</span>
-          </div>
-        </div>
+      {manualMode === "amount" && Math.round(manualInput) > manualDiscount && (
+        <p className="text-xs text-warning-strong">Capped at the bill total.</p>
       )}
     </div>
   );
 
-  const totals = (
-    <div className="space-y-2 text-sm">
-      <div className="flex justify-between">
-        <span className="text-muted-foreground">Subtotal</span>
-        <span className="tabular-nums">{formatRs(subtotal, settings.currency)}</span>
-      </div>
-      {discounts.enabled && autoDiscount > 0 && (
-        <div className="flex justify-between text-success-strong">
-          <span>Discount</span>
-          <span className="tabular-nums">− {formatRs(autoDiscount, settings.currency)}</span>
+  /* ------------------------------------------------------- totals & payment */
+
+  /**
+   * The closing block: what is owed, how it is being paid, and the button.
+   *
+   * Pinned to the bottom of the panel rather than scrolling with the cart — a
+   * total the cashier has to scroll to find is a total they read out wrong.
+   */
+  const checkoutFooter = (
+    <div className="border-t bg-card shrink-0">
+      <div className="p-4 space-y-2 text-sm">
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Subtotal</span>
+          <span className="tabular-nums">{formatRs(subtotal, settings.currency)}</span>
         </div>
-      )}
-      {manualDiscount > 0 && (
-        <div className="flex justify-between text-success-strong">
-          <span>
-            Counter discount
-            {manualMode === "percent" && <span className="text-muted-foreground"> ({Math.min(100, Math.max(0, manualInput))}%)</span>}
-          </span>
-          <span className="tabular-nums">− {formatRs(manualDiscount, settings.currency)}</span>
-        </div>
-      )}
-      {cartUnits > 0 && (
-        <div className="flex justify-between text-xs text-muted-foreground">
-          <span>Items</span>
-          <span className="tabular-nums">{cartUnits}</span>
-        </div>
-      )}
-      {/*
-        The total is the one number the cashier and the customer both look at,
-        so it gets its own band rather than being one more row in a list.
-      */}
-      <div className="flex items-baseline justify-between gap-3 mt-3 pt-3 border-t">
-        <span className="text-sm font-medium text-muted-foreground">Total</span>
-        <span className="font-display text-3xl font-bold tabular-nums leading-none">
-          {formatRs(total, settings.currency)}
-        </span>
-      </div>
-      {payment === "Cash" && tendered > 0 && (
-        <div
-          className={cn(
-            "flex justify-between items-baseline rounded-lg px-3 py-2 mt-2 font-medium",
-            tendered >= total ? "bg-success/10 text-success-strong" : "bg-destructive/10 text-destructive",
-          )}
-        >
-          <span className="text-sm">{tendered >= total ? "Change due" : "Short by"}</span>
-          <span className="text-lg tabular-nums">
-            {formatRs(tendered >= total ? change : total - tendered, settings.currency)}
+        {discounts.enabled && autoDiscount > 0 && (
+          <div className="flex justify-between text-success-strong">
+            <span>Discount</span>
+            <span className="tabular-nums">− {formatRs(autoDiscount, settings.currency)}</span>
+          </div>
+        )}
+        {manualDiscount > 0 && (
+          <div className="flex justify-between text-success-strong">
+            <span>
+              Counter discount
+              {manualMode === "percent" && (
+                <span className="text-muted-foreground"> ({Math.min(100, Math.max(0, manualInput))}%)</span>
+              )}
+            </span>
+            <span className="tabular-nums">− {formatRs(manualDiscount, settings.currency)}</span>
+          </div>
+        )}
+
+        {/*
+          The one number the cashier and the customer both look at. It gets its
+          own band and the largest type on the page — nothing else in the panel
+          should be able to be mistaken for it.
+        */}
+        <div className="flex items-baseline justify-between gap-3 rounded-lg bg-primary/10 px-3 py-2.5 mt-1">
+          <span className="text-xs uppercase tracking-wider font-semibold text-primary">Total</span>
+          <span className="font-display text-3xl font-bold tabular-nums leading-none text-primary">
+            {formatRs(total, settings.currency)}
           </span>
         </div>
-      )}
+      </div>
+
+      <div className="px-4 pb-4 space-y-3">
+        <div className="space-y-1.5">
+          <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+            Payment method
+          </label>
+          <PaymentPicker
+            value={payment}
+            onChange={setPayment}
+            allowCredit={Boolean(selectedCustomer) && !customersUnavailable}
+            creditDisabledReason={creditBlockedReason}
+          />
+        </div>
+
+        {payment === "Cash" && (
+          <div className="space-y-1.5">
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+              Cash received
+            </label>
+            <Input
+              type="number"
+              inputMode="decimal"
+              value={tendered || ""}
+              placeholder="0"
+              onChange={(e) => setTendered(Number(e.target.value) || 0)}
+              className="text-lg font-semibold tabular-nums h-11"
+            />
+            {/* Counting out change from a note is the commonest thing that happens
+                at a till, so the common notes are one tap instead of typing. */}
+            <div className="grid grid-cols-4 gap-1.5">
+              <button
+                type="button"
+                onClick={() => setTendered(total)}
+                disabled={total <= 0}
+                className="text-xs py-1.5 rounded-md border hover:bg-muted disabled:opacity-40 transition-colors"
+              >
+                Exact
+              </button>
+              {[500, 1000, 5000].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setTendered((t) => t + n)}
+                  className="text-xs py-1.5 rounded-md border hover:bg-muted transition-colors tabular-nums"
+                >
+                  +{n.toLocaleString()}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {payment === "Cash" && tendered > 0 && (
+          <div
+            className={cn(
+              "flex justify-between items-baseline rounded-lg px-3 py-2 font-medium",
+              tendered >= total ? "bg-success/10 text-success-strong" : "bg-destructive/10 text-destructive",
+            )}
+          >
+            <span className="text-sm">{tendered >= total ? "Change due" : "Short by"}</span>
+            <span className="text-lg tabular-nums">
+              {formatRs(tendered >= total ? change : total - tendered, settings.currency)}
+            </span>
+          </div>
+        )}
+
+        {payment === "Credit" && selectedCustomer && balance && (
+          <div className="rounded-md bg-warning/10 border border-warning/40 p-2.5 text-xs space-y-1">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Owes now</span>
+              <span className="tabular-nums">{formatRs(balance.outstanding, settings.currency)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">This sale</span>
+              <span className="tabular-nums">+ {formatRs(total, settings.currency)}</span>
+            </div>
+            <div className="flex justify-between font-semibold border-t border-warning/30 pt-1">
+              <span>Will owe</span>
+              <span className="tabular-nums">{formatRs(balance.outstanding + total, settings.currency)}</span>
+            </div>
+          </div>
+        )}
+
+        <Button className="w-full h-14 text-base font-semibold" onClick={complete} disabled={cart.length === 0}>
+          <CheckCircle2 className="h-5 w-5 mr-2" />
+          {cart.length === 0 ? "Add items to sell" : "Complete sale"}
+        </Button>
+        <p className="text-[11px] text-muted-foreground text-center">
+          Press <kbd className="px-1 py-0.5 rounded border bg-muted font-mono text-[10px]">F9</kbd> to complete ·
+          selling price only
+        </p>
+      </div>
     </div>
   );
 
   return (
-    // pb clears the sticky total bar on phones/tablets, which sits above the app's
-    // own bottom nav.
-    <div className="pb-28 lg:pb-0">
+    // A till, not a document: the page fills the shell and the two panes scroll
+    // independently, so the sale is on screen the whole time. pb clears the
+    // mobile summary bar, which sits above the app's own bottom nav.
+    <div className="flex flex-col lg:flex-1 lg:min-h-0 pb-28 lg:pb-0">
       <PageHeader
         title={isWholesale ? "New wholesale sale" : "New sale"}
         subtitle="Scan a barcode or search to add items. F9 to complete."
@@ -611,7 +785,7 @@ function POS() {
       />
 
       {dayBookUnavailable && (
-        <Card className="p-3 mb-4 flex items-start gap-2.5 border-warning/40 bg-warning/10 text-sm">
+        <Card className="p-3 mb-4 flex items-start gap-2.5 border-warning/40 bg-warning/10 text-sm shrink-0">
           <Sunrise className="h-4 w-4 shrink-0 mt-0.5 text-warning-strong" />
           <span>
             Selling without a trading day — sales are booked to today's calendar date, so anything
@@ -622,7 +796,7 @@ function POS() {
       )}
 
       {isWholesale && (
-        <Card className="p-3 mb-4 flex items-center gap-2.5 border-accent/40 bg-accent/5 text-sm">
+        <Card className="p-3 mb-4 flex items-center gap-2.5 border-accent/40 bg-accent/5 text-sm shrink-0">
           <Warehouse className="h-4 w-4 shrink-0 text-accent-strong" />
           <span>
             Trade counter — items are priced at their <strong>wholesale rate</strong>, not the shelf price.
@@ -630,10 +804,11 @@ function POS() {
         </Card>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_400px]">
-        {/* Left: catalog + cart */}
-        <div className="space-y-4 min-w-0">
-          <Card className="p-3 sm:p-4">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_23rem] xl:grid-cols-[minmax(0,1fr)_25rem] lg:flex-1 lg:min-h-0">
+        {/* ------------------------------------------------- left: catalogue */}
+        <Card className="flex flex-col min-w-0 lg:min-h-0 overflow-hidden">
+          {/* Search and categories stay put; only the grid under them scrolls. */}
+          <div className="p-3 sm:p-4 border-b shrink-0">
             <div className="relative">
               <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
               <Input
@@ -641,7 +816,7 @@ function POS() {
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 onKeyDown={onSearchKeyDown}
-                placeholder="Scan barcode or search product…"
+                placeholder="Scan barcode or search by name…"
                 // enterKeyHint labels the on-screen keyboard's action key "Go",
                 // which is what pressing it actually does here.
                 enterKeyHint="go"
@@ -670,7 +845,7 @@ function POS() {
                     className={cn(
                       "shrink-0 text-xs px-3 py-1.5 rounded-full border transition-colors",
                       category === c
-                        ? "bg-primary text-primary-foreground border-primary"
+                        ? "bg-primary text-primary-foreground border-primary font-medium"
                         : "hover:bg-muted text-muted-foreground",
                     )}
                   >
@@ -679,73 +854,134 @@ function POS() {
                 ))}
               </div>
             )}
+          </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5 mt-4">
+          <div className="flex-1 lg:min-h-0 lg:overflow-y-auto p-3 sm:p-4">
+            {/*
+              Column count follows the width the CATALOGUE actually gets, not the
+              window: at lg both the sidebar and the sale panel appear at once and
+              take roughly 660px between them, so the grid steps back down to two
+              rather than shrinking cards until "Add to cart" wraps.
+            */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
               {filtered.map((p) => {
                 // The badge counts what is still SELLABLE, so it ticks down as
                 // the cashier taps and back up when a line is removed.
                 const inCart = cartQtyFor(p.id);
-                const s = availableFor(p.id);
-                const out = s === 0;
-                const low = !out && s <= p.lowAlert;
+                const left = availableFor(p.id);
+                const out = left === 0;
+                const low = !out && left <= p.lowAlert;
+                const lineIndex = cart.findIndex((l) => l.product.id === p.id);
                 return (
-                  <button
+                  <div
                     key={p.id}
-                    onClick={() => addToCart(p)}
-                    disabled={out}
                     className={cn(
-                      "group relative text-left p-3 min-h-[6.5rem] rounded-xl border bg-card flex flex-col",
-                      "transition-all duration-150",
-                      // A tile with units in the cart is ringed rather than
-                      // recoloured, so the grid still reads as one surface.
-                      inCart > 0 && "border-primary/60 ring-1 ring-primary/25",
-                      out
-                        ? "opacity-55 cursor-not-allowed"
-                        : "hover:border-primary hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:shadow-sm",
+                      "group relative rounded-xl border bg-card flex flex-col transition-all duration-150",
+                      inCart > 0 ? "border-primary ring-1 ring-primary/30" : "hover:border-primary/50 hover:shadow-md",
+                      out && inCart === 0 && "opacity-60",
+                      // A brief ring on the tile just added: confirmation the tap
+                      // landed, without an animation that costs the next tap.
+                      flashId === p.id && "ring-2 ring-success/70 border-success",
                     )}
                   >
-                    {/* Stock sits top-right as a badge rather than competing with
-                        the price on the bottom line, which is what the cashier
-                        is actually reading. */}
-                    <span
-                      className={cn(
-                        "absolute top-2 right-2 text-[10px] font-medium px-1.5 py-0.5 rounded-full border tabular-nums",
-                        out
-                          ? "bg-destructive/10 text-destructive border-destructive/30"
-                          : low
-                            ? "bg-warning/15 text-warning-strong border-warning/40"
-                            : "bg-muted text-muted-foreground border-transparent",
-                      )}
+                    {/*
+                      The information half. Clicking it adds too — a cashier
+                      going at speed aims at the tile, not the button — but the
+                      button below is the affordance that says so, and it is
+                      never hidden behind a hover.
+                    */}
+                    <button
+                      type="button"
+                      onClick={() => addToCart(p)}
+                      disabled={out}
+                      className="text-left p-3 pb-2 flex-1 disabled:cursor-not-allowed"
+                      aria-label={`Add ${p.name} to cart`}
                     >
-                      {/* "Out" means the shelf is empty; "0 left" means the
-                          cart already holds every unit there is. Different problems,
-                          different fixes. */}
-                      {out ? (stockFor(p.id) === 0 ? "Out" : "0 left") : s}
-                    </span>
-
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground pr-14">
-                      {p.category || "General"}
-                    </div>
-                    <div className="font-medium text-sm leading-snug line-clamp-2 mt-1 pr-2">{p.name}</div>
-
-                    <div className="mt-auto pt-2 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
-                      <span className="font-display text-lg font-bold tabular-nums">
-                        {formatRs(unitPrice(p), settings.currency)}
-                      </span>
-                      {inCart > 0 && (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary tabular-nums">
-                          {inCart} in cart
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium truncate">
+                          {p.category || "General"}
                         </span>
-                      )}
-                      {/* Retail price struck through makes it obvious the trade
-                          rate is in force, not a mispriced product. */}
-                      {isWholesale && unitPrice(p) !== p.price && (
-                        <span className="text-xs text-muted-foreground line-through tabular-nums">
-                          {formatRs(p.price, settings.currency)}
+                        <span
+                          className={cn(
+                            "shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full border tabular-nums whitespace-nowrap",
+                            out
+                              ? "bg-destructive/10 text-destructive border-destructive/30"
+                              : low
+                                ? "bg-warning/15 text-warning-strong border-warning/40"
+                                : "bg-muted text-muted-foreground border-transparent",
+                          )}
+                        >
+                          {/* "Out of stock" means the shelf is empty; "0 left"
+                              means the cart already holds every unit there is.
+                              Different problems, different fixes. */}
+                          {out
+                            ? stockFor(p.id) === 0 ? "OUT OF STOCK" : "0 left"
+                            : low ? `${left} left` : `${left} in stock`}
                         </span>
+                      </div>
+
+                      <div className="font-medium text-sm leading-snug line-clamp-2 mt-1.5 min-h-[2.5rem]">
+                        {p.name}
+                      </div>
+
+                      <div className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5">
+                        <span className="font-display text-lg font-bold tabular-nums">
+                          {formatRs(unitPrice(p), settings.currency)}
+                        </span>
+                        {/* Retail price struck through makes it obvious the trade
+                            rate is in force, not a mispriced product. */}
+                        {isWholesale && unitPrice(p) !== p.price && (
+                          <span className="text-xs text-muted-foreground line-through tabular-nums">
+                            {formatRs(p.price, settings.currency)}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+
+                    {/*
+                      The action half: always drawn, never on hover. Once the
+                      product is in the cart the button becomes the stepper for
+                      that line, so the count and the way to change it are on the
+                      tile the cashier is already looking at.
+                    */}
+                    <div className="p-2 pt-0">
+                      {inCart > 0 ? (
+                        <div className="flex items-center justify-between gap-1 rounded-lg border border-primary/40 bg-primary/5 p-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-9 shrink-0 hover:bg-primary/15"
+                            aria-label={inCart === 1 ? `Remove ${p.name}` : `One less ${p.name}`}
+                            onClick={() => stepLine(lineIndex, -1)}
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+                          <span className="text-sm font-semibold tabular-nums text-primary whitespace-nowrap">
+                            {inCart} in cart
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-9 shrink-0 hover:bg-primary/15"
+                            aria-label={`One more ${p.name}`}
+                            disabled={out}
+                            onClick={() => stepLine(lineIndex, 1)}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          className="w-full h-10 font-semibold"
+                          disabled={out}
+                          onClick={() => addToCart(p)}
+                        >
+                          <Plus className="h-4 w-4 mr-1.5" />
+                          {out ? "Out of stock" : "Add to cart"}
+                        </Button>
                       )}
                     </div>
-                  </button>
+                  </div>
                 );
               })}
 
@@ -759,160 +995,26 @@ function POS() {
                 </div>
               )}
             </div>
-          </Card>
+          </div>
+        </Card>
 
-          <Card>
-            <div className="p-4 border-b flex items-center justify-between gap-3">
-              <h3 className="font-semibold flex items-center gap-2">
-                <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-                Cart
-                {cartUnits > 0 && (
-                  <span className="text-xs font-normal text-muted-foreground tabular-nums">
-                    {cartUnits} item{cartUnits === 1 ? "" : "s"}
-                  </span>
-                )}
-              </h3>
-              {cart.length > 0 && (
-                <Confirm
-                  title="Clear the cart?"
-                  description={`All ${cart.length} line${cart.length === 1 ? "" : "s"} will be removed. This can't be undone.`}
-                  confirmLabel="Clear cart"
-                  destructive
-                  onConfirm={() => { setCart([]); toast.success("Cart cleared"); }}
-                  trigger={
-                    <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">
-                      <Trash2 className="h-3.5 w-3.5 mr-1.5" />Clear
-                    </Button>
-                  }
-                />
-              )}
-            </div>
-            {cart.length === 0 ? (
-              <div className="px-6 py-12 text-center">
-                <div className="mx-auto h-11 w-11 rounded-full bg-muted flex items-center justify-center mb-3">
-                  <ScanLine className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <p className="text-sm font-medium">Nothing in the cart yet</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Scan a barcode, or tap a product above to add it.
-                </p>
-              </div>
-            ) : (
-              <div className="divide-y">
-                {/*
-                  Name, stepper, line total and remove used to share one row.
-                  At 360px that gave the product name about 90px and squeezed
-                  the stepper into a target you couldn't hit. On phones the row
-                  becomes two lines: name over controls; from sm it's one line
-                  again.
-                */}
-                {cart.map((l, i) => (
-                  <div key={i} className="p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                    <div className="flex items-start justify-between gap-2 sm:flex-1 sm:min-w-0 sm:items-center">
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium break-words sm:truncate">{l.product.name}</div>
-                        <div className="text-xs text-muted-foreground tabular-nums">
-                          {formatRs(unitPrice(l.product), settings.currency)} × {l.qty}
-                          {l.discount > 0 && (
-                            <span className="ml-1.5 text-success-strong">
-                              − {formatRs(l.discount, settings.currency)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setCart((prev) => prev.filter((_, j) => j !== i))}
-                        aria-label={`Remove ${l.product.name}`}
-                        className="sm:hidden h-9 w-9 shrink-0 -mr-1 -mt-1 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 sm:justify-start">
-                      <div className="flex items-center gap-1">
-                        {/*
-                          Minus on the last unit drops the line rather than
-                          sticking at 1: tapping down to nothing is how a cashier
-                          says "not this one after all", and stopping short left
-                          them hunting for the separate remove button.
-                        */}
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          aria-label={l.qty === 1 ? `Remove ${l.product.name}` : "Decrease quantity"}
-                          className="h-9 w-9 sm:h-8 sm:w-8"
-                          onClick={() =>
-                            setCart((prev) =>
-                              l.qty === 1
-                                ? prev.filter((_, j) => j !== i)
-                                : prev.map((x, j) => (j === i ? { ...x, qty: x.qty - 1 } : x)),
-                            )
-                          }
-                        >
-                          <Minus className="h-3.5 w-3.5" />
-                        </Button>
-                        <div className="w-10 text-center font-medium tabular-nums">{l.qty}</div>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          aria-label="Increase quantity"
-                          className="h-9 w-9 sm:h-8 sm:w-8"
-                          // Nothing left on the shelf, so there is nothing to add.
-                          disabled={availableFor(l.product.id) === 0}
-                          onClick={() =>
-                            setCart((prev) =>
-                              prev.map((x, j) =>
-                                j === i ? { ...x, qty: Math.min(stockFor(x.product.id), x.qty + 1) } : x,
-                              ),
-                            )
-                          }
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                      <div className="font-semibold tabular-nums sm:w-24 sm:text-right">{formatRs(l.qty * unitPrice(l.product) - l.discount, settings.currency)}</div>
-                      <button
-                        onClick={() => setCart((prev) => prev.filter((_, j) => j !== i))}
-                        aria-label={`Remove ${l.product.name}`}
-                        className="hidden sm:block text-muted-foreground hover:text-destructive"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </div>
-
-        {/* Right: checkout — a real column only where there's room for one. */}
-        <Card className="hidden lg:flex flex-col p-5 h-fit lg:sticky lg:top-0 max-h-[calc(100dvh-3rem)]">
-          <h3 className="font-semibold mb-4 shrink-0">Checkout</h3>
-          {/* The fields scroll; the total and the action stay put, so the button
-              never drifts below the fold on a long cart. */}
-          <div className="flex-1 min-h-0 overflow-y-auto -mx-1 px-1">{checkoutFields}</div>
-          <div className="mt-5 pt-4 border-t shrink-0">{totals}</div>
-          <Button
-            className="w-full mt-4 h-12 text-base shrink-0"
-            onClick={complete}
-            disabled={cart.length === 0}
-          >
-            <CheckCircle2 className="h-5 w-5 mr-2" />
-            {cart.length === 0 ? "Add items to sell" : "Complete sale"}
-          </Button>
-          <p className="text-xs text-muted-foreground text-center mt-3 shrink-0">
-            Press <kbd className="px-1 py-0.5 rounded border bg-muted font-mono text-[10px]">F9</kbd> to complete ·
-            selling price only
-          </p>
+        {/* ---------------------------------------- right: the sale, pinned */}
+        <Card className="hidden lg:flex flex-col min-h-0 overflow-hidden">
+          {cartHeader()}
+          {/* Only this middle band scrolls, so the header above and the total
+              and button below are on screen for the whole sale. */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {cartLines}
+            {customerBlock}
+          </div>
+          {checkoutFooter}
         </Card>
       </div>
 
       {/*
-        Mobile / tablet checkout: a sticky bar showing the running total with one
-        button into a bottom sheet. Sitting the checkout panel under a 12-tile
-        catalogue meant the cashier scrolled the length of the page for every
-        single sale.
+        Mobile / tablet: a sticky summary bar with one button into a bottom
+        sheet holding the same sale. Sitting the panel under a 12-tile catalogue
+        meant scrolling the length of the page for every single sale.
       */}
       <div
         data-print="hide"
@@ -927,21 +1029,28 @@ function POS() {
               {formatRs(total, settings.currency)}
             </div>
           </div>
-          <Button className="ml-auto h-12 px-6 text-base" disabled={cart.length === 0} onClick={() => setCheckoutOpen(true)}>
-            <CheckCircle2 className="h-5 w-5 mr-2" /> Charge
+          <Button
+            className="ml-auto h-12 px-6 text-base"
+            disabled={cart.length === 0}
+            onClick={() => setCheckoutOpen(true)}
+          >
+            <ShoppingCart className="h-5 w-5 mr-2" /> View sale
           </Button>
         </div>
       </div>
 
       <Sheet open={checkoutOpen} onOpenChange={setCheckoutOpen}>
-        <SheetContent side="bottom" className="space-y-4">
-          <SheetHeader><SheetTitle>Checkout</SheetTitle></SheetHeader>
-          {checkoutFields}
-          <div className="pt-4 border-t">{totals}</div>
-          <Button className="w-full h-12 text-base" onClick={complete} disabled={cart.length === 0}>
-            <CheckCircle2 className="h-5 w-5 mr-2" /> Complete sale
-          </Button>
-          <p className="text-xs text-muted-foreground text-center">Selling price only. No cost or profit shown here.</p>
+        {/* p-0/gap-0 at every width, and overflow owned here rather than by the
+            sheet, so the total and the button stay pinned exactly as they are on
+            desktop instead of scrolling away with the cart. */}
+        <SheetContent side="bottom" className="p-0 sm:p-0 gap-0 overflow-y-hidden flex flex-col max-h-[85dvh]">
+          <SheetHeader className="sr-only"><SheetTitle>Current sale</SheetTitle></SheetHeader>
+          {cartHeader("pr-12")}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {cartLines}
+            {customerBlock}
+          </div>
+          {checkoutFooter}
         </SheetContent>
       </Sheet>
 
@@ -959,6 +1068,54 @@ function POS() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/**
+ * The − n + control, identical on a product tile and on a cart line so the
+ * gesture is the same wherever the cashier reaches for it.
+ */
+function Stepper({
+  qty,
+  onDecrease,
+  onIncrease,
+  canIncrease,
+  name,
+}: {
+  qty: number;
+  onDecrease: () => void;
+  onIncrease: () => void;
+  canIncrease: boolean;
+  name: string;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      {/*
+        Minus on the last unit drops the line rather than sticking at 1: tapping
+        down to nothing is how a cashier says "not this one after all", and
+        stopping short left them hunting for a separate remove button.
+      */}
+      <Button
+        variant="outline"
+        size="icon"
+        aria-label={qty === 1 ? `Remove ${name}` : `Decrease quantity of ${name}`}
+        className="h-9 w-9"
+        onClick={onDecrease}
+      >
+        <Minus className="h-3.5 w-3.5" />
+      </Button>
+      <div className="w-9 text-center font-semibold tabular-nums">{qty}</div>
+      <Button
+        variant="outline"
+        size="icon"
+        aria-label={`Increase quantity of ${name}`}
+        className="h-9 w-9"
+        disabled={!canIncrease}
+        onClick={onIncrease}
+      >
+        <Plus className="h-3.5 w-3.5" />
+      </Button>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { formatRs, type ReceiptDesign, type Settings } from "@/lib/store";
+import { formatRs, WALK_IN, type ReceiptDesign, type Settings } from "@/lib/store";
 
 export interface ReceiptData {
   invoice: string;
@@ -65,7 +65,7 @@ export function Receipt({
         <div className="space-y-0.5 text-left">
           {d.showInvoiceNo && <Row label="Invoice" value={data.invoice} />}
           {d.showDateTime && <Row label="Date" value={data.at.toLocaleString()} />}
-          {d.showCustomer && <Row label="Customer" value={data.customer} />}
+          {d.showCustomer && <Row label="Customer" value={data.customer?.trim() || WALK_IN} />}
           {d.showCashier && <Row label="Cashier" value={data.cashier} />}
         </div>
       )}

@@ -188,7 +188,14 @@ export interface Sale {
   businessDate?: string;
   /** The day session this sale was rung up in, when there was one. */
   sessionId?: string;
-  /** The customer's name as printed on the invoice. Always set. */
+  /**
+   * The customer's name as printed on the invoice.
+   *
+   * Always set, and never blank — a shopper who gives no name is recorded as
+   * `WALK_IN` rather than as an empty string, so the sale is a complete record
+   * of an anonymous purchase instead of a row that looks like it lost its data.
+   * Read it through `customerNameOf()`, which repairs older or hand-edited rows.
+   */
   customer: string;
   /** Set when the buyer was picked from the customer list rather than typed. */
   customerId?: string;
@@ -285,6 +292,32 @@ export type SettledMethod = Exclude<PaymentMethod, "Credit">;
 
 export const PAYMENT_METHODS: PaymentMethod[] = ["Cash", "Card", "Online", "Credit"];
 export const SETTLED_METHODS: SettledMethod[] = ["Cash", "Card", "Online"];
+
+/**
+ * What an unnamed shopper is called, everywhere, in one place.
+ *
+ * A retail till takes most of its money from people who never give a name, so
+ * "no customer" is the normal case, not a missing field. Naming it once means
+ * the sales list, the receipt, the day book and every export agree — and that a
+ * blank can be told apart from a shopper actually called something.
+ */
+export const WALK_IN = "Walk-in";
+
+/**
+ * The name to show for a sale, with blanks repaired.
+ *
+ * Rows can arrive without one: a sale edited to clear the field, a null column
+ * in Postgres, an import. Rendering those as an empty cell reads as a broken
+ * record rather than an anonymous sale, so they all resolve to `WALK_IN`.
+ */
+export function customerNameOf(sale: Pick<Sale, "customer">): string {
+  return sale.customer?.trim() || WALK_IN;
+}
+
+/** True when the sale was rung up without a named buyer. */
+export function isWalkIn(sale: Pick<Sale, "customer" | "customerId">): boolean {
+  return !sale.customerId && customerNameOf(sale) === WALK_IN;
+}
 
 /* ----------------------------------------------------------------- customers */
 

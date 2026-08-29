@@ -201,6 +201,44 @@ it("lines adding up to MORE than the slip never produce a bill surcharge", () =>
   eq(T.discountSplitOf(s).bill, 0, "clamped at zero, not negative");
 });
 
+describe("A shopper who gives no name");
+
+it("a blank name reads as a walk-in, not as an empty cell", () => {
+  eq(T.customerNameOf(sale({ customer: "" })), T.WALK_IN);
+  eq(T.customerNameOf(sale({ customer: "   " })), T.WALK_IN, "whitespace only counts as blank");
+});
+
+it("a missing name survives a row that never had one", () => {
+  // A null column in Postgres, or an import that skipped the field.
+  eq(T.customerNameOf({ customer: undefined }), T.WALK_IN);
+  eq(T.customerNameOf({ customer: null }), T.WALK_IN);
+});
+
+it("a real name is left exactly alone", () => {
+  eq(T.customerNameOf(sale({ customer: "Ayesha K." })), "Ayesha K.");
+  eq(T.customerNameOf(sale({ customer: "  Hassan A.  " })), "Hassan A.", "trimmed, not renamed");
+});
+
+it("knows an anonymous sale from an account sale", () => {
+  eq(T.isWalkIn(sale({ customer: "", customerId: undefined })), true);
+  eq(T.isWalkIn(sale({ customer: T.WALK_IN, customerId: undefined })), true);
+  eq(T.isWalkIn(sale({ customer: "Ayesha K.", customerId: undefined })), false, "a typed name is still a name");
+  eq(
+    T.isWalkIn(sale({ customer: T.WALK_IN, customerId: "cust1" })),
+    false,
+    "an account sale is never a walk-in, whatever the name field says",
+  );
+});
+
+it("a walk-in sale is a complete record: it still totals, profits and settles", () => {
+  const s = sale({ customer: "", lines: [line({ qty: 2, price: 300, cost: 200 })], subtotal: 600, discount: 50, total: 550 });
+  // Nothing about an unnamed buyer changes the money. The allocation, the
+  // discount split and the day's drawer all read the lines, not the name.
+  eq(T.discountSplitOf(s), { items: 0, bill: 50, total: 50 });
+  eq(T.allocateSale(s)[0].revenue, 550);
+  eq(T.allocateSale(s)[0].profit, 150, "600 taken - 400 cost - 50 off the bill");
+});
+
 describe("Allocating a bill discount across lines");
 
 it("shares a bill discount in proportion to line value", () => {

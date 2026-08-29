@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  useStore, formatRs, todayISO, daysAgoISO, dayOf, discountSplitOf, allocateSale,
+  useStore, formatRs, customerNameOf, todayISO, daysAgoISO, dayOf, discountSplitOf, allocateSale,
   closedSessionFor, shortDay, type DaySession, type Sale,
 } from "@/lib/store";
 import { SaleEditDialog } from "@/components/SaleEditDialog";
@@ -9,6 +9,7 @@ import { Receipt as ReceiptView, type ReceiptData } from "@/components/Receipt";
 import { PageHeader } from "@/components/AppLayout";
 import { StatusPill } from "@/components/Stat";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
+import { CustomerName } from "@/components/CustomerName";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,7 +47,7 @@ function useSaleToReceipt() {
     at: new Date(s.date),
     shopName: shops.find((x) => x.id === s.shopId)?.name,
     cashier: s.cashier,
-    customer: s.customer,
+    customer: customerNameOf(s),
     payment: s.payment,
     tendered: 0,
     change: 0,
@@ -109,7 +110,7 @@ function SalesPage() {
       .filter((s) =>
         q
           ? s.invoice.toLowerCase().includes(q.toLowerCase()) ||
-            s.customer.toLowerCase().includes(q.toLowerCase())
+            customerNameOf(s).toLowerCase().includes(q.toLowerCase())
           : true,
       );
   }, [sales, isAdmin, user?.shopId, shopFilter, q, from, to]);
@@ -216,7 +217,7 @@ function SalesPage() {
           s.invoice,
           new Date(s.date).toLocaleString(),
           shops.find((sh) => sh.id === s.shopId)?.name ?? "",
-          s.customer,
+          customerNameOf(s),
           s.payment,
           s.lines.reduce((a, l) => a + l.qty, 0),
           s.subtotal,
@@ -478,7 +479,7 @@ function SalesPage() {
                 </>
               }
               fields={[
-                { label: "Customer", value: s.customer },
+                { label: "Customer", value: <CustomerName sale={s} /> },
                 { label: "Items", value: s.lines.reduce((a, l) => a + l.qty, 0) },
                 ...(s.discount > 0
                   ? [{
@@ -552,7 +553,7 @@ function SalesPage() {
                     </span>
                   </td>
                   {isAdmin && <td className="px-4 py-3">{shops.find((sh) => sh.id === s.shopId)?.name}</td>}
-                  <td className="px-4 py-3 max-w-[14rem] truncate">{s.customer}</td>
+                  <td className="px-4 py-3 max-w-[14rem] truncate"><CustomerName sale={s} /></td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-0.5 rounded-full border ${
                       s.payment === "Credit"
@@ -665,7 +666,7 @@ function SalesPage() {
               </SheetHeader>
               <div className="mt-6 space-y-4">
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div><div className="text-muted-foreground text-xs">Customer</div><div className="font-medium">{selected.customer}</div></div>
+                  <div><div className="text-muted-foreground text-xs">Customer</div><div className="font-medium"><CustomerName sale={selected} /></div></div>
                   <div><div className="text-muted-foreground text-xs">Cashier</div><div className="font-medium">{selected.cashier}</div></div>
                   <div><div className="text-muted-foreground text-xs">Payment</div><div className="font-medium">{selected.payment}</div></div>
                   <div><div className="text-muted-foreground text-xs">Status</div><StatusPill status={selected.status} /></div>

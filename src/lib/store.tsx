@@ -30,7 +30,7 @@ import type {
   Transfer,
   User,
 } from "./store-types";
-import { DEFAULT_DISCOUNTS, DEFAULT_RECEIPT, discountSplitOf, isRestorable } from "./store-types";
+import { DEFAULT_DISCOUNTS, DEFAULT_RECEIPT, customerNameOf, discountSplitOf, isRestorable } from "./store-types";
 import { openSessionFor } from "./day-book";
 import { dayOf, todayISO } from "./dates";
 import { db, loadSnapshot, subscribeToMessages } from "./db";
@@ -506,6 +506,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const session = openSessionFor(daySessions, s.shopId);
         const sale: Sale = {
           ...s,
+          // Normalised here rather than at each caller: every screen that reads
+          // a sale can then trust the name is present, and no path can write a
+          // row that renders as a blank cell.
+          customer: customerNameOf(s),
           id: `sale-${Date.now()}`,
           invoice: `${settings.invoicePrefix || "INV"}-S${shopIdx}-${String(counter).padStart(6, "0")}`,
           businessDate: s.businessDate ?? session?.businessDate ?? dayOf(s.date),
@@ -537,7 +541,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
        * Editing a completed sale has to move stock by the DIFFERENCE between the
        * old and new line quantities, or inventory silently drifts.
        */
-      updateSale: (updated) => {
+      updateSale: (edited) => {
+        // Clearing the name on an edit means "this was a walk-in", not "this
+        // sale has no customer field" — same normalisation as on the way in.
+        const updated: Sale = { ...edited, customer: customerNameOf(edited) };
         const previous = sales.find((s) => s.id === updated.id);
         setSales((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
         persist("the sale", () => db.upsertSale(updated));

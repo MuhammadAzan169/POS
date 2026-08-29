@@ -33,7 +33,7 @@ import {
   type Transfer,
   type User,
 } from "./store-types";
-import { purchaseSettlement } from "./store-types";
+import { purchaseSettlement, WALK_IN } from "./store-types";
 import { DEFAULT_SETTINGS } from "./seed-data";
 
 /** Everything the app holds in memory, loaded in one go. */
@@ -110,14 +110,16 @@ const inventoryToRow = (r: InventoryRow) => ({ product_id: r.productId, shop_id:
 const rowToSale = (r: any): Sale => ({
   id: r.id, invoice: r.invoice, shopId: r.shop_id, date: r.date,
   businessDate: r.business_date ?? undefined, sessionId: r.session_id ?? undefined,
-  customer: r.customer, customerId: r.customer_id ?? undefined, cashier: r.cashier,
+  // A null or blank name in the column is an anonymous sale, not a broken row.
+  customer: (r.customer ?? "").trim() || WALK_IN,
+  customerId: r.customer_id ?? undefined, cashier: r.cashier,
   lines: r.lines ?? [], subtotal: Number(r.subtotal), discount: Number(r.discount), total: Number(r.total),
   profit: Number(r.profit), payment: r.payment, status: r.status, synced: r.synced,
 });
 const saleToRow = (s: Sale) => ({
   id: s.id, invoice: s.invoice, shop_id: s.shopId, date: s.date,
   business_date: s.businessDate ?? null, session_id: s.sessionId ?? null,
-  customer: s.customer, customer_id: s.customerId ?? null, cashier: s.cashier,
+  customer: s.customer?.trim() || WALK_IN, customer_id: s.customerId ?? null, cashier: s.cashier,
   lines: s.lines, subtotal: s.subtotal, discount: s.discount, total: s.total, profit: s.profit,
   payment: s.payment, status: s.status, synced: s.synced,
 });

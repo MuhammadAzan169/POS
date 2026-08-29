@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useStore, formatRs, todayISO, type ReturnRec, type Shop, type Purchase, type Product, type Sale } from "@/lib/store";
+import { useStore, formatRs, todayISO, customerNameOf, type ReturnRec, type Shop, type Purchase, type Product, type Sale } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -267,7 +267,7 @@ function NewCustomerReturn({ sales, shopId }: { sales: Sale[]; shopId?: string }
                 <SelectTrigger><SelectValue placeholder="Select an invoice…" /></SelectTrigger>
                 <SelectContent>
                   {eligible.slice(0, 50).map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.invoice} · {s.customer} · {formatRs(s.total)}</SelectItem>
+                    <SelectItem key={s.id} value={s.id}>{s.invoice} · {customerNameOf(s)} · {formatRs(s.total)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

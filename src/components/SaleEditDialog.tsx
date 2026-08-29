@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  useStore, formatRs, discountAmountFor, discountSplitOf, closedSessionFor, shortDay,
+  useStore, formatRs, discountAmountFor, discountSplitOf, closedSessionFor, shortDay, WALK_IN,
   type Sale,
 } from "@/lib/store";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -172,7 +172,14 @@ export function SaleEditDialog({ sale, onClose }: { sale: Sale | null; onClose: 
         <div className="grid sm:grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label>Customer</Label>
-            <Input value={draft.customer} onChange={(e) => setDraft({ ...draft, customer: e.target.value })} />
+            <Input
+              value={draft.customer}
+              onChange={(e) => setDraft({ ...draft, customer: e.target.value })}
+              // Clearing the field is how you say "this was a walk-in". The
+              // store normalises a blank back to WALK_IN on save, so the row
+              // can never end up with an empty name.
+              placeholder={WALK_IN}
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Payment</Label>
