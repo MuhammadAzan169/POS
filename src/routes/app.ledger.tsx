@@ -19,6 +19,7 @@ import { StatCard, StatusPill } from "@/components/Stat";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { LedgerTable } from "@/components/LedgerTable";
 import { SupplierPaymentDialog } from "@/components/SupplierPaymentDialog";
+import { CustomerPaymentDialog } from "@/components/CustomerPaymentDialog";
 import { SetOffDialog } from "@/components/SetOffDialog";
 import { AdjustBalanceDialog } from "@/components/AdjustBalanceDialog";
 import { Confirm } from "@/components/Confirm";
@@ -68,6 +69,8 @@ function LedgerPage() {
   /** The party whose statement is open in the side sheet. */
   const [detail, setDetail] = useState<PartyPosition | null>(null);
   const [payFor, setPayFor] = useState<Supplier | null>(null);
+  /** The account money is being collected against — the receivable side's "Pay". */
+  const [collectFrom, setCollectFrom] = useState<Customer | null>(null);
   const [payEditing, setPayEditing] = useState<SupplierPayment | null>(null);
   const [settleFor, setSettleFor] = useState<{ customer: Customer; supplier: Supplier } | null>(null);
   /** The party whose balance the owner is moving by hand, and which side of it. */
@@ -368,6 +371,7 @@ function LedgerPage() {
               currency={currency}
               onOpen={setDetail}
               onPay={(sup) => { setPayEditing(null); setPayFor(sup); }}
+              onReceive={setCollectFrom}
               onSettle={(c, sup) => setSettleFor({ customer: c, supplier: sup })}
             />
           </TabsContent>
@@ -418,6 +422,7 @@ function LedgerPage() {
                     <th className="px-4 py-3 font-medium text-right">Items</th>
                     <th className="px-4 py-3 font-medium text-right">On account</th>
                     <th className="px-4 py-3 font-medium text-right">They now owe</th>
+                    <th className="px-4 py-3 font-medium text-right">Collect</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -436,10 +441,23 @@ function LedgerPage() {
                       <td className="px-4 py-3 text-right text-warning-strong">
                         {r.position ? money(r.position.receivable) : "—"}
                       </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        {r.position?.customer && r.position.receivable > 0 && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-warning-strong hover:text-warning-strong"
+                            onClick={() => setCollectFrom(r.position!.customer!)}
+                            title={`Record money received from ${r.sale.customer}`}
+                          >
+                            <HandCoins className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                   {creditSales.length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                    <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
                       Nothing has been sold on credit.
                     </td></tr>
                   )}
@@ -870,6 +888,18 @@ function LedgerPage() {
                       <Wallet className="h-3.5 w-3.5 mr-1.5" />Pay them
                     </Button>
                   )}
+                  {detail.customer && detail.receivable > 0 && (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        const c = detail.customer!;
+                        setDetail(null);
+                        setCollectFrom(c);
+                      }}
+                    >
+                      <HandCoins className="h-3.5 w-3.5 mr-1.5" />Receive payment
+                    </Button>
+                  )}
                   {/* A party on both sides gets a button per side: the two
                       balances are separate debts and are written off separately. */}
                   {detail.customer && (
@@ -933,6 +963,8 @@ function LedgerPage() {
         </SheetContent>
       </Sheet>
 
+      <CustomerPaymentDialog customer={collectFrom} onClose={() => setCollectFrom(null)} />
+
       <SupplierPaymentDialog
         supplier={payFor}
         editing={payEditing}
@@ -964,12 +996,14 @@ function PartyList({
   currency,
   onOpen,
   onPay,
+  onReceive,
   onSettle,
 }: {
   parties: PartyPosition[];
   currency: string;
   onOpen: (p: PartyPosition) => void;
   onPay: (s: Supplier) => void;
+  onReceive: (c: Customer) => void;
   onSettle: (c: Customer, s: Supplier) => void;
 }) {
   const money = (n: number) => formatRs(n, currency);
@@ -1007,6 +1041,13 @@ function PartyList({
             ]}
             actions={
               <>
+                {/* One button per direction the money can move, shown only when
+                    there is money to move that way. */}
+                {p.customer && p.receivable > 0 && (
+                  <Button size="sm" onClick={() => onReceive(p.customer!)}>
+                    <HandCoins className="h-3.5 w-3.5 mr-1.5" />Receive
+                  </Button>
+                )}
                 {p.supplier && (
                   <Button size="sm" variant="outline" onClick={() => onPay(p.supplier!)}>
                     <Wallet className="h-3.5 w-3.5 mr-1.5" />Pay
@@ -1092,6 +1133,17 @@ function PartyList({
                   )}
                 </td>
                 <td className="px-4 py-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                  {p.customer && p.receivable > 0 && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-warning-strong hover:text-warning-strong"
+                      onClick={() => onReceive(p.customer!)}
+                      title="Record money received from them"
+                    >
+                      <HandCoins className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                   {p.supplier && (
                     <Button size="sm" variant="ghost" onClick={() => onPay(p.supplier!)} title="Record a payment">
                       <Wallet className="h-3.5 w-3.5" />

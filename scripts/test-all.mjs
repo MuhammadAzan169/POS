@@ -82,6 +82,12 @@ const session = (over = {}) => ({
 });
 
 /** An empty ledger, so each test only has to supply the part it cares about. */
+/** Money taken from a customer against what they already owe. */
+const receipt = (over = {}) => ({
+  id: "p1", customerId: "c1", date: "2026-08-21", amount: 1000,
+  method: "Cash", shopId: "shop1", note: "", receivedBy: "Cashier", ...over,
+});
+
 const ledgerData = (over = {}) => ({
   sales: [], customerPayments: [], purchases: [], supplierPayments: [], returns: [], setOffs: [],
   adjustments: [], ...over,
@@ -381,6 +387,74 @@ it("the month-start payer draws the advance down as they buy", () => {
     customerPayments: [{ id: "p1", customerId: "c1", date: "2026-08-01", amount: 100000, method: "Online", shopId: "shop1", note: "", receivedBy: "x" }],
   });
   eq(B.customerBalance(cust, data).advance, 25000, "100,000 less 75,000 drawn");
+});
+
+/*
+ * A "pay later" sale that is settled afterwards — in one go, in instalments, or
+ * with more than was owed. This is the commonest thing that happens to a credit
+ * sale after it is rung up, so each shape is pinned down here.
+ */
+it("paying the whole balance later settles the account exactly", () => {
+  const data = ledgerData({
+    sales: [sale({ customerId: "c1", payment: "Credit", total: 8000 })],
+    customerPayments: [receipt({ amount: 8000 })],
+  });
+  const bal = B.customerBalance(cust, data);
+  eq([bal.outstanding, bal.advance, bal.paid], [0, 0, 8000], "square, with nothing held either way");
+});
+
+it("a part payment leaves the rest owed and collectable", () => {
+  const data = ledgerData({
+    sales: [sale({ customerId: "c1", payment: "Credit", total: 8000 })],
+    customerPayments: [receipt({ amount: 3000 })],
+  });
+  const bal = B.customerBalance(cust, data);
+  eq([bal.paid, bal.outstanding], [3000, 5000]);
+  eq(bal.advance, 0, "a part payment is never an advance");
+});
+
+it("instalments add up: three visits clear one invoice", () => {
+  const data = ledgerData({
+    sales: [sale({ customerId: "c1", payment: "Credit", total: 9000 })],
+    customerPayments: [
+      receipt({ id: "p1", amount: 3000, date: "2026-08-21" }),
+      receipt({ id: "p2", amount: 4000, date: "2026-08-24" }),
+      receipt({ id: "p3", amount: 2000, date: "2026-08-28" }),
+    ],
+  });
+  eq(B.customerBalance(cust, data).outstanding, 0, "9,000 taken in three parts");
+});
+
+it("part-paying frees exactly that much credit back up", () => {
+  const before = ledgerData({ sales: [sale({ customerId: "c1", payment: "Credit", total: 40000 })] });
+  const after = ledgerData({
+    sales: [sale({ customerId: "c1", payment: "Credit", total: 40000 })],
+    customerPayments: [receipt({ amount: 15000 })],
+  });
+  // The whole point of collecting: the customer can buy on account again.
+  eq(B.creditHeadroom(cust, before), 10000);
+  eq(B.creditHeadroom(cust, after), 25000);
+});
+
+it("a payment against a settled account is held as an advance, not refused", () => {
+  const data = ledgerData({
+    sales: [sale({ customerId: "c1", payment: "Credit", total: 5000 })],
+    customerPayments: [receipt({ id: "p1", amount: 5000 }), receipt({ id: "p2", amount: 2000 })],
+  });
+  const bal = B.customerBalance(cust, data);
+  eq([bal.outstanding, bal.advance], [0, 2000]);
+});
+
+it("one customer's payment never touches another's balance", () => {
+  const data = ledgerData({
+    sales: [
+      sale({ id: "s1", customerId: "c1", payment: "Credit", total: 5000 }),
+      sale({ id: "s2", customerId: "c2", payment: "Credit", total: 7000 }),
+    ],
+    customerPayments: [receipt({ amount: 5000, customerId: "c2" })],
+  });
+  eq(B.customerBalance(cust, data).outstanding, 5000, "c1 still owes every rupee");
+  eq(B.customerBalance({ id: "c2", creditLimit: 50000 }, data).outstanding, 2000);
 });
 
 it("the credit limit trips exactly AT the limit, not past it", () => {

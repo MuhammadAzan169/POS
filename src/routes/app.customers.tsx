@@ -18,6 +18,7 @@ import {
 import { PageHeader } from "@/components/AppLayout";
 import { StatCard, StatusPill } from "@/components/Stat";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
+import { CustomerPaymentDialog } from "@/components/CustomerPaymentDialog";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -522,82 +523,11 @@ function CustomersPage() {
       </Dialog>
 
       {/* ----------------------------------------------- receive payment */}
-      <Dialog open={!!payFor} onOpenChange={(o) => { if (!o) { setPayFor(null); setPayEditing(null); } }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{payEditing ? "Correct payment" : "Receive payment"}</DialogTitle>
-            <DialogDescription>
-              {payFor &&
-                (customerBalance(payFor, ledger).outstanding > 0
-                  ? `${payFor.name} owes ${formatRs(customerBalance(payFor, ledger).outstanding, currency)}.`
-                  : `${payFor.name} owes nothing — anything taken now is an advance they can draw stock against.`)}
-              {payEditing && ` Taken ${shortDay(payEditing.date)} by ${payEditing.receivedBy || "staff"}.`}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>Amount ({currency})</Label>
-              <Input
-                type="number"
-                min={0}
-                autoFocus
-                value={pay.amount || ""}
-                onChange={(e) => setPay({ ...pay, amount: Math.max(0, Number(e.target.value) || 0) })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Method</Label>
-              <Select value={pay.method} onValueChange={(v) => setPay({ ...pay, method: v as SettledMethod })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Cash">Cash</SelectItem>
-                  <SelectItem value="Card">Card</SelectItem>
-                  <SelectItem value="Online">Online</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label>Received at</Label>
-              <Select value={pay.shopId} onValueChange={(v) => setPay({ ...pay, shopId: v })} disabled={!isAdmin}>
-                <SelectTrigger><SelectValue placeholder="Which shop took the money?" /></SelectTrigger>
-                <SelectContent>
-                  {(isAdmin ? shops : shops.filter((s) => s.id === user?.shopId)).map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label>Note (optional)</Label>
-              <Input value={pay.note} onChange={(e) => setPay({ ...pay, note: e.target.value })} placeholder="e.g. Part payment against last week's bill" />
-            </div>
-            {pay.method === "Cash" && (
-              <p className="sm:col-span-2 text-xs text-muted-foreground">
-                Cash goes into that shop's drawer, so tonight's cash count will expect it.
-              </p>
-            )}
-            {/* Said before the money is taken, not after: whether this is a
-                settlement or an advance changes what the shop tells the buyer. */}
-            {payFor && pay.amount > customerBalance(payFor, ledger).outstanding + (payEditing?.amount ?? 0) && (
-              <p className="sm:col-span-2 text-xs text-accent-strong">
-                {formatRs(
-                  pay.amount - customerBalance(payFor, ledger).outstanding - (payEditing?.amount ?? 0),
-                  currency,
-                )}{" "}
-                more than is owed — that part is held as an advance and comes off their next purchases
-                on account.
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setPayFor(null); setPayEditing(null); }}>Cancel</Button>
-            <Button onClick={savePayment}>
-              <HandCoins className="h-4 w-4 mr-1.5" />
-              {payEditing ? "Save correction" : "Record payment"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CustomerPaymentDialog
+        customer={payFor}
+        editing={payEditing}
+        onClose={() => { setPayFor(null); setPayEditing(null); }}
+      />
 
       {/* --------------------------------------------------- detail sheet */}
       <Sheet open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>

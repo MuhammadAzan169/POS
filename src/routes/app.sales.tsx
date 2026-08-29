@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   useStore, formatRs, customerNameOf, todayISO, daysAgoISO, dayOf, discountSplitOf, allocateSale,
-  closedSessionFor, shortDay, type DaySession, type Sale,
+  closedSessionFor, shortDay, customerBalance, type Customer, type DaySession, type Sale,
 } from "@/lib/store";
 import { SaleEditDialog } from "@/components/SaleEditDialog";
 import { Receipt as ReceiptView, type ReceiptData } from "@/components/Receipt";
@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/AppLayout";
 import { StatusPill } from "@/components/Stat";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { CustomerName } from "@/components/CustomerName";
+import { CustomerPaymentDialog } from "@/components/CustomerPaymentDialog";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Download, Printer, Undo2, Pencil, Trash2, RotateCcw, ReceiptText } from "lucide-react";
+import { Download, Printer, Undo2, Pencil, Trash2, RotateCcw, ReceiptText, HandCoins } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { cn } from "@/lib/utils";
 import { Confirm } from "@/components/Confirm";
@@ -82,7 +83,10 @@ function ClosedDayWarning({ sale, sessions }: { sale: Sale; sessions: DaySession
 }
 
 function SalesPage() {
-  const { user, sales, shops, products, addReturn, deleteSale, daySessions, settings } = useStore();
+  const {
+    user, sales, shops, products, addReturn, deleteSale, daySessions, settings,
+    customers, customerPayments, setOffs, adjustments,
+  } = useStore();
   const navigate = useNavigate();
   const { q: searchParam } = Route.useSearch();
   const saleToReceipt = useSaleToReceipt();
@@ -91,6 +95,8 @@ function SalesPage() {
   const [q, setQ] = useState(searchParam ?? "");
   const [open, setOpen] = useState<string | null>(null);
   const [editing, setEditing] = useState<Sale | null>(null);
+  /** The account being collected against, opened from a "pay later" invoice. */
+  const [collectFrom, setCollectFrom] = useState<Customer | null>(null);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
@@ -118,6 +124,24 @@ function SalesPage() {
   const selected = open ? sales.find((s) => s.id === open) : null;
 
   /** Headline figures for whatever the filters currently select. */
+  /**
+   * The account behind a "pay later" invoice, when there still is one.
+   *
+   * Only credit sales booked to a saved customer can be collected against: a
+   * walk-in who was given credit has nobody to chase, and the till already
+   * refuses to sell that way. Returns nothing once the account is square, so a
+   * settled invoice does not offer to take money that is not owed.
+   */
+  const accountFor = (sale: Sale): Customer | null => {
+    if (sale.payment !== "Credit" || !sale.customerId) return null;
+    return customers.find((c) => c.id === sale.customerId) ?? null;
+  };
+
+  const owesOn = (sale: Sale) => {
+    const c = accountFor(sale);
+    return c ? customerBalance(c, { sales, customerPayments, setOffs, adjustments }).outstanding : 0;
+  };
+
   const stats = useMemo(() => {
     const live = rows.filter((s) => s.status !== "Returned");
     const revenue = live.reduce((a, s) => a + s.total, 0);
@@ -491,6 +515,13 @@ function SalesPage() {
               ]}
               actions={
                 <>
+                  {/* The money on a "pay later" invoice is collected from here
+                      rather than three screens away on the Customers page. */}
+                  {owesOn(s) > 0 && (
+                    <Button size="sm" onClick={() => setCollectFrom(accountFor(s))}>
+                      <HandCoins className="h-3.5 w-3.5 mr-1.5" />Receive
+                    </Button>
+                  )}
                   <Button size="sm" variant="outline" onClick={() => setEditing(s)} disabled={s.status === "Returned"}>
                     <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
                   </Button>
@@ -591,6 +622,17 @@ function SalesPage() {
                   <td className="px-4 py-3"><StatusPill status={s.status} /></td>
                   {/* stopPropagation so acting on a row doesn't also open the detail sheet. */}
                   <td className="px-4 py-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    {owesOn(s) > 0 && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-warning-strong hover:text-warning-strong"
+                        title={`Receive payment from ${s.customer}`}
+                        onClick={() => setCollectFrom(accountFor(s))}
+                      >
+                        <HandCoins className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                     <Button size="sm" variant="ghost" onClick={() => setEditing(s)} disabled={s.status === "Returned"}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
@@ -654,6 +696,8 @@ function SalesPage() {
         </TabsContent>
       </Tabs>
 
+      <CustomerPaymentDialog customer={collectFrom} onClose={() => setCollectFrom(null)} />
+
       <Sheet open={!!open} onOpenChange={(o) => !o && setOpen(null)}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
           {selected && (
@@ -671,6 +715,38 @@ function SalesPage() {
                   <div><div className="text-muted-foreground text-xs">Payment</div><div className="font-medium">{selected.payment}</div></div>
                   <div><div className="text-muted-foreground text-xs">Status</div><StatusPill status={selected.status} /></div>
                 </div>
+
+                {/*
+                  A "pay later" invoice, and what is still owed on the account
+                  behind it. The balance is the ACCOUNT's, not this invoice's —
+                  receipts are taken against the whole account, so claiming a
+                  per-invoice figure here would be inventing an allocation the
+                  shop never made. Said plainly rather than left to be guessed.
+                */}
+                {accountFor(selected) && (
+                  <div
+                    className={cn(
+                      "rounded-lg border p-3 flex flex-wrap items-center justify-between gap-3",
+                      owesOn(selected) > 0 ? "border-warning/40 bg-warning/10" : "border-success/40 bg-success/10",
+                    )}
+                  >
+                    <div>
+                      <div className="text-sm font-medium">
+                        {owesOn(selected) > 0 ? "Sold on account — still owing" : "Sold on account — settled"}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {owesOn(selected) > 0
+                          ? `${selected.customer} owes ${formatRs(owesOn(selected), settings.currency)} in total across their account.`
+                          : `${selected.customer} has paid off their account in full.`}
+                      </p>
+                    </div>
+                    {owesOn(selected) > 0 && (
+                      <Button size="sm" onClick={() => setCollectFrom(accountFor(selected))}>
+                        <HandCoins className="h-3.5 w-3.5 mr-1.5" />Receive payment
+                      </Button>
+                    )}
+                  </div>
+                )}
                 {/* Per-item discount gets its own column: "why is this line
                     Rs 40 less than qty × price" is the first question anyone
                     asks of a slip, and the answer was nowhere on this screen. */}
