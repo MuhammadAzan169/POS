@@ -7,6 +7,7 @@
  */
 import { useStore } from "@/lib/store";
 import { buildInvoice, printInvoice } from "@/lib/invoice";
+import { settingsForShop } from "@/lib/bill-settings";
 import { downloadInvoicePdf } from "@/lib/invoice-pdf";
 import type { Sale } from "@/lib/store";
 import { Invoice } from "./Invoice";
@@ -32,6 +33,10 @@ export function BillDialog({ sale: opened, onClose }: { sale: Sale | null; onClo
     ? (customers.find((c) => c.id === sale.customerId) ?? null)
     : null;
   const shop = shops.find((s) => s.id === sale.shopId) ?? null;
+  // The outlet's own design where it has one, the business design otherwise —
+  // resolved once here, so the bill on screen, the print and the PDF are the
+  // same document.
+  const billSettings = settingsForShop(settings, shop);
   const data = buildInvoice(
     sale,
     { sales, customerPayments, setOffs, adjustments },
@@ -45,7 +50,7 @@ export function BillDialog({ sale: opened, onClose }: { sale: Sale | null; onClo
    */
   const download = async () => {
     try {
-      await downloadInvoicePdf(data, settings);
+      await downloadInvoicePdf(data, billSettings);
       toast.success(`Bill ${sale.invoice} downloaded`);
     } catch {
       toast.error("Could not build the PDF. Use Print instead.");
@@ -61,7 +66,7 @@ export function BillDialog({ sale: opened, onClose }: { sale: Sale | null; onClo
 
         {/* The print stylesheet prints only this node, wherever it sits. */}
         <div data-print="only">
-          <Invoice data={data} settings={settings} />
+          <Invoice data={data} settings={billSettings} />
         </div>
 
         <div data-print="hide" className="flex flex-col sm:flex-row gap-2 pt-2">

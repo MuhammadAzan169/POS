@@ -30,6 +30,16 @@ export interface Shop {
   address: string;
   phone: string;
   /**
+   * This outlet's own bill design, overriding the business-wide one.
+   *
+   * Only the parts an outlet actually wants differently are stored — a shop
+   * that sets nothing but a title keeps following the business design for
+   * everything else, including changes made to it later. That is the whole
+   * point of holding overrides rather than a copy: a group-wide change to the
+   * terms still reaches every branch that has not deliberately overridden them.
+   */
+  bill?: ShopBillOverride;
+  /**
    * This outlet's own mark, as a data URL, printed on its bills.
    *
    * Optional, and falls back to the business-wide logo in Settings. A group
@@ -979,6 +989,22 @@ export interface InvoiceDesign {
    * actually printed on. A picker would let someone choose yellow.
    */
   accentColor: "navy" | "black" | "green" | "maroon";
+}
+
+/**
+ * What one shop may override on its bills.
+ *
+ * A partial design plus the handful of text fields that live on Settings rather
+ * than in the design, so a branch can send a "DELIVERY CHALLAN" with its own
+ * terms while the rest of the group sends an invoice.
+ */
+export interface ShopBillOverride {
+  design?: Partial<InvoiceDesign>;
+  title?: string;
+  terms?: string;
+  signatory?: string;
+  copyLabel?: string;
+  note?: string;
 }
 
 /** The accent choices, as ink. Shared by the screen and the PDF. */

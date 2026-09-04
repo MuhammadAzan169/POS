@@ -35,6 +35,8 @@ import { DEFAULT_DISCOUNTS, DEFAULT_RECEIPT, customerNameOf, discountSplitOf, is
 import { openSessionFor } from "./day-book";
 import { dayOf, todayISO } from "./dates";
 import { db, loadSnapshot, subscribeToMessages } from "./db";
+import * as auth from "./auth";
+import { staffEmail } from "./auth-identity";
 import { maxSetOff } from "./ledger";
 import { repriceForCost } from "./store-types";
 import { isSupabaseConfigured } from "./supabase";
@@ -44,6 +46,11 @@ import { isSupabaseConfigured } from "./supabase";
 export * from "./dates";
 export * from "./day-book";
 export * from "./ledger";
+
+export interface AuthOutcome {
+  user: User | null;
+  error?: string;
+}
 
 interface StoreState {
   user: User | null;
@@ -89,7 +96,18 @@ interface StoreState {
   messages: Message[];
   settings: Settings;
   discounts: DiscountRules;
-  login: (email: string, password: string) => User | null;
+  /**
+   * Signs in for real when Supabase is configured, and against the demo users
+   * otherwise — so the app still runs with no database behind it.
+   *
+   * `kind` decides how the identifier is read: an owner types an email, a shop
+   * worker types a username that becomes one.
+   */
+  signIn: (identifier: string, password: string, kind: "owner" | "staff") => Promise<AuthOutcome>;
+  /** True until the first owner has been claimed. Drives the first-run screen. */
+  needsOwner: boolean;
+  /** Claims the one owner account. Refused by the database once one exists. */
+  createOwner: (email: string, password: string, name: string) => Promise<AuthOutcome>;
   logout: () => void;
   addSale: (s: Omit<Sale, "id" | "invoice" | "synced">) => Sale;
   updateSale: (s: Sale) => void;
@@ -299,6 +317,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
    * already knows; SSR has no navigator, so it renders optimistically and the
    * effect below corrects it on hydration.
    */
+  /*
+   * Whether an owner account has been claimed. Only meaningful with a database
+   * behind the app; demo mode has its seeded owner and never asks.
+   */
+  const [needsOwner, setNeedsOwner] = useState(false);
+
   const [online, setOnline] = useState(true);
   const [shops, setShops] = useState<Shop[]>(SHOPS);
   const [users, setUsers] = useState<User[]>(USERS);
@@ -507,16 +531,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       messages,
       settings,
       discounts,
-      login: (email, _password) => {
-        const u = users.find((x) => x.email.toLowerCase() === email.toLowerCase());
-        if (!u) return null;
-        setUser(u);
-        try { window.localStorage.setItem(LS_USER, JSON.stringify(u)); } catch {}
-        return u;
+      needsOwner,
+      signIn: async (identifier, password, kind) => {
+        /*
+         * With no database behind it the app runs on demo data, where an
+         * account is whatever is in the seeded list and the password is not
+         * checked. That path exists so the system can be shown without any
+         * setup at all; it is never reached once Supabase is configured.
+         */
+        if (!usingSupabase) {
+          const email = kind === "staff" ? staffEmail(identifier) : identifier.trim().toLowerCase();
+          const u = users.find((x) => x.email.toLowerCase() === email);
+          if (!u) return { user: null, error: "No such account" };
+          setUser(u);
+          try { window.localStorage.setItem(LS_USER, JSON.stringify(u)); } catch { /* private mode */ }
+          return { user: u };
+        }
+
+        const result = await auth.signIn(identifier, password, kind);
+        if (result.user) setUser(result.user);
+        return result;
+      },
+      createOwner: async (email, password, name) => {
+        if (!usingSupabase) return { user: null, error: "Connect a database first" };
+        const result = await auth.createOwner(email, password, name);
+        if (result.user) {
+          setUser(result.user);
+          setNeedsOwner(false);
+        }
+        return result;
       },
       logout: () => {
         setUser(null);
-        try { window.localStorage.removeItem(LS_USER); } catch {}
+        try { window.localStorage.removeItem(LS_USER); } catch { /* private mode */ }
+        void auth.signOut();
       },
       addSale: (s) => {
         const counter = sales.length + 200;

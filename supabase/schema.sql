@@ -19,9 +19,13 @@ create table if not exists shops (
   -- This outlet's own logo for its bills, as a data URL. Null falls back to the
   -- business-wide logo held in app_state.
   logo     text,
+  -- Only the parts of the bill design this outlet wants differently; null means
+  -- it follows the business-wide design in app_state entirely.
+  bill     jsonb,
   active   boolean not null default true
 );
 alter table shops add column if not exists logo text;
+alter table shops add column if not exists bill jsonb;
 
 create table if not exists users (
   id         text primary key,

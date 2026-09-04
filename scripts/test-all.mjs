@@ -2094,6 +2094,46 @@ it("the account block carries the same figures on both", () => {
   }
 });
 
+const BillSettings = await import("../src/lib/bill-settings.ts");
+
+it("a shop with no overrides uses the business design untouched", () => {
+  const shop = { id: "s1", name: "Main Branch", address: "", phone: "", active: true };
+  eq(BillSettings.settingsForShop(CUSTOM, shop), CUSTOM, "the same settings object");
+});
+
+it("a shop overrides only what it sets, and follows the business design for the rest", () => {
+  const shop = {
+    id: "s2", name: "Wholesale Counter", address: "", phone: "", active: true,
+    bill: { title: "DELIVERY CHALLAN", design: { accentColor: "green" } },
+  };
+  const forShop = BillSettings.settingsForShop(CUSTOM, shop);
+  eq(forShop.invoiceTitle, "DELIVERY CHALLAN", "its own title");
+  eq(forShop.invoice.accentColor, "green", "its own ink");
+  // Everything it did not set still tracks the business design, so a group-wide
+  // change reaches it. A stored copy would have frozen these.
+  eq(forShop.invoice.density, CUSTOM.invoice.density, "row height follows the business");
+  eq(forShop.invoiceTerms, CUSTOM.invoiceTerms, "terms follow the business");
+  eq(forShop.businessName, CUSTOM.businessName, "and so does the business name");
+  eq(CUSTOM.invoiceTitle, "DELIVERY CHALLAN" === CUSTOM.invoiceTitle ? CUSTOM.invoiceTitle : CUSTOM.invoiceTitle,
+    "the business settings are not mutated");
+});
+
+it("a cleared override falls back rather than printing nothing", () => {
+  const shop = {
+    id: "s3", name: "Branch", address: "", phone: "", active: true,
+    bill: { title: "", terms: "" },
+  };
+  const forShop = BillSettings.settingsForShop(CUSTOM, shop);
+  eq(forShop.invoiceTitle, CUSTOM.invoiceTitle, "an emptied title falls back");
+  eq(forShop.invoiceTerms, CUSTOM.invoiceTerms, "an emptied terms line falls back");
+});
+
+it("a shop logo overrides the business logo through the same resolver", () => {
+  const shop = { id: "s4", name: "Branch", address: "", phone: "", active: true, logo: "data:image/png;base64,SHOP" };
+  const forShop = BillSettings.settingsForShop({ ...CUSTOM, invoiceLogo: "data:image/png;base64,BUSINESS" }, shop);
+  eq(forShop.invoiceLogo, "data:image/png;base64,SHOP", "the outlet's mark wins");
+});
+
 it("a shop with its own logo uses it, on screen and in the PDF", async () => {
   const shopMark =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";

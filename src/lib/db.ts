@@ -79,11 +79,12 @@ export interface Snapshot {
 
 const rowToShop = (r: any): Shop => ({
   id: r.id, name: r.name, kind: r.kind === "wholesale" ? "wholesale" : "retail",
-  address: r.address ?? "", phone: r.phone ?? "", logo: r.logo ?? undefined, active: r.active,
+  address: r.address ?? "", phone: r.phone ?? "", logo: r.logo ?? undefined,
+  bill: r.bill ?? undefined, active: r.active,
 });
 const shopToRow = (s: Shop) => ({
   id: s.id, name: s.name, kind: s.kind ?? "retail", address: s.address, phone: s.phone,
-  logo: s.logo ?? null, active: s.active,
+  logo: s.logo ?? null, bill: s.bill ?? null, active: s.active,
 });
 
 const rowToUser = (r: any): User => ({
@@ -493,6 +494,7 @@ export async function loadSnapshot(): Promise<Snapshot> {
   const shopRows = (shops.data ?? []) as any[];
   if (shopRows.length > 0 && !("kind" in shopRows[0])) missing.push("shops.kind");
   if (shopRows.length > 0 && !("logo" in shopRows[0])) missing.push("shops.logo");
+  if (shopRows.length > 0 && !("bill" in shopRows[0])) missing.push("shops.bill");
   const saleRows = (sales.data ?? []) as any[];
   if (saleRows.length > 0 && !("business_date" in saleRows[0])) missing.push("sales.business_date");
   if (saleRows.length > 0 && !("customer_id" in saleRows[0])) missing.push("sales.customer_id");

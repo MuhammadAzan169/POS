@@ -46,12 +46,17 @@ export const SHOPS: Shop[] = [
 /** Only the retail branches ring up walk-in sales in the demo history. */
 const RETAIL_SHOPS = SHOPS.filter((s) => s.kind !== "wholesale");
 
+/*
+ * Shop staff are addressed at the staff domain, which receives no mail: they
+ * sign in with a username and the address is assembled from it. The owner keeps
+ * a real address, because that is the account that signs in as a person.
+ */
 export const USERS: User[] = [
   { id: "u0", name: "Owner", email: "admin@apos.pk", role: "admin", active: true, lastLogin: "2026-06-28 09:14" },
-  { id: "u1", name: "Shop 1 Cashier", email: "shop1@apos.pk", role: "shop", shopId: "s1", active: true, lastLogin: "2026-06-28 10:02" },
-  { id: "u2", name: "Shop 2 Cashier", email: "shop2@apos.pk", role: "shop", shopId: "s2", active: true, lastLogin: "2026-06-27 18:45" },
-  { id: "u3", name: "Shop 3 Cashier", email: "shop3@apos.pk", role: "shop", shopId: "s3", active: true, lastLogin: "2026-06-28 11:20" },
-  { id: "u4", name: "Wholesale Counter", email: "wholesale@apos.pk", role: "shop", shopId: "s0", active: true, lastLogin: "2026-06-28 09:40" },
+  { id: "u1", name: "Shop 1 Cashier", email: "shop1@staff.apos.pk", role: "shop", shopId: "s1", active: true, lastLogin: "2026-06-28 10:02" },
+  { id: "u2", name: "Shop 2 Cashier", email: "shop2@staff.apos.pk", role: "shop", shopId: "s2", active: true, lastLogin: "2026-06-27 18:45" },
+  { id: "u3", name: "Shop 3 Cashier", email: "shop3@staff.apos.pk", role: "shop", shopId: "s3", active: true, lastLogin: "2026-06-28 11:20" },
+  { id: "u4", name: "Wholesale Counter", email: "wholesale@staff.apos.pk", role: "shop", shopId: "s0", active: true, lastLogin: "2026-06-28 09:40" },
 ];
 
 /** Wholesale rates sit roughly midway between cost and the retail price. */

@@ -6,6 +6,8 @@ import { PageHeader } from "@/components/AppLayout";
 import { Receipt as ReceiptView } from "@/components/Receipt";
 import { Invoice as InvoiceView, type InvoiceData } from "@/components/Invoice";
 import { LogoPicker } from "@/components/LogoPicker";
+import { settingsForShop } from "@/lib/bill-settings";
+import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -126,10 +128,58 @@ const SAMPLE_BILL: InvoiceData = {
 
 function SettingsPage() {
   const store = useStore();
-  const { user, settings, updateSettings, updateReceiptDesign, updateInvoiceDesign } = store;
+  const { user, settings, updateSettings, updateReceiptDesign, updateInvoiceDesign, shops, updateShop } = store;
   const isAdmin = user?.role === "admin";
   const d = settings.receipt;
-  const b = settings.invoice;
+
+  /*
+   * The bill designer edits one of two things: the business-wide design, or a
+   * single shop's overrides of it.
+   *
+   * Held as a shop id rather than a copy of the design, so switching outlets
+   * cannot leave half-edited state behind, and every write goes straight to the
+   * row it belongs to.
+   */
+  const [billShopId, setBillShopId] = useState<string>("");
+  const billShop = billShopId ? (shops.find((x) => x.id === billShopId) ?? null) : null;
+
+  // What the chosen target actually renders with — the business design, or the
+  // business design with this shop's overrides folded in.
+  const effective = billShop ? settingsForShop(settings, billShop) : settings;
+  const b = effective.invoice;
+
+  /** Writes a design change to whichever target is being edited. */
+  const setDesign = (patch: Partial<InvoiceDesign>) => {
+    if (!billShop) return updateInvoiceDesign(patch);
+    updateShop({
+      ...billShop,
+      bill: { ...billShop.bill, design: { ...billShop.bill?.design, ...patch } },
+    });
+  };
+
+  /** The same for the wording, which lives on Settings rather than the design. */
+  const setText = (patch: Partial<Pick<typeof settings, "invoiceTitle" | "invoiceTerms" | "invoiceSignatory" | "invoiceCopyLabel" | "invoiceNote">>) => {
+    if (!billShop) return updateSettings(patch);
+    const map = {
+      invoiceTitle: "title",
+      invoiceTerms: "terms",
+      invoiceSignatory: "signatory",
+      invoiceCopyLabel: "copyLabel",
+      invoiceNote: "note",
+    } as const;
+    const bill = { ...billShop.bill };
+    for (const [key, value] of Object.entries(patch)) {
+      bill[map[key as keyof typeof map]] = value as string;
+    }
+    updateShop({ ...billShop, bill });
+  };
+
+  /** Puts one outlet back on the business-wide design entirely. */
+  const resetShop = () => {
+    if (!billShop) return;
+    updateShop({ ...billShop, bill: undefined });
+    toast.success(`${billShop.name} follows the business design again`);
+  };
 
   /**
    * A backup that omits a table is worse than no backup — you only find out
@@ -353,41 +403,95 @@ function SettingsPage() {
           value="bill"
           className="grid gap-5 lg:grid-cols-[22rem_minmax(0,1fr)] items-start"
         >
+          {/*
+            Which outlet's paperwork is being designed.
+
+            A group with four shops usually wants one design everywhere, so the
+            business default comes first and is what opens. A branch is only
+            listed as "customised" once it actually holds an override, which
+            makes it obvious at a glance where the exceptions are.
+          */}
+          <Card className="p-4 sm:p-5">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+              Designing bills for
+            </Label>
+            <div className="flex flex-wrap gap-2 mt-2">
+              <button
+                onClick={() => setBillShopId("")}
+                className={cn(
+                  "h-9 px-3 rounded-md border text-sm font-medium transition-colors cursor-pointer",
+                  !billShop ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted",
+                )}
+              >
+                All shops (business default)
+              </button>
+              {shops.filter((x) => x.active).map((x) => (
+                <button
+                  key={x.id}
+                  onClick={() => setBillShopId(x.id)}
+                  className={cn(
+                    "h-9 px-3 rounded-md border text-sm font-medium transition-colors cursor-pointer",
+                    billShopId === x.id
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "hover:bg-muted",
+                  )}
+                >
+                  {x.name}
+                  {(x.bill || x.logo) && (
+                    <span className="ml-1.5 text-[10px] uppercase tracking-wide opacity-70">
+                      customised
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2.5">
+              {billShop
+                ? `Changes below apply to ${billShop.name} only. Anything left untouched follows the business design.`
+                : "Changes below apply to every shop that has not been customised."}
+            </p>
+            {billShop && (billShop.bill || billShop.logo) && (
+              <Button variant="outline" className="h-8 mt-3" onClick={resetShop}>
+                Reset {billShop.name} to the business design
+              </Button>
+            )}
+          </Card>
+
           <div className="grid gap-5 min-w-0">
           <Section title="Bill text" description="The lines printed on a bill, above the items and under the totals.">
             <div className="grid gap-4">
               <Field label="Note above the items" hint="Order reference, delivery terms - left blank on most bills.">
                 <Input
-                  value={settings.invoiceNote}
+                  value={effective.invoiceNote}
                   placeholder="e.g. Against order dated 12/08"
-                  onChange={(e) => updateSettings({ invoiceNote: e.target.value })}
+                  onChange={(e) => setText({ invoiceNote: e.target.value })}
                 />
               </Field>
               <Field label="Terms" hint="The small print beside the signature.">
                 <Input
-                  value={settings.invoiceTerms}
-                  onChange={(e) => updateSettings({ invoiceTerms: e.target.value })}
+                  value={effective.invoiceTerms}
+                  onChange={(e) => setText({ invoiceTerms: e.target.value })}
                 />
               </Field>
               <Field label="Title in the tab" hint="Some shops send a delivery challan rather than a bill.">
                 <Input
-                  value={settings.invoiceTitle}
+                  value={effective.invoiceTitle}
                   placeholder="INVOICE / BILL"
-                  onChange={(e) => updateSettings({ invoiceTitle: e.target.value })}
+                  onChange={(e) => setText({ invoiceTitle: e.target.value })}
                 />
               </Field>
               <Field label="Under the signature line">
                 <Input
-                  value={settings.invoiceSignatory}
+                  value={effective.invoiceSignatory}
                   placeholder="Authorised signature"
-                  onChange={(e) => updateSettings({ invoiceSignatory: e.target.value })}
+                  onChange={(e) => setText({ invoiceSignatory: e.target.value })}
                 />
               </Field>
               <Field label="Copy stamp" hint="Shown in the corner when the stamp is switched on below.">
                 <Input
-                  value={settings.invoiceCopyLabel}
+                  value={effective.invoiceCopyLabel}
                   placeholder="ORIGINAL"
-                  onChange={(e) => updateSettings({ invoiceCopyLabel: e.target.value })}
+                  onChange={(e) => setText({ invoiceCopyLabel: e.target.value })}
                 />
               </Field>
             </div>
@@ -395,9 +499,13 @@ function SettingsPage() {
 
           <Section title="Logo" description="Printed in the top right of every bill, on screen and in the PDF.">
             <LogoPicker
-              value={settings.invoiceLogo}
-              onChange={(invoiceLogo) => updateSettings({ invoiceLogo })}
-              label="Business logo"
+              value={billShop ? (billShop.logo ?? "") : settings.invoiceLogo}
+              onChange={(logo) =>
+                billShop
+                  ? updateShop({ ...billShop, logo: logo || undefined })
+                  : updateSettings({ invoiceLogo: logo })
+              }
+              label={billShop ? `${billShop.name} logo` : "Business logo"}
             />
             <p className="text-xs text-muted-foreground mt-3">
               Used on every shop&apos;s bills. A branch that needs its own mark can override this on
@@ -410,28 +518,28 @@ function SettingsPage() {
               <Field label="Paper size">
                 <Segmented
                   value={b.paperSize}
-                  onChange={(v) => updateInvoiceDesign({ paperSize: v })}
+                  onChange={(v) => setDesign({ paperSize: v })}
                   options={[{ value: "A4", label: "A4" }, { value: "A5", label: "A5" }]}
                 />
               </Field>
               <Field label="Font size">
                 <Segmented
                   value={b.fontSize}
-                  onChange={(v) => updateInvoiceDesign({ fontSize: v })}
+                  onChange={(v) => setDesign({ fontSize: v })}
                   options={[{ value: "sm", label: "Small" }, { value: "md", label: "Medium" }, { value: "lg", label: "Large" }]}
                 />
               </Field>
               <Field label="Table heading" hint="Solid matches a printed bill book; plain saves toner.">
                 <Segmented
                   value={b.accent}
-                  onChange={(v) => updateInvoiceDesign({ accent: v })}
+                  onChange={(v) => setDesign({ accent: v })}
                   options={[{ value: "ink", label: "Solid" }, { value: "plain", label: "Plain" }]}
                 />
               </Field>
               <Field label="Logo size" hint="How large the mark prints in the top right.">
                 <Segmented
                   value={b.logoSize}
-                  onChange={(v) => updateInvoiceDesign({ logoSize: v })}
+                  onChange={(v) => setDesign({ logoSize: v })}
                   options={[
                     { value: "sm", label: "Small" },
                     { value: "md", label: "Medium" },
@@ -442,7 +550,7 @@ function SettingsPage() {
               <Field label="Row height" hint="Compact fits about a third more items on a sheet.">
                 <Segmented
                   value={b.density}
-                  onChange={(v) => updateInvoiceDesign({ density: v })}
+                  onChange={(v) => setDesign({ density: v })}
                   options={[{ value: "normal", label: "Normal" }, { value: "compact", label: "Compact" }]}
                 />
               </Field>
@@ -458,7 +566,7 @@ function SettingsPage() {
                     <button
                       key={key}
                       type="button"
-                      onClick={() => updateInvoiceDesign({ accentColor: key })}
+                      onClick={() => setDesign({ accentColor: key })}
                       title={INVOICE_ACCENTS[key].label}
                       aria-label={INVOICE_ACCENTS[key].label}
                       aria-pressed={b.accentColor === key}
@@ -480,7 +588,7 @@ function SettingsPage() {
                   min={0}
                   max={20}
                   value={b.ruledRowCount}
-                  onChange={(e) => updateInvoiceDesign({ ruledRowCount: Number(e.target.value) })}
+                  onChange={(e) => setDesign({ ruledRowCount: Number(e.target.value) })}
                   className="w-full accent-primary cursor-pointer"
                   disabled={!b.ruledRows}
                 />
@@ -497,7 +605,7 @@ function SettingsPage() {
                   key={t.key}
                   label={t.label}
                   checked={Boolean(b[t.key])}
-                  onChange={(v) => updateInvoiceDesign({ [t.key]: v } as Partial<InvoiceDesign>)}
+                  onChange={(v) => setDesign({ [t.key]: v } as Partial<InvoiceDesign>)}
                 />
               ))}
             </div>
@@ -508,7 +616,9 @@ function SettingsPage() {
           <Card className="p-4 sm:p-6 lg:sticky lg:top-0 min-w-0 bg-muted/30">
             <div className="flex items-center gap-2 mb-1">
               <FileText className="h-4 w-4 text-muted-foreground" />
-              <h3 className="font-semibold">Bill preview</h3>
+              <h3 className="font-semibold">
+                Bill preview{billShop ? ` — ${billShop.name}` : ""}
+              </h3>
             </div>
             <p className="text-xs text-muted-foreground">
               A trade order carrying a balance forward — the same layout that prints and downloads.
@@ -517,7 +627,11 @@ function SettingsPage() {
             {/* At its own size, centred, with nothing clipping it. The sheet is
                 capped at A4's width and simply narrows on a smaller screen. */}
             <div className="mx-auto w-full max-w-[820px]">
-              <InvoiceView data={SAMPLE_BILL} settings={settings} className="shadow-sm" />
+              <InvoiceView
+                data={{ ...SAMPLE_BILL, shopName: billShop?.name ?? SAMPLE_BILL.shopName }}
+                settings={effective}
+                className="shadow-sm"
+              />
             </div>
           </Card>
         </TabsContent>
