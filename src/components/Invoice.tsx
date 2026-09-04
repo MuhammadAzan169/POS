@@ -87,9 +87,9 @@ const SIZES: Record<InvoiceDesign["fontSize"], string> = {
  * square emblem fills; the width cap only bites on a wide wordmark.
  */
 const LOGO_BOX: Record<InvoiceDesign["logoSize"], string> = {
-  sm: "h-16 max-w-[9rem]",
-  md: "h-24 max-w-[12rem]",
-  lg: "h-32 max-w-[16rem]",
+  sm: "h-20 max-w-[11rem]",
+  md: "h-28 max-w-[15rem]",
+  lg: "h-36 max-w-[19rem]",
 };
 
 /** Row padding, per density. Compact fits about a third more on a sheet. */

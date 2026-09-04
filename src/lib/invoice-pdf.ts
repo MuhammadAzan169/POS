@@ -183,7 +183,7 @@ export async function buildInvoicePdf(data: InvoiceData, settings: Settings) {
      */
     try {
       // mm, matched to the on-screen boxes so the preview predicts the print.
-      const [boxW, boxH] = { sm: [34, 18], md: [46, 26], lg: [58, 34] }[d.logoSize] ?? [46, 26];
+      const [boxW, boxH] = { sm: [42, 22], md: [56, 32], lg: [70, 42] }[d.logoSize] ?? [56, 32];
       const props = doc.getImageProperties(logo);
       const scale = Math.min(boxW / props.width, boxH / props.height);
       const w = props.width * scale;
