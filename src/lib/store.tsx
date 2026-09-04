@@ -31,7 +31,13 @@ import type {
   Transfer,
   User,
 } from "./store-types";
-import { DEFAULT_DISCOUNTS, DEFAULT_RECEIPT, customerNameOf, discountSplitOf, isRestorable } from "./store-types";
+import {
+  DEFAULT_DISCOUNTS,
+  DEFAULT_RECEIPT,
+  customerNameOf,
+  discountSplitOf,
+  isRestorable,
+} from "./store-types";
 import { openSessionFor } from "./day-book";
 import { dayOf, todayISO } from "./dates";
 import { db, loadSnapshot, subscribeToMessages } from "./db";
@@ -336,8 +342,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [daySessions, setDaySessions] = useState<DaySession[]>(() => genDaySessions());
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [customers, setCustomers] = useState<Customer[]>(CUSTOMERS);
-  const [customerPayments, setCustomerPayments] = useState<CustomerPayment[]>(() => genCustomerPayments());
-  const [supplierPayments, setSupplierPayments] = useState<SupplierPayment[]>(() => genSupplierPayments());
+  const [customerPayments, setCustomerPayments] = useState<CustomerPayment[]>(() =>
+    genCustomerPayments(),
+  );
+  const [supplierPayments, setSupplierPayments] = useState<SupplierPayment[]>(() =>
+    genSupplierPayments(),
+  );
   const [setOffs, setSetOffs] = useState<SetOff[]>(() => genSetOffs());
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
@@ -435,7 +445,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
 
     void boot();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   /**
@@ -558,7 +570,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const u = users.find((x) => x.email.toLowerCase() === email);
           if (!u) return { user: null, error: "No such account" };
           setUser(u);
-          try { window.localStorage.setItem(LS_USER, JSON.stringify(u)); } catch { /* private mode */ }
+          try {
+            window.localStorage.setItem(LS_USER, JSON.stringify(u));
+          } catch {
+            /* private mode */
+          }
           return { user: u };
         }
 
@@ -592,7 +608,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       logout: () => {
         setUser(null);
-        try { window.localStorage.removeItem(LS_USER); } catch { /* private mode */ }
+        try {
+          window.localStorage.removeItem(LS_USER);
+        } catch {
+          /* private mode */
+        }
         void auth.signOut();
       },
       addSale: (s) => {
@@ -629,7 +649,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             s.lines.map((l) => ({
               productId: l.productId,
               shopId: s.shopId,
-              qty: Math.max(0, (inventory.find((r) => r.productId === l.productId && r.shopId === s.shopId)?.qty ?? 0) - l.qty),
+              qty: Math.max(
+                0,
+                (inventory.find((r) => r.productId === l.productId && r.shopId === s.shopId)?.qty ??
+                  0) - l.qty,
+              ),
             })),
           ),
         );
@@ -651,7 +675,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const next = [...prev];
           const bump = (productId: string, delta: number) => {
             if (delta === 0) return;
-            const i = next.findIndex((r) => r.productId === productId && r.shopId === updated.shopId);
+            const i = next.findIndex(
+              (r) => r.productId === productId && r.shopId === updated.shopId,
+            );
             if (i >= 0) next[i] = { ...next[i], qty: Math.max(0, next[i].qty + delta) };
             else if (delta > 0) next.push({ productId, shopId: updated.shopId, qty: delta });
           };
@@ -663,7 +689,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             bump(id, before - after);
           });
           persist("stock levels", () =>
-            db.upsertInventory(next.filter((r) => r.shopId === updated.shopId && ids.has(r.productId))),
+            db.upsertInventory(
+              next.filter((r) => r.shopId === updated.shopId && ids.has(r.productId)),
+            ),
           );
           return next;
         });
@@ -671,19 +699,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       /** Removing a sale returns its items to stock, unless it was already returned. */
       deleteSale: (id) => {
         const sale = sales.find((s) => s.id === id);
-        if (sale) log("deleted", "sale", sale, { label: sale.invoice, amount: sale.total, shopId: sale.shopId });
+        if (sale)
+          log("deleted", "sale", sale, {
+            label: sale.invoice,
+            amount: sale.total,
+            shopId: sale.shopId,
+          });
         setSales((prev) => prev.filter((s) => s.id !== id));
         persist("the deletion", () => db.deleteSale(id));
         if (!sale || sale.status === "Returned") return;
         setInventory((prev) => {
           const next = [...prev];
           sale.lines.forEach((l) => {
-            const i = next.findIndex((r) => r.productId === l.productId && r.shopId === sale.shopId);
+            const i = next.findIndex(
+              (r) => r.productId === l.productId && r.shopId === sale.shopId,
+            );
             if (i >= 0) next[i] = { ...next[i], qty: next[i].qty + l.qty };
             else next.push({ productId: l.productId, shopId: sale.shopId, qty: l.qty });
           });
           persist("stock levels", () =>
-            db.upsertInventory(next.filter((r) => r.shopId === sale.shopId && sale.lines.some((l) => l.productId === r.productId))),
+            db.upsertInventory(
+              next.filter(
+                (r) =>
+                  r.shopId === sale.shopId && sale.lines.some((l) => l.productId === r.productId),
+              ),
+            ),
           );
           return next;
         });
@@ -693,7 +733,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // session, so cash handed to the delivery man leaves the drawer on the
         // right trading day — including after midnight, when the calendar date
         // has already moved on but the day has not.
-        const session = p.createdByShopId ? openSessionFor(daySessions, p.createdByShopId) : undefined;
+        const session = p.createdByShopId
+          ? openSessionFor(daySessions, p.createdByShopId)
+          : undefined;
         const purchase: Purchase = {
           ...p,
           id: `pur-${Date.now()}`,
@@ -717,9 +759,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           .filter((prod) => p.lines.some((l) => l.productId === prod.id && l.rate > 0))
           .map((prod) => repriceForCost(prod, p.lines.find((l) => l.productId === prod.id)!.rate));
 
-        setProducts((prev) =>
-          prev.map((prod) => repriced.find((x) => x.id === prod.id) ?? prod),
-        );
+        setProducts((prev) => prev.map((prod) => repriced.find((x) => x.id === prod.id) ?? prod));
         persist("product costs", () => db.upsertProducts(repriced));
         setInventory((prev) => {
           const next = [...prev];
@@ -729,7 +769,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             else next.push({ productId: l.productId, shopId: l.shopId, qty: l.qty });
           });
           persist("stock levels", () =>
-            db.upsertInventory(next.filter((r) => p.lines.some((l) => l.productId === r.productId && l.shopId === r.shopId))),
+            db.upsertInventory(
+              next.filter((r) =>
+                p.lines.some((l) => l.productId === r.productId && l.shopId === r.shopId),
+              ),
+            ),
           );
           return next;
         });
@@ -746,11 +790,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setPurchases((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
         persist("the purchase", () => db.upsertPurchase(updated));
         if (!previous) return;
-        const keys = new Set([...previous.lines, ...updated.lines].map((l) => `${l.productId}|${l.shopId}`));
+        const keys = new Set(
+          [...previous.lines, ...updated.lines].map((l) => `${l.productId}|${l.shopId}`),
+        );
         const moves: StockMove[] = [...keys].map((k) => {
           const [productId, shopId] = k.split("|");
-          const before = previous.lines.find((l) => l.productId === productId && l.shopId === shopId)?.qty ?? 0;
-          const after = updated.lines.find((l) => l.productId === productId && l.shopId === shopId)?.qty ?? 0;
+          const before =
+            previous.lines.find((l) => l.productId === productId && l.shopId === shopId)?.qty ?? 0;
+          const after =
+            updated.lines.find((l) => l.productId === productId && l.shopId === shopId)?.qty ?? 0;
           return { productId, shopId, delta: after - before };
         });
         setInventory((prev) => {
@@ -765,13 +813,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const bill = purchases.find((p) => p.id === id);
         if (bill) {
           log("deleted", "purchase", bill, {
-            label: bill.billNo, amount: bill.total, shopId: bill.createdByShopId,
+            label: bill.billNo,
+            amount: bill.total,
+            shopId: bill.createdByShopId,
           });
         }
         setPurchases((prev) => prev.filter((p) => p.id !== id));
         persist("the deletion", () => db.deletePurchase(id));
         if (!bill) return;
-        const moves: StockMove[] = bill.lines.map((l) => ({ productId: l.productId, shopId: l.shopId, delta: -l.qty }));
+        const moves: StockMove[] = bill.lines.map((l) => ({
+          productId: l.productId,
+          shopId: l.shopId,
+          delta: -l.qty,
+        }));
         setInventory((prev) => {
           const next = applyStock(prev, moves);
           persist("stock levels", () => db.upsertInventory(touchedRows(next, moves)));
@@ -789,8 +843,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setSuppliers((prev) => prev.map((x) => (x.id === sup.id ? sup : x)));
         persist("the supplier", () => db.upsertSupplier(sup));
         // Bills store the name too, so renaming a supplier must not orphan them.
-        setPurchases((prev) => prev.map((p) => (p.supplierId === sup.id ? { ...p, supplier: sup.name } : p)));
-        setReturns((prev) => prev.map((r) => (r.supplierId === sup.id ? { ...r, supplier: sup.name } : r)));
+        setPurchases((prev) =>
+          prev.map((p) => (p.supplierId === sup.id ? { ...p, supplier: sup.name } : p)),
+        );
+        setReturns((prev) =>
+          prev.map((r) => (r.supplierId === sup.id ? { ...r, supplier: sup.name } : r)),
+        );
       },
       addExpense: (e) => {
         // Money spent while the till is open comes OUT of the drawer, so the
@@ -799,7 +857,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // deliberately left unattached.
         const session = openSessionFor(daySessions, e.shopId);
         const attach = session && dayOf(e.date) === session.businessDate ? session.id : undefined;
-        const expense: Expense = { ...e, id: `exp-${Date.now()}`, sessionId: e.sessionId ?? attach };
+        const expense: Expense = {
+          ...e,
+          id: `exp-${Date.now()}`,
+          sessionId: e.sessionId ?? attach,
+        };
         setExpenses((prev) => [expense, ...prev]);
         persist("the expense", () => db.upsertExpense(expense));
       },
@@ -816,7 +878,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const rec = expenses.find((x) => x.id === id);
         if (rec) {
           log("deleted", "expense", rec, {
-            label: rec.category || "Expense", amount: rec.amount, shopId: rec.shopId,
+            label: rec.category || "Expense",
+            amount: rec.amount,
+            shopId: rec.shopId,
           });
         }
         setExpenses((prev) => prev.filter((x) => x.id !== id));
@@ -826,7 +890,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const isSupplier = r.kind === "supplier";
         const prefix = isSupplier ? "SRET" : "RET";
         const sameKind = returns.filter((x) => x.kind === r.kind).length;
-        const rr: ReturnRec = { ...r, id: `ret-${Date.now()}`, returnNo: `${prefix}-${1000 + sameKind + 1}` };
+        const rr: ReturnRec = {
+          ...r,
+          id: `ret-${Date.now()}`,
+          returnNo: `${prefix}-${1000 + sameKind + 1}`,
+        };
         setReturns((prev) => [rr, ...prev]);
         persist("the return", () => db.upsertReturn(rr));
 
@@ -834,7 +902,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // same invoice stays returnable and sales totals stay inflated.
         if (!isSupplier) {
           setSales((prev) => {
-            const updated = prev.map((s) => (s.invoice === r.invoice ? { ...s, status: "Returned" as const, profit: 0 } : s));
+            const updated = prev.map((s) =>
+              s.invoice === r.invoice ? { ...s, status: "Returned" as const, profit: 0 } : s,
+            );
             const touched = updated.find((s) => s.invoice === r.invoice);
             if (touched) persist("the invoice status", () => db.upsertSale(touched));
             return updated;
@@ -846,12 +916,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setInventory((prev) => {
           const next = [...prev];
           r.items.forEach((item) => {
-            const idx = next.findIndex((row) => row.productId === item.productId && row.shopId === r.shopId);
-            if (idx >= 0) next[idx] = { ...next[idx], qty: Math.max(0, next[idx].qty + sign * item.qty) };
-            else if (!isSupplier) next.push({ productId: item.productId, shopId: r.shopId, qty: item.qty });
+            const idx = next.findIndex(
+              (row) => row.productId === item.productId && row.shopId === r.shopId,
+            );
+            if (idx >= 0)
+              next[idx] = { ...next[idx], qty: Math.max(0, next[idx].qty + sign * item.qty) };
+            else if (!isSupplier)
+              next.push({ productId: item.productId, shopId: r.shopId, qty: item.qty });
           });
           persist("stock levels", () =>
-            db.upsertInventory(next.filter((row) => row.shopId === r.shopId && r.items.some((i) => i.productId === row.productId))),
+            db.upsertInventory(
+              next.filter(
+                (row) =>
+                  row.shopId === r.shopId && r.items.some((i) => i.productId === row.productId),
+              ),
+            ),
           );
           return next;
         });
@@ -891,7 +970,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
        */
       deleteReturn: (id) => {
         const rec = returns.find((r) => r.id === id);
-        if (rec) log("deleted", "return", rec, { label: rec.returnNo, amount: rec.refund, shopId: rec.shopId });
+        if (rec)
+          log("deleted", "return", rec, {
+            label: rec.returnNo,
+            amount: rec.refund,
+            shopId: rec.shopId,
+          });
         setReturns((prev) => prev.filter((r) => r.id !== id));
         persist("the deletion", () => db.deleteReturn(id));
         if (!rec) return;
@@ -935,7 +1019,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       updateProductAlert: (productId, lowAlert) =>
         setProducts((prev) => {
-          const next = prev.map((x) => (x.id === productId ? { ...x, lowAlert: Math.max(0, lowAlert) } : x));
+          const next = prev.map((x) =>
+            x.id === productId ? { ...x, lowAlert: Math.max(0, lowAlert) } : x,
+          );
           const changed = next.find((x) => x.id === productId);
           if (changed) persist("the alert level", () => db.upsertProduct(changed));
           return next;
@@ -962,7 +1048,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // the header keeps showing the old name until the next sign-in.
         setUser((cur) => {
           if (cur?.id !== u.id) return cur;
-          try { window.localStorage.setItem(LS_USER, JSON.stringify(u)); } catch { /* private mode */ }
+          try {
+            window.localStorage.setItem(LS_USER, JSON.stringify(u));
+          } catch {
+            /* private mode */
+          }
           return u;
         });
       },
@@ -1183,7 +1273,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (transfer) {
           const units = transfer.items.reduce((a, i) => a + i.qty, 0);
           log("deleted", "transfer", transfer, {
-            label: transfer.transferNo, amount: units, shopId: transfer.fromShopId,
+            label: transfer.transferNo,
+            amount: units,
+            shopId: transfer.fromShopId,
           });
         }
         setTransfers((prev) => prev.filter((t) => t.id !== id));
@@ -1212,7 +1304,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         persist("the customer", () => db.upsertCustomer(c));
         // Invoices print the name they were issued with, so a rename has to
         // reach them too or old bills credit a customer who no longer exists.
-        setSales((prev) => prev.map((s) => (s.customerId === c.id ? { ...s, customer: c.name } : s)));
+        setSales((prev) =>
+          prev.map((s) => (s.customerId === c.id ? { ...s, customer: c.name } : s)),
+        );
       },
 
       addCustomerPayment: (p) => {
@@ -1221,7 +1315,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // payment taken at 1am still belongs to the day that's still open.
         const session = openSessionFor(daySessions, p.shopId);
         const attach = session && dayOf(p.date) <= session.businessDate ? session.id : undefined;
-        const payment: CustomerPayment = { ...p, id: `pay-${Date.now()}`, sessionId: p.sessionId ?? attach };
+        const payment: CustomerPayment = {
+          ...p,
+          id: `pay-${Date.now()}`,
+          sessionId: p.sessionId ?? attach,
+        };
         setCustomerPayments((prev) => [payment, ...prev]);
         persist("the payment", () => db.upsertCustomerPayment(payment));
       },
@@ -1239,7 +1337,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const pay = customerPayments.find((x) => x.id === id);
         if (pay) {
           log("deleted", "customer-payment", pay, {
-            label: `${pay.method} receipt`, amount: pay.amount, shopId: pay.shopId,
+            label: `${pay.method} receipt`,
+            amount: pay.amount,
+            shopId: pay.shopId,
           });
         }
         setCustomerPayments((prev) => prev.filter((x) => x.id !== id));
@@ -1272,7 +1372,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const pay = supplierPayments.find((x) => x.id === id);
         if (pay) {
           log("deleted", "supplier-payment", pay, {
-            label: `${pay.method} payment`, amount: pay.amount, shopId: pay.shopId || undefined,
+            label: `${pay.method} payment`,
+            amount: pay.amount,
+            shopId: pay.shopId || undefined,
           });
         }
         setSupplierPayments((prev) => prev.filter((x) => x.id !== id));
@@ -1288,7 +1390,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // rather than trusted from whatever the form last rendered — another
         // till may have taken a payment in between.
         const available = maxSetOff(customer, supplier, {
-          sales, customerPayments, purchases, supplierPayments, returns, setOffs,
+          sales,
+          customerPayments,
+          purchases,
+          supplierPayments,
+          returns,
+          setOffs,
         });
         const amount = Math.round(Math.min(x.amount, available));
         if (amount <= 0) return null;
@@ -1341,7 +1448,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         persist("the deletion", () => db.deleteAdjustment(id));
       },
 
-
       /* ----------------------------------------------------------- activity */
 
       restoreDeleted: (activityId) => {
@@ -1375,7 +1481,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             // restoring takes them off again. A returned sale never moved
             // stock, so nothing is replayed for it.
             if (rec.status !== "Returned") {
-              replay(rec.lines.map((l) => ({ productId: l.productId, shopId: rec.shopId, delta: -l.qty })));
+              replay(
+                rec.lines.map((l) => ({
+                  productId: l.productId,
+                  shopId: rec.shopId,
+                  delta: -l.qty,
+                })),
+              );
             }
             break;
           }
@@ -1384,7 +1496,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             const rec = snap as Purchase;
             setPurchases((prev) => [rec, ...prev]);
             persist("the restored purchase", () => db.upsertPurchase(rec));
-            replay(rec.lines.map((l) => ({ productId: l.productId, shopId: l.shopId, delta: l.qty })));
+            replay(
+              rec.lines.map((l) => ({ productId: l.productId, shopId: l.shopId, delta: l.qty })),
+            );
             break;
           }
           case "return": {
@@ -1406,7 +1520,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             // Mirror of deleteReturn: a customer return puts stock back, a
             // supplier return takes it away.
             const sign = rec.kind === "supplier" ? -1 : 1;
-            replay(rec.items.map((i) => ({ productId: i.productId, shopId: rec.shopId, delta: sign * i.qty })));
+            replay(
+              rec.items.map((i) => ({
+                productId: i.productId,
+                shopId: rec.shopId,
+                delta: sign * i.qty,
+              })),
+            );
             break;
           }
           case "transfer": {
@@ -1545,7 +1665,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return count;
       },
     }),
-    [user, ready, usingSupabase, dbError, pendingMigration, online, shops, users, products, inventory, sales, purchases, suppliers, expenses, returns, daySessions, transfers, customers, customerPayments, supplierPayments, setOffs, adjustments, activity, messages, settings, discounts],
+    [
+      user,
+      ready,
+      usingSupabase,
+      dbError,
+      pendingMigration,
+      online,
+      shops,
+      users,
+      products,
+      inventory,
+      sales,
+      purchases,
+      suppliers,
+      expenses,
+      returns,
+      daySessions,
+      transfers,
+      customers,
+      customerPayments,
+      supplierPayments,
+      setOffs,
+      adjustments,
+      activity,
+      messages,
+      settings,
+      discounts,
+    ],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

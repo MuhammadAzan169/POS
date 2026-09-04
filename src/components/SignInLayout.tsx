@@ -14,12 +14,15 @@ export function SignInLayout({
   children,
   footer,
   eyebrow,
+  wide = false,
 }: {
   title: string;
   subtitle: string;
   children: ReactNode;
   footer?: ReactNode;
   eyebrow?: ReactNode;
+  /** Setting up a business asks for more than a sign-in does. */
+  wide?: boolean;
 }) {
   return (
     <div className="min-h-dvh grid lg:grid-cols-2 bg-background">
@@ -57,7 +60,7 @@ export function SignInLayout({
       </div>
 
       <div className="flex items-center justify-center p-5 sm:p-6 md:p-12 px-safe">
-        <div className="w-full max-w-md py-6 lg:py-0">
+        <div className={`w-full py-6 lg:py-0 ${wide ? "max-w-xl" : "max-w-md"}`}>
           <div className="lg:hidden flex items-center gap-3 mb-8">
             <div className="h-10 w-10 rounded-lg bg-primary text-primary-foreground flex items-center justify-center font-bold">
               A

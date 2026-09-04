@@ -18,6 +18,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import {
+  claimAsOwner,
   hasOwner,
   onPasswordRecovery,
   requestPasswordReset,
@@ -29,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/PasswordInput";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { ArrowLeft, KeyRound, ShieldCheck, Sparkles } from "lucide-react";
 
@@ -49,7 +51,10 @@ function AdminSignIn() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [businessName, setBusinessName] = useState("");
   const [loading, setLoading] = useState(false);
   /** null while we are still asking the database. */
   const [firstRun, setFirstRun] = useState<boolean | null>(null);
@@ -118,10 +123,37 @@ function AdminSignIn() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    if (firstRun) {
+      // Checked here rather than left to the database, so the message names the
+      // field rather than reporting a constraint.
+      if (password.length < 8) {
+        setLoading(false);
+        return toast.error("Use a password of at least 8 characters");
+      }
+      if (password !== confirm) {
+        setLoading(false);
+        return toast.error("The two passwords do not match");
+      }
+    }
+
     const result = firstRun
-      ? await createOwner(email, password, name)
+      ? await createOwner({ name, phone, email, password, businessName })
       : await signIn(email, password, "owner");
     setLoading(false);
+
+    /*
+     * A login that exists without a profile, on a system with no owner yet, is
+     * a setup that stopped halfway. Rather than a dead end, finish the claim
+     * with what was typed — the alternative is telling someone their own brand
+     * new account has no access.
+     */
+    if (!result.user && !firstRun && /no access/i.test(result.error ?? "")) {
+      const claimed = await claimAsOwner(name || email.split("@")[0], phone);
+      if (claimed.user) {
+        toast.success("Setup finished");
+        return navigate({ to: "/app/dashboard" });
+      }
+    }
 
     if (!result.user) {
       toast.error(result.error ?? "Could not sign in");
@@ -280,10 +312,11 @@ function AdminSignIn() {
 
   return (
     <SignInLayout
-      title={firstRun ? "Create the owner account" : "Owner sign in"}
+      wide={Boolean(firstRun)}
+      title={firstRun ? "Set up your business" : "Owner sign in"}
       subtitle={
         firstRun
-          ? "This is the first account, and it can only be created once."
+          ? "One account runs the whole system. It can only be created once, and it is yours."
           : "For the business owner. Shop staff sign in on the main page."
       }
       eyebrow={
@@ -315,17 +348,52 @@ function AdminSignIn() {
     >
       <form onSubmit={submit} className="mt-6 sm:mt-8 space-y-4">
         {firstRun && (
-          <div className="space-y-2">
-            <Label htmlFor="owner-name">Your name</Label>
-            <Input
-              id="owner-name"
-              autoComplete="name"
-              placeholder="e.g. Khadija"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-          </div>
+          <>
+            {/* Grouped: who you are, then how the business is known. Two
+                columns from `sm` up, because six stacked fields on a laptop
+                reads as a long form rather than a short one. */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="owner-name">Your name</Label>
+                <Input
+                  id="owner-name"
+                  autoComplete="name"
+                  placeholder="e.g. Khadija Bibi"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="owner-phone">Phone</Label>
+                <Input
+                  id="owner-phone"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder="e.g. 0300-1234567"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="owner-business">Business name</Label>
+              <Input
+                id="owner-business"
+                placeholder="e.g. Khadija Fashion"
+                value={businessName}
+                onChange={(e) => setBusinessName(e.target.value)}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Printed at the top of every bill and receipt. You can change it later in Settings.
+              </p>
+            </div>
+
+            <Separator />
+          </>
         )}
         <div className="space-y-2">
           <Label htmlFor="admin-email">Email</Label>
@@ -342,6 +410,12 @@ function AdminSignIn() {
             onChange={(e) => setEmail(e.target.value)}
             required
           />
+          {firstRun && (
+            <p className="text-xs text-muted-foreground">
+              Used to sign in, and to reset your password if you ever forget it. Use one you can
+              actually read.
+            </p>
+          )}
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -370,6 +444,22 @@ function AdminSignIn() {
             </p>
           )}
         </div>
+
+        {firstRun && (
+          <div className="space-y-2">
+            <Label htmlFor="admin-confirm">Confirm password</Label>
+            <PasswordInput
+              id="admin-confirm"
+              autoComplete="new-password"
+              value={confirm}
+              onChange={setConfirm}
+              required
+            />
+            {confirm.length > 0 && confirm !== password && (
+              <p className="text-xs text-destructive">The two passwords do not match.</p>
+            )}
+          </div>
+        )}
         <Button type="submit" className="w-full h-11" disabled={loading || firstRun === null}>
           {loading
             ? firstRun

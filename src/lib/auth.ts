@@ -204,8 +204,7 @@ export async function requestPasswordReset(email: string): Promise<{ error?: str
    * idea a password reset is in progress, and nothing would happen. The screen
    * that listens for a recovery session is the one this points at.
    */
-  const redirectTo =
-    typeof window === "undefined" ? undefined : `${window.location.origin}/admin`;
+  const redirectTo = typeof window === "undefined" ? undefined : `${window.location.origin}/admin`;
 
   const { error } = await supabase.auth.resetPasswordForEmail(address, { redirectTo });
   // Deliberately not reporting "no such account": whether an address is
