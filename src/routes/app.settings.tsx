@@ -1,15 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { useStore, type ReceiptDesign } from "@/lib/store";
+import { useStore, type InvoiceDesign, type ReceiptDesign } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { Receipt as ReceiptView } from "@/components/Receipt";
+import { Invoice as InvoiceView, type InvoiceData } from "@/components/Invoice";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Download, Check, Receipt as ReceiptIcon } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Download, Check, Building2, FileText, Receipt as ReceiptIcon } from "lucide-react";
 import { toast } from "sonner";
 import { downloadJson } from "@/lib/export";
 
@@ -87,11 +89,37 @@ const SAMPLE = {
   ],
 };
 
+/**
+ * The preview bill. Deliberately a trade order carrying a balance forward - the
+ * account block is the half of the design most worth seeing before it goes out
+ * to a wholesale customer, and a one-line cash sale would never show it.
+ */
+const SAMPLE_BILL: InvoiceData = {
+  invoice: "INV-0848",
+  at: new Date(),
+  shopName: "Main Branch",
+  cashier: "Owner",
+  customer: "Bilal Traders",
+  customerPhone: "0300-1234567",
+  lines: [
+    { name: "Chand Maxi", qty: 7, rate: 2300 },
+    { name: "Crush Flare - Golden", qty: 5, rate: 3100 },
+    { name: "Silk Contrast", qty: 9, rate: 4200 },
+  ],
+  subtotal: 69400,
+  discount: 0,
+  total: 69400,
+  payment: "Credit",
+  status: "Completed",
+  account: { previousBalance: 36550, onAccount: 69400, received: 32000, closingBalance: 73950 },
+};
+
 function SettingsPage() {
   const store = useStore();
-  const { user, settings, updateSettings, updateReceiptDesign } = store;
+  const { user, settings, updateSettings, updateReceiptDesign, updateInvoiceDesign } = store;
   const isAdmin = user?.role === "admin";
   const d = settings.receipt;
+  const b = settings.invoice;
 
   /**
    * A backup that omits a table is worse than no backup — you only find out
@@ -117,7 +145,7 @@ function SettingsPage() {
   if (!isAdmin) {
     return (
       <div>
-        <PageHeader title="Settings" subtitle="Business details and receipt design." />
+        <PageHeader title="Settings" subtitle="Business details, receipt and bill design." />
         <Card className="p-10 text-center text-sm text-muted-foreground">Admins only.</Card>
       </div>
     );
@@ -140,11 +168,31 @@ function SettingsPage() {
     { key: "showFooterText", label: "Footer text" },
   ];
 
+  const billToggles: { key: keyof InvoiceDesign; label: string }[] = [
+    { key: "showBillTag", label: "INVOICE / BILL tag" },
+    { key: "showBusinessName", label: "Business name" },
+    { key: "showShopName", label: "Shop name" },
+    { key: "showAddress", label: "Address" },
+    { key: "showPhone", label: "Phone" },
+    { key: "showTaxNumber", label: "NTN number" },
+    { key: "showInvoiceNo", label: "Bill number (S.No.)" },
+    { key: "showDate", label: "Date" },
+    { key: "showCustomer", label: "Customer (M/s)" },
+    { key: "showCustomerPhone", label: "Customer phone" },
+    { key: "showCashier", label: "Billed by" },
+    { key: "showLineNumbers", label: "Line numbers" },
+    { key: "showUnitRate", label: "Rate column" },
+    { key: "showAccountBlock", label: "Previous balance & account" },
+    { key: "ruledRows", label: "Empty ruled rows" },
+    { key: "showTerms", label: "Terms line" },
+    { key: "showSignature", label: "Signature space" },
+  ];
+
   return (
     <div>
       <PageHeader
         title="Settings"
-        subtitle="Business details and receipt design. Stock alerts and discounts have their own tabs."
+        subtitle="Your business, the till receipt, and the bill — one tab each. Stock alerts and discounts have their own pages."
         actions={
           <>
             {/*
@@ -162,8 +210,30 @@ function SettingsPage() {
         }
       />
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] items-start">
-        <div className="grid gap-5 min-w-0">
+      {/*
+        Three documents' worth of settings on one page had grown to five stacked
+        sections and two previews — most of it scrolled past to reach the one
+        field being changed. Tabbed, each job is a screen: the business details,
+        the till slip, or the bill. Both previews used to be side by side in the
+        rail whichever you were editing, so half of it was always answering a
+        question nobody had asked; now the preview belongs to its tab.
+      */}
+      <Tabs defaultValue="business">
+        <TabsList className="mb-4">
+          <TabsTrigger value="business">
+            <Building2 className="h-4 w-4 mr-1.5" />Business
+          </TabsTrigger>
+          <TabsTrigger value="receipt">
+            <ReceiptIcon className="h-4 w-4 mr-1.5" />Receipt
+          </TabsTrigger>
+          <TabsTrigger value="bill">
+            <FileText className="h-4 w-4 mr-1.5" />Bill
+          </TabsTrigger>
+        </TabsList>
+
+        {/* No preview here — none of these fields has a shape, and a half-empty
+            rail beside them only narrows the form. */}
+        <TabsContent value="business" className="grid gap-5 max-w-3xl">
           <Section title="Business" description="Shown on receipts and exported reports.">
             <div className="grid gap-4 sm:grid-cols-6">
               <Field label="Business name" className="sm:col-span-4">
@@ -186,7 +256,13 @@ function SettingsPage() {
               </Field>
             </div>
           </Section>
+        </TabsContent>
 
+        <TabsContent
+          value="receipt"
+          className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] items-start"
+        >
+          <div className="grid gap-5 min-w-0">
           <Section title="Receipt text" description="The lines printed above and below the sale.">
             <div className="grid gap-4">
               <Field label="Header text" hint="Appears under the shop address.">
@@ -236,20 +312,105 @@ function SettingsPage() {
               ))}
             </div>
           </Section>
-        </div>
+          </div>
 
-        <Card className="p-5 lg:sticky lg:top-0 min-w-0">
+
+          <Card className="p-5 lg:sticky lg:top-0 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <ReceiptIcon className="h-4 w-4 text-muted-foreground" />
             <h3 className="font-semibold">Receipt preview</h3>
           </div>
           <p className="text-xs text-muted-foreground">Sample sale. Updates as you type.</p>
           <Separator className="my-4" />
-          <div className="max-h-[60dvh] overflow-y-auto">
+          <div className="max-h-[70dvh] overflow-y-auto">
             <ReceiptView data={SAMPLE} settings={settings} />
           </div>
-        </Card>
-      </div>
+          </Card>
+        </TabsContent>
+
+        <TabsContent
+          value="bill"
+          className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] items-start"
+        >
+          <div className="grid gap-5 min-w-0">
+          <Section title="Bill text" description="The lines printed on a bill, above the items and under the totals.">
+            <div className="grid gap-4">
+              <Field label="Note above the items" hint="Order reference, delivery terms - left blank on most bills.">
+                <Input
+                  value={settings.invoiceNote}
+                  placeholder="e.g. Against order dated 12/08"
+                  onChange={(e) => updateSettings({ invoiceNote: e.target.value })}
+                />
+              </Field>
+              <Field label="Terms" hint="The small print beside the signature.">
+                <Input
+                  value={settings.invoiceTerms}
+                  onChange={(e) => updateSettings({ invoiceTerms: e.target.value })}
+                />
+              </Field>
+            </div>
+          </Section>
+
+          <Section title="Bill design" description="What appears on a printed or downloaded bill. The preview updates as you change these.">
+            <div className="grid gap-5 sm:grid-cols-3">
+              <Field label="Paper size">
+                <Segmented
+                  value={b.paperSize}
+                  onChange={(v) => updateInvoiceDesign({ paperSize: v })}
+                  options={[{ value: "A4", label: "A4" }, { value: "A5", label: "A5" }]}
+                />
+              </Field>
+              <Field label="Font size">
+                <Segmented
+                  value={b.fontSize}
+                  onChange={(v) => updateInvoiceDesign({ fontSize: v })}
+                  options={[{ value: "sm", label: "Small" }, { value: "md", label: "Medium" }, { value: "lg", label: "Large" }]}
+                />
+              </Field>
+              <Field label="Table heading" hint="Solid matches a printed bill book; plain saves toner.">
+                <Segmented
+                  value={b.accent}
+                  onChange={(v) => updateInvoiceDesign({ accent: v })}
+                  options={[{ value: "ink", label: "Solid" }, { value: "plain", label: "Plain" }]}
+                />
+              </Field>
+            </div>
+
+            <Separator className="my-5" />
+
+            <div className="grid sm:grid-cols-2 gap-x-8">
+              {billToggles.map((t) => (
+                <Toggle
+                  key={t.key}
+                  label={t.label}
+                  checked={Boolean(b[t.key])}
+                  onChange={(v) => updateInvoiceDesign({ [t.key]: v } as Partial<InvoiceDesign>)}
+                />
+              ))}
+            </div>
+          </Section>
+          </div>
+
+
+          <Card className="p-5 lg:sticky lg:top-0 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <h3 className="font-semibold">Bill preview</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            A trade order carrying a balance forward - the same layout that prints and downloads.
+          </p>
+          <Separator className="my-4" />
+          {/* Scaled rather than squeezed: an A4 bill in a sidebar has to keep its
+              proportions or the preview stops predicting the printout. */}
+          <div className="max-h-[70dvh] overflow-auto">
+            <div className="origin-top-left scale-[0.62] w-[161%]">
+              <InvoiceView data={SAMPLE_BILL} settings={settings} />
+            </div>
+          </div>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

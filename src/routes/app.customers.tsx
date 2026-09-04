@@ -655,7 +655,7 @@ function CustomersPage() {
                     entries={selectedEntries}
                     debitLabel="Taken on account"
                     creditLabel="Paid / set off"
-                    balanceLabel="Owes"
+                    balanceLabel="Receivables"
                     empty="Nothing on account — every purchase was settled at the counter."
                   />
                   {selectedBalance.advance > 0 && (

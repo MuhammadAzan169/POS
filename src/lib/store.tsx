@@ -13,6 +13,7 @@ import type {
   DiscountRules,
   Expense,
   InventoryRow,
+  InvoiceDesign,
   Message,
   Product,
   Purchase,
@@ -118,6 +119,7 @@ interface StoreState {
   updateUser: (u: User) => void;
   updateSettings: (s: Partial<Settings>) => void;
   updateReceiptDesign: (r: Partial<ReceiptDesign>) => void;
+  updateInvoiceDesign: (i: Partial<InvoiceDesign>) => void;
   updateDiscounts: (d: Partial<DiscountRules>) => void;
   setProductDiscount: (productId: string, pct: number | null) => void;
 
@@ -879,6 +881,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setSettings((prev) => {
           const next = { ...prev, receipt: { ...prev.receipt, ...r } };
           persist("the receipt design", () => db.saveAppState(next, discounts));
+          return next;
+        });
+      },
+      updateInvoiceDesign: (i) => {
+        setSettings((prev) => {
+          const next = { ...prev, invoice: { ...prev.invoice, ...i } };
+          persist("the bill design", () => db.saveAppState(next, discounts));
           return next;
         });
       },

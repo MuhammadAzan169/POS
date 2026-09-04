@@ -904,6 +904,70 @@ export const DEFAULT_RECEIPT: ReceiptDesign = {
 };
 
 /**
+ * Which blocks appear on a printed BILL, and how it is laid out.
+ *
+ * Separate from `ReceiptDesign` because the two documents answer different
+ * questions. A receipt is the slip a walk-in leaves with: narrow roll paper, one
+ * moment in time, nothing owed. A bill is what goes out with a bulk delivery to
+ * a trade buyer — A4, a ruled Qty/Particulars/Rate/Amount table, and, crucially,
+ * the running account: what was owed before this delivery, what has been paid
+ * against it, and what is left. Folding both into one design would mean every
+ * toggle needed a "…but only on A4" caveat.
+ */
+export interface InvoiceDesign {
+  showBusinessName: boolean;
+  showAddress: boolean;
+  showPhone: boolean;
+  showTaxNumber: boolean;
+  /** The "INVOICE / BILL" tab across the top of a printed book's slip. */
+  showBillTag: boolean;
+  showShopName: boolean;
+  showInvoiceNo: boolean;
+  showDate: boolean;
+  showCustomer: boolean;
+  showCustomerPhone: boolean;
+  showCashier: boolean;
+  /** A running line number down the left of the table. */
+  showLineNumbers: boolean;
+  showUnitRate: boolean;
+  /**
+   * The account block under the total: previous balance, what was received, and
+   * the closing balance. The whole reason a trade buyer keeps the slip.
+   */
+  showAccountBlock: boolean;
+  showSignature: boolean;
+  showTerms: boolean;
+  /** Empty ruled rows padded under the items, as a printed bill book has. */
+  ruledRows: boolean;
+  paperSize: "A4" | "A5";
+  fontSize: "sm" | "md" | "lg";
+  accent: "ink" | "plain";
+}
+
+export const DEFAULT_INVOICE: InvoiceDesign = {
+  showBusinessName: true,
+  showAddress: true,
+  showPhone: true,
+  showTaxNumber: true,
+  showBillTag: true,
+  showShopName: true,
+  showInvoiceNo: true,
+  showDate: true,
+  showCustomer: true,
+  showCustomerPhone: true,
+  showCashier: false,
+  showLineNumbers: false,
+  showUnitRate: true,
+  showAccountBlock: true,
+  showSignature: true,
+  showTerms: true,
+  ruledRows: true,
+  paperSize: "A4",
+  fontSize: "md",
+  accent: "ink",
+};
+
+/**
  * Discounts live here rather than on Settings so the Discounts tab owns them.
  * A product's own percentage wins; anything without one uses `overallPct`.
  * Both are capped by `maxPct`.
@@ -962,4 +1026,9 @@ export interface Settings {
   receiptFooter: string;
   lowStockDefault: number;
   receipt: ReceiptDesign;
+  /** Printed above the item table on a bill — delivery terms, order reference. */
+  invoiceNote: string;
+  /** The small print under the totals. */
+  invoiceTerms: string;
+  invoice: InvoiceDesign;
 }

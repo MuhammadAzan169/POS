@@ -5,6 +5,7 @@ import {
   closedSessionFor, shortDay, customerBalance, type Customer, type DaySession, type Sale,
 } from "@/lib/store";
 import { SaleEditDialog } from "@/components/SaleEditDialog";
+import { BillDialog } from "@/components/BillDialog";
 import { Receipt as ReceiptView, type ReceiptData } from "@/components/Receipt";
 import { PageHeader } from "@/components/AppLayout";
 import { StatusPill } from "@/components/Stat";
@@ -18,7 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Download, Printer, Undo2, Pencil, Trash2, RotateCcw, ReceiptText, HandCoins } from "lucide-react";
+import { Download, FileText, Printer, Undo2, Pencil, Trash2, RotateCcw, ReceiptText, HandCoins } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { cn } from "@/lib/utils";
 import { Confirm } from "@/components/Confirm";
@@ -95,6 +96,7 @@ function SalesPage() {
   const [q, setQ] = useState(searchParam ?? "");
   const [open, setOpen] = useState<string | null>(null);
   const [editing, setEditing] = useState<Sale | null>(null);
+  const [billFor, setBillFor] = useState<Sale | null>(null);
   /** The account being collected against, opened from a "pay later" invoice. */
   const [collectFrom, setCollectFrom] = useState<Customer | null>(null);
   const [from, setFrom] = useState("");
@@ -522,6 +524,9 @@ function SalesPage() {
                       <HandCoins className="h-3.5 w-3.5 mr-1.5" />Receive
                     </Button>
                   )}
+                  <Button size="sm" variant="outline" onClick={() => setBillFor(s)}>
+                    <FileText className="h-3.5 w-3.5 mr-1.5" />Bill
+                  </Button>
                   <Button size="sm" variant="outline" onClick={() => setEditing(s)} disabled={s.status === "Returned"}>
                     <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
                   </Button>
@@ -831,8 +836,14 @@ function SalesPage() {
                   )}
                 </div>
                 {/* Screen-only actions: never appear on paper. */}
-                <div data-print="hide" className="flex gap-2 pt-2">
-                  <Button variant="outline" className="flex-1" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" />Print</Button>
+                <div data-print="hide" className="flex flex-wrap gap-2 pt-2">
+                  {/* A bill, not a till slip: A4, ruled, and carrying the
+                      customer's running balance — what goes out with a bulk
+                      delivery and what a trade buyer asks to be sent a copy of. */}
+                  <Button className="flex-1 min-w-[8rem]" onClick={() => { setBillFor(selected); setOpen(null); }}>
+                    <FileText className="h-4 w-4 mr-1.5" />Bill / PDF
+                  </Button>
+                  <Button variant="outline" className="flex-1" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" />Receipt</Button>
                   <Button
                     variant="outline"
                     className="flex-1"
@@ -869,12 +880,13 @@ function SalesPage() {
       </Sheet>
 
       {/* Hidden on screen; the print stylesheet shows only this element. */}
-      {selected && (
+      {selected && !billFor && (
         <div data-print="only" className="hidden print:block">
           <ReceiptView data={saleToReceipt(selected)} settings={settings} />
         </div>
       )}
 
+      <BillDialog sale={billFor} onClose={() => setBillFor(null)} />
       <SaleEditDialog sale={editing} onClose={() => setEditing(null)} />
     </div>
   );

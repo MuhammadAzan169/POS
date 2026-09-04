@@ -375,10 +375,41 @@
     visibility: visible;
   }
 
+  /*
+   * Anything at the top of the document that does NOT contain the printed node
+   * is removed outright rather than hidden. Left merely invisible it still
+   * occupies its full height — the app shell is several screens tall — and
+   * prints as blank pages trailing the receipt or bill.
+   */
+  body:has([data-print="only"]) > *:not(:has([data-print="only"])) {
+    display: none !important;
+  }
+
+  /*
+   * The wrappers between <body> and the printed node are plumbing, not layout.
+   * An open dialog is a fixed, viewport-tall, scrolling box with a transform on
+   * it; printed as-is that is one page of document followed by one of empty box.
+   */
+  body:has([data-print="only"]) *:has([data-print="only"]) {
+    position: static !important;
+    inset: auto !important;
+    transform: none !important;
+    height: auto !important;
+    max-height: none !important;
+    width: auto !important;
+    max-width: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    display: block !important;
+  }
+
   body:has([data-print="only"]) [data-print="only"] {
-    position: absolute;
-    left: 0;
-    top: 0;
+    position: static;
     width: 100%;
     max-width: none;
     max-height: none;
@@ -388,6 +419,12 @@
     box-shadow: none;
     background: #fff;
     color: #000;
+    /* A trailing empty page is usually one stray line box past the last row. */
+    break-after: avoid-page;
+  }
+
+  body:has([data-print="only"]) [data-print="only"] > *:last-child {
+    margin-bottom: 0 !important;
   }
 
   /* Never print navigation, toolbars or action buttons. */

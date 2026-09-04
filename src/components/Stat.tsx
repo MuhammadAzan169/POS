@@ -117,8 +117,8 @@ export function StatusPill({ status }: { status: string }) {
     Overdue: "bg-destructive/10 text-destructive border-destructive/30",
     // Which way a party balance points. "Advance" is money you are holding for
     // someone, which is a liability, not a win — hence the neutral tint.
-    Owes: "bg-warning/20 text-warning-strong border-warning/40",
-    "You owe": "bg-destructive/10 text-destructive border-destructive/30",
+    Receivables: "bg-warning/20 text-warning-strong border-warning/40",
+    Payables: "bg-destructive/10 text-destructive border-destructive/30",
     Advance: "bg-accent/15 text-accent-strong border-accent/30",
     Settled: "bg-success/15 text-success-strong border-success/30",
     // A balance moved by hand. Writing debt off is the safe direction, so it is

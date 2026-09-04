@@ -337,7 +337,7 @@ function SuppliersPage() {
         <div className="text-xs text-muted-foreground sm:ml-auto sm:text-right">
           <div>{rows.length} suppliers · {money(rows.reduce((a, r) => a + r.spent, 0))} spent</div>
           <div className="mt-0.5">
-            You owe{" "}
+            Payables{" "}
             <Link to="/app/ledger" className="font-medium text-warning-strong hover:underline">
               {money(totals.payable)}
             </Link>
@@ -361,7 +361,7 @@ function SuppliersPage() {
               badges={
                 <>
                   <StatusPill status={r.supplier.active ? "Active" : "Disabled"} />
-                  {r.balance.outstanding > 0 && <StatusPill status="You owe" />}
+                  {r.balance.outstanding > 0 && <StatusPill status="Payables" />}
                   {r.balance.advance > 0 && <StatusPill status="Advance" />}
                 </>
               }
@@ -395,7 +395,7 @@ function SuppliersPage() {
                 <th className="px-4 py-3 font-medium text-right">Open</th>
                 <th className="px-4 py-3 font-medium text-right">Units</th>
                 <th className="px-4 py-3 font-medium text-right">Total spent</th>
-                <th className="px-4 py-3 font-medium text-right">You owe</th>
+                <th className="px-4 py-3 font-medium text-right">Payables</th>
                 <th className="px-4 py-3 font-medium">Last purchase</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium text-right">Actions</th>
@@ -480,7 +480,7 @@ function SuppliersPage() {
                 */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <Stat
-                    label={openBalance && openBalance.advance > 0 ? "Advance with them" : "You owe"}
+                    label={openBalance && openBalance.advance > 0 ? "Advance with them" : "Payables"}
                     value={money(openBalance ? openBalance.outstanding || openBalance.advance : 0)}
                   />
                   <Stat label="Open bills" value={String(openBalance?.unpaidBills ?? 0)} />
@@ -540,7 +540,7 @@ function SuppliersPage() {
                     entries={openEntries}
                     debitLabel="Billed"
                     creditLabel="Paid / credited"
-                    balanceLabel="You owe"
+                    balanceLabel="Payables"
                     empty="Nothing on account — no bills and no payments."
                   />
                 </section>

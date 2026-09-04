@@ -197,7 +197,7 @@ function LedgerPage() {
     if (parties.length === 0) { toast.error("Nothing to export"); return; }
     downloadCsv(
       `ledgers-${todayISO()}.csv`,
-      ["Party", "They owe you", "You owe them", "Can be set off", "Net", "Advance held", "Advance placed", "Both sides"],
+      ["Party", "Receivables", "Payables", "Can be set off", "Net", "Advance held", "Advance placed", "Both sides"],
       parties.map((p) => [
         p.name, p.receivable, p.payable, p.settleable, p.net, p.advanceHeld, p.advancePlaced,
         p.customer && p.supplier ? "yes" : "no",
@@ -234,7 +234,7 @@ function LedgerPage() {
       <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4 mb-4">
         <StatCard
           onClick={() => setTab("receivable")}
-          label="Owed to you"
+          label="Receivables"
           value={money(totals.receivable)}
           sub="across every customer"
           icon={<HandCoins className="h-5 w-5" />}
@@ -242,7 +242,7 @@ function LedgerPage() {
         />
         <StatCard
           onClick={() => setTab("payable")}
-          label="You owe"
+          label="Payables"
           value={money(totals.payable)}
           sub={overdue.length > 0 ? `${overdue.length} bill${overdue.length === 1 ? "" : "s"} overdue` : "nothing overdue"}
           icon={<Wallet className="h-5 w-5" />}
@@ -752,7 +752,7 @@ function LedgerPage() {
                       <td className="px-4 py-3 text-muted-foreground">{shortDay(a.date)}</td>
                       <td className="px-4 py-3 font-medium">{party?.name ?? "Unknown"}</td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        {side === "customer" ? "They owe you" : "You owe them"}
+                        {side === "customer" ? "Receivables" : "Payables"}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{a.reason || "Not given"}</td>
                       <td className="px-4 py-3 text-muted-foreground">{a.createdBy || "Not recorded"}</td>
@@ -808,13 +808,13 @@ function LedgerPage() {
               <div className="mt-6 space-y-5">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-lg border p-3">
-                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">They owe you</div>
+                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Receivables</div>
                     <div className={`font-semibold text-lg mt-1 ${detail.receivable > 0 ? "text-warning-strong" : ""}`}>
                       {money(detail.receivable)}
                     </div>
                   </div>
                   <div className="rounded-lg border p-3">
-                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">You owe them</div>
+                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Payables</div>
                     <div className={`font-semibold text-lg mt-1 ${detail.payable > 0 ? "text-destructive" : ""}`}>
                       {money(detail.payable)}
                     </div>
@@ -939,7 +939,7 @@ function LedgerPage() {
                       entries={detailCustomerEntries}
                       debitLabel="Taken on account"
                       creditLabel="Paid / set off"
-                      balanceLabel="Owes"
+                      balanceLabel="Receivables"
                       empty="Nothing on account."
                     />
                   </section>
@@ -952,7 +952,7 @@ function LedgerPage() {
                       entries={detailSupplierEntries}
                       debitLabel="Billed"
                       creditLabel="Paid / credited"
-                      balanceLabel="You owe"
+                      balanceLabel="Payables"
                       empty="No bills recorded."
                     />
                   </section>
@@ -1029,14 +1029,14 @@ function PartyList({
             rightSub={p.net > 0 ? "owed to you" : p.net < 0 ? "you owe" : "square"}
             badges={
               <>
-                {p.receivable > 0 && <StatusPill status="Owes" />}
-                {p.payable > 0 && <StatusPill status="You owe" />}
+                {p.receivable > 0 && <StatusPill status="Receivables" />}
+                {p.payable > 0 && <StatusPill status="Payables" />}
                 {p.settleable > 0 && <StatusPill status="Settled" />}
               </>
             }
             fields={[
-              { label: "They owe", value: money(p.receivable) },
-              { label: "You owe", value: money(p.payable) },
+              { label: "Receivables", value: money(p.receivable) },
+              { label: "Payables", value: money(p.payable) },
               { label: "Can cancel", value: p.settleable > 0 ? money(p.settleable) : "Nothing to cancel" },
             ]}
             actions={
@@ -1069,8 +1069,8 @@ function PartyList({
             <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
               <th className="px-4 py-3 font-medium">Party</th>
               <th className="px-4 py-3 font-medium">Relationship</th>
-              <th className="px-4 py-3 font-medium text-right">They owe you</th>
-              <th className="px-4 py-3 font-medium text-right">You owe them</th>
+              <th className="px-4 py-3 font-medium text-right">Receivables</th>
+              <th className="px-4 py-3 font-medium text-right">Payables</th>
               <th className="px-4 py-3 font-medium text-right">Can be set off</th>
               <th className="px-4 py-3 font-medium text-right">Net</th>
               <th className="px-4 py-3 font-medium text-right">Actions</th>

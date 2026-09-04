@@ -9,6 +9,7 @@
  * the UI today — nothing is hand-retyped into SQL and left to drift.
  */
 import {
+  DEFAULT_INVOICE,
   DEFAULT_RECEIPT,
   type Customer,
   type CustomerPayment,
@@ -660,4 +661,7 @@ export const DEFAULT_SETTINGS: Settings = {
   receiptFooter: "Thank You! Visit again",
   lowStockDefault: 5,
   receipt: DEFAULT_RECEIPT,
+  invoiceNote: "",
+  invoiceTerms: "Goods once sold are not returnable. Please check items on delivery.",
+  invoice: DEFAULT_INVOICE,
 };

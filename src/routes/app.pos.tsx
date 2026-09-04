@@ -16,12 +16,13 @@ import {
   type Sale,
 } from "@/lib/store";
 import { Receipt as ReceiptView, type ReceiptData } from "@/components/Receipt";
+import { BillDialog } from "@/components/BillDialog";
 import { PageHeader } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Minus, X, ScanLine, CheckCircle2, Sunrise, Warehouse, ShoppingCart, Trash2, PackageSearch } from "lucide-react";
+import { Plus, Minus, X, FileText, ScanLine, CheckCircle2, Sunrise, Warehouse, ShoppingCart, Trash2, PackageSearch } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -89,11 +90,18 @@ function POS() {
    * was typed in, so switching between "10%" and "Rs 10" re-reads the same box
    * rather than silently converting one into the other.
    */
+  /** The walk-in receipt name is asked for rarely, so it stays folded away
+      until someone wants it — it used to cost a permanent row. */
+  const [receiptNameOpen, setReceiptNameOpen] = useState(false);
   const [manualMode, setManualMode] = useState<"amount" | "percent">("amount");
   const [manualInput, setManualInput] = useState(0);
   const [tendered, setTendered] = useState(0);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [lastSale, setLastSale] = useState<ReceiptData | null>(null);
+  /** The sale itself, kept alongside the receipt so a bill can be raised for
+      it without going and finding it again on the Sales page. */
+  const [lastSaleRecord, setLastSaleRecord] = useState<Sale | null>(null);
+  const [billFor, setBillFor] = useState<Sale | null>(null);
   // Below lg the checkout panel is a bottom sheet reached from the sticky total
   // bar, rather than a column the cashier has to scroll past the catalogue for.
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -319,6 +327,7 @@ function POS() {
       sessionId: session?.id,
       lines, subtotal, discount, total, profit, payment, status: "Completed",
     });
+    setLastSaleRecord(sale);
     setLastSale({
       invoice: sale.invoice,
       total,
@@ -345,6 +354,7 @@ function POS() {
     setManualInput(0);
     setCustomer("");
     setCustomerId(null);
+    setReceiptNameOpen(false);
     setPayment("Cash");
   };
 
@@ -476,12 +486,20 @@ function POS() {
 
   /* --------------------------------------------------- who, and any discount */
 
+  /**
+   * Who the sale is for, and anything knocked off at the counter.
+   *
+   * Pinned above the totals rather than sitting at the end of the cart list:
+   * as a scrolling item it was only reachable after paging past every line, so
+   * on a long sale the customer picker was effectively invisible. Everything
+   * optional here is folded away, so the resting state is a single row.
+   */
   const customerBlock = (
-    <div className="p-3 space-y-2 border-t bg-muted/20">
-      <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Customer</label>
-      {!customersUnavailable && (
+    <div className="px-3 py-2 space-y-2 border-t bg-muted/20 shrink-0">
+      <div className="flex items-center gap-2">
+        {!customersUnavailable && (
         <Select value={customerId ?? "__walkin__"} onValueChange={pickCustomer}>
-          <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-9 flex-1 min-w-0"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__walkin__">Walk-in (no account)</SelectItem>
             {/* Trade buyers first at a wholesale counter — they're who you serve. */}
@@ -498,17 +516,69 @@ function POS() {
             <SelectItem value="__new__">+ Add new customer…</SelectItem>
           </SelectContent>
         </Select>
-      )}
+        )}
 
-      {/* An untracked walk-in can still have a name printed on the receipt. */}
-      {!selectedCustomer && (
+        {/* The counter discount belongs on the same row as the customer: both
+            are things decided once per sale, and neither earns its own band. */}
+        <div className="flex rounded-md border bg-card p-0.5 shrink-0">
+          {(["amount", "percent"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setManualMode(m)}
+              className={cn(
+                "px-2.5 h-8 text-sm rounded-[5px] transition-colors tabular-nums",
+                manualMode === m ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted",
+              )}
+            >
+              {m === "amount" ? settings.currency : "%"}
+            </button>
+          ))}
+        </div>
         <Input
-          value={customer}
-          onChange={(e) => setCustomer(e.target.value)}
-          placeholder={`${WALK_IN} — name for the receipt (optional)`}
-          className="h-10"
+          type="number"
+          inputMode="decimal"
+          min={0}
+          max={manualMode === "percent" ? 100 : undefined}
+          value={manualInput || ""}
+          placeholder="Off"
+          aria-label="Counter discount"
+          onChange={(e) => setManualInput(Math.max(0, Number(e.target.value) || 0))}
+          className="tabular-nums h-9 w-20 shrink-0"
         />
-      )}
+        {manualInput > 0 && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            onClick={() => setManualInput(0)}
+            aria-label="Clear discount"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+
+      {/* An untracked walk-in can still have a name printed on the receipt —
+          asked for seldom enough that it stays behind a link. */}
+      {!selectedCustomer &&
+        (receiptNameOpen || customer ? (
+          <Input
+            autoFocus={receiptNameOpen}
+            value={customer}
+            onChange={(e) => setCustomer(e.target.value)}
+            placeholder={`${WALK_IN} — name for the receipt`}
+            className="h-9"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setReceiptNameOpen(true)}
+            className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+          >
+            + Name for the receipt
+          </button>
+        ))}
 
       {selectedCustomer && balance && (
         <div className="text-xs text-muted-foreground">
@@ -553,54 +623,6 @@ function POS() {
         </div>
       )}
 
-      {/*
-        Shopkeeper's own discount, given at the counter for this one sale.
-        Two units because both are asked for by name: "give them ten percent"
-        and "knock off two hundred" are different instructions, and making the
-        cashier convert one into the other in their head is where the mistakes
-        come from.
-      */}
-      <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium block pt-1">
-        Counter discount
-      </label>
-      <div className="flex gap-2">
-        <div className="flex rounded-md border bg-card p-0.5 shrink-0">
-          {(["amount", "percent"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setManualMode(m)}
-              className={cn(
-                "px-3 h-9 text-sm rounded-[5px] transition-colors tabular-nums",
-                manualMode === m ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted",
-              )}
-            >
-              {m === "amount" ? settings.currency : "%"}
-            </button>
-          ))}
-        </div>
-        <Input
-          type="number"
-          inputMode="decimal"
-          min={0}
-          max={manualMode === "percent" ? 100 : undefined}
-          value={manualInput || ""}
-          placeholder="0"
-          onChange={(e) => setManualInput(Math.max(0, Number(e.target.value) || 0))}
-          className="tabular-nums h-10"
-        />
-        {manualInput > 0 && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 shrink-0"
-            onClick={() => setManualInput(0)}
-            aria-label="Clear discount"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
       {manualMode === "percent" && (
         <div className="grid grid-cols-4 gap-1.5">
           {[5, 10, 15, 20].map((n) => (
@@ -770,7 +792,34 @@ function POS() {
         title={isWholesale ? "New wholesale sale" : "New sale"}
         subtitle="Scan a barcode or search to add items. F9 to complete."
         actions={
-          session ? (
+          <>
+            {/*
+              The cart used to be discoverable only by noticing the panel on the right — items were
+              added and then hunted for. This is the one control that is always in the same place,
+              carries the running count and total, and opens the sale at any width.
+            */}
+            <Button
+              variant={cart.length === 0 ? "outline" : "default"}
+              className="h-10 gap-2 px-3"
+              disabled={cart.length === 0}
+              onClick={() => setCheckoutOpen(true)}
+            >
+              <ShoppingCart className="h-4 w-4" />
+              {/* The count rides inside the button rather than as a corner badge:
+                  a badge hung outside the border was clipped by the header. */}
+              {cartUnits > 0 && (
+                <span className="min-w-5 h-5 px-1.5 rounded-full bg-primary-foreground/20 text-[11px] font-bold grid place-items-center tabular-nums">
+                  {cartUnits}
+                </span>
+              )}
+              <span>{cart.length === 0 ? "Cart empty" : "View cart"}</span>
+              {cart.length > 0 && (
+                <span className="font-semibold tabular-nums border-l border-primary-foreground/25 pl-2">
+                  {formatRs(total, settings.currency)}
+                </span>
+              )}
+            </Button>
+            {session ? (
             <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full border bg-success/10 text-success-strong border-success/30">
               <Sunrise className="h-3.5 w-3.5" />
               Day open · {shortDay(session.businessDate)}
@@ -780,7 +829,8 @@ function POS() {
               <Sunrise className="h-3.5 w-3.5" />
               Day book off
             </span>
-          )
+            )}
+          </>
         }
       />
 
@@ -1003,10 +1053,8 @@ function POS() {
           {cartHeader()}
           {/* Only this middle band scrolls, so the header above and the total
               and button below are on screen for the whole sale. */}
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            {cartLines}
-            {customerBlock}
-          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto">{cartLines}</div>
+          {customerBlock}
           {checkoutFooter}
         </Card>
       </div>
@@ -1043,13 +1091,16 @@ function POS() {
         {/* p-0/gap-0 at every width, and overflow owned here rather than by the
             sheet, so the total and the button stay pinned exactly as they are on
             desktop instead of scrolling away with the cart. */}
-        <SheetContent side="bottom" className="p-0 sm:p-0 gap-0 overflow-y-hidden flex flex-col max-h-[85dvh]">
+        {/* Constrained and centred: stretched edge to edge on a desktop the sale
+            read as a full-screen takeover, with 2,000px of empty row per item. */}
+        <SheetContent
+          side="bottom"
+          className="p-0 sm:p-0 gap-0 overflow-y-hidden flex flex-col max-h-[85dvh] mx-auto w-full sm:max-w-lg sm:bottom-4 sm:rounded-2xl sm:border"
+        >
           <SheetHeader className="sr-only"><SheetTitle>Current sale</SheetTitle></SheetHeader>
           {cartHeader("pr-12")}
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            {cartLines}
-            {customerBlock}
-          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto">{cartLines}</div>
+          {customerBlock}
           {checkoutFooter}
         </SheetContent>
       </Sheet>
@@ -1064,10 +1115,25 @@ function POS() {
           )}
           <DialogFooter data-print="hide" className="flex-col-reverse gap-2 sm:flex-row sm:!justify-between">
             <Button variant="outline" onClick={() => setReceiptOpen(false)}>New sale</Button>
-            <Button onClick={() => { window.print(); }}>Print receipt</Button>
+            <div className="flex gap-2">
+              {/* A trade order leaves with paperwork, not a till slip — so the
+                  bill is offered here rather than only from the Sales page,
+                  which is where it was always needed a minute later anyway. */}
+              {lastSaleRecord && (
+                <Button
+                  variant="outline"
+                  onClick={() => { setBillFor(lastSaleRecord); setReceiptOpen(false); }}
+                >
+                  <FileText className="h-4 w-4 mr-1.5" />Bill / PDF
+                </Button>
+              )}
+              <Button onClick={() => { window.print(); }}>Print receipt</Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <BillDialog sale={billFor} onClose={() => setBillFor(null)} />
     </div>
   );
 }

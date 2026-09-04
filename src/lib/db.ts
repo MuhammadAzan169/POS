@@ -36,6 +36,15 @@ import {
 import { purchaseSettlement, WALK_IN } from "./store-types";
 import { DEFAULT_SETTINGS } from "./seed-data";
 
+function mergeSettings(stored: Partial<Settings> | undefined): Settings {
+  return {
+    ...DEFAULT_SETTINGS,
+    ...(stored ?? {}),
+    receipt: { ...DEFAULT_SETTINGS.receipt, ...(stored?.receipt ?? {}) },
+    invoice: { ...DEFAULT_SETTINGS.invoice, ...(stored?.invoice ?? {}) },
+  };
+}
+
 /** Everything the app holds in memory, loaded in one go. */
 export interface Snapshot {
   shops: Shop[];
@@ -457,7 +466,10 @@ export async function loadSnapshot(): Promise<Snapshot> {
     // Oldest first: a conversation reads downwards, so the UI never has to
     // reverse it and the two orderings can't drift apart.
     messages: [...messages].reverse(),
-    settings: { ...DEFAULT_SETTINGS, ...((appState.data?.settings as Partial<Settings>) ?? {}) },
+    // Nested merge, not a spread: a row saved before the bill designer existed
+    // has no `invoice` key at all, and a shallow merge would leave it undefined
+    // for every screen that reads it.
+    settings: mergeSettings(appState.data?.settings as Partial<Settings> | undefined),
     discounts: { ...DEFAULT_DISCOUNTS, ...((appState.data?.discounts as Partial<DiscountRules>) ?? {}) },
     pendingMigration: missing.length > 0 ? missing : undefined,
   };

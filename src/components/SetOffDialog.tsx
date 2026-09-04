@@ -98,12 +98,12 @@ export function SetOffDialog({
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">They owe you</div>
+              <div className="text-xs text-muted-foreground">Receivables</div>
               <div className="mt-0.5 font-semibold">{money(receivable)}</div>
               <div className="mt-1 text-xs text-muted-foreground">as {customer.name}</div>
             </div>
             <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">You owe them</div>
+              <div className="text-xs text-muted-foreground">Payables</div>
               <div className="mt-0.5 font-semibold">{money(payable)}</div>
               <div className="mt-1 text-xs text-muted-foreground">as {supplier.name}</div>
             </div>

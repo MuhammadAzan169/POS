@@ -26,6 +26,8 @@ const N = await import("../src/lib/notifications.ts");
 const I = await import("../src/lib/insights.ts");
 const seed = await import("../src/lib/seed-data.ts");
 const Store = await import("../src/lib/store.tsx");
+const Bill = await import("../src/lib/invoice.ts");
+const BillView = await import("../src/components/Invoice.tsx");
 
 /* ------------------------------------------------------------------ runner */
 
@@ -1676,6 +1678,128 @@ it("computeInsights agrees with the raw records", () => {
   const brief = I.buildBrief(insights);
   ok(typeof brief === "string" && brief.length > 100, "a brief was rendered");
   ok(!/NaN|undefined|Infinity/.test(brief), "the brief contains no NaN, undefined or Infinity");
+});
+
+/* ================================================================== BILLS */
+
+describe("The bill that goes out with the goods");
+
+// One trade buyer, one ledger, built by hand so every figure on the bill has a
+// known right answer rather than being compared against itself.
+const TRADER = { id: "cust-bill", name: "Bilal Traders", phone: "0300-1112223", creditLimit: 500000, kind: "wholesale", active: true };
+
+const billSale = (over = {}) => ({
+  id: "sale-bill", invoice: "INV-0848", shopId: "shop-1",
+  date: "2026-08-28T11:00:00.000Z", customer: TRADER.name, customerId: TRADER.id,
+  cashier: "Owner", lines: [{ productId: "p1", name: "Chand Maxi", qty: 7, price: 2300, cost: 1800, discount: 0 }],
+  subtotal: 16100, discount: 0, total: 16100, profit: 3500,
+  payment: "Credit", status: "Completed", synced: true, ...over,
+});
+
+const ledgerWith = (sales, payments = [], extra = {}) => ({
+  sales, customerPayments: payments, setOffs: [], adjustments: [], ...extra,
+});
+
+it("carries forward what was owed BEFORE this bill, not after", () => {
+  const earlier = billSale({ id: "sale-old", invoice: "INV-0845", date: "2026-08-20T10:00:00.000Z", total: 36550 });
+  const sale = billSale();
+  // Paid two days AFTER the bill: it must reduce the closing balance, and must
+  // not be quietly folded into the balance carried forward.
+  const payment = { id: "pay-1", customerId: TRADER.id, date: "2026-08-30", amount: 32000, method: "Cash", shopId: "shop-1", note: "", receivedBy: "Owner" };
+
+  const inv = Bill.buildInvoice(sale, ledgerWith([earlier, sale], [payment]), { customer: TRADER });
+  eq(inv.account.previousBalance, 36550, "previous balance");
+  eq(inv.account.onAccount, 16100, "this bill on account");
+  eq(inv.account.received, 32000, "received since");
+  eq(inv.account.closingBalance, 20650, "closing balance");
+});
+
+it("the four printed figures always reconcile", () => {
+  const earlier = billSale({ id: "sale-old", date: "2026-08-20T10:00:00.000Z", total: 36550 });
+  const sale = billSale();
+  const payment = { id: "pay-1", customerId: TRADER.id, date: "2026-08-30", amount: 32000, method: "Cash", shopId: "shop-1", note: "", receivedBy: "Owner" };
+  const a = Bill.buildInvoice(sale, ledgerWith([earlier, sale], [payment]), { customer: TRADER }).account;
+  eq(a.previousBalance + a.onAccount - a.received, a.closingBalance, "the block adds up");
+});
+
+it("a sale paid at the counter never joins the account", () => {
+  const earlier = billSale({ id: "sale-old", date: "2026-08-20T10:00:00.000Z", total: 36550 });
+  const sale = billSale({ payment: "Cash" });
+  const inv = Bill.buildInvoice(sale, ledgerWith([earlier, sale]), { customer: TRADER });
+  eq(inv.account.onAccount, 0, "a cash sale adds nothing to the balance");
+  eq(inv.account.closingBalance, 36550, "the balance is unmoved by a cash sale");
+  const labels = BillView.accountRows(inv).map((r) => r.label);
+  ok(labels.includes("Paid by cash"), `the bill says how it was settled: ${labels.join(", ")}`);
+});
+
+it("a returned sale is cancelled on the bill and off the account", () => {
+  const earlier = billSale({ id: "sale-old", date: "2026-08-20T10:00:00.000Z", total: 36550 });
+  const sale = billSale({ status: "Returned" });
+  const inv = Bill.buildInvoice(sale, ledgerWith([earlier, sale]), { customer: TRADER });
+  eq(inv.status, "Returned", "the bill knows it was returned");
+  eq(inv.account.onAccount, 0, "a returned sale owes nothing");
+  eq(inv.account.closingBalance, 36550, "the balance goes back to what it was");
+});
+
+it("money paid in beyond the balance reads as an advance, not a debt", () => {
+  const sale = billSale({ total: 10000 });
+  const payment = { id: "pay-1", customerId: TRADER.id, date: "2026-08-30", amount: 25000, method: "Cash", shopId: "shop-1", note: "", receivedBy: "Owner" };
+  const inv = Bill.buildInvoice(sale, ledgerWith([sale], [payment]), { customer: TRADER });
+  eq(inv.account.closingBalance, -15000, "the closing balance is negative");
+  const last = BillView.accountRows(inv).at(-1);
+  eq(last.label, "Advance in hand", "and is labelled as their money, not a debt");
+  eq(last.value, "15,000", "shown without the minus sign");
+});
+
+it("a walk-in gets no account block at all", () => {
+  const sale = billSale({ customer: T.WALK_IN, customerId: undefined, payment: "Cash" });
+  const inv = Bill.buildInvoice(sale, ledgerWith([sale]));
+  ok(!inv.account, "no running balance is printed for an anonymous shopper");
+});
+
+it("the bill follows the sale when it is edited", () => {
+  const before = Bill.buildInvoice(billSale(), ledgerWith([billSale()]), { customer: TRADER });
+  const edited = billSale({ total: 20000, subtotal: 20000, lines: [{ productId: "p1", name: "Chand Maxi", qty: 9, price: 2300, cost: 1800, discount: 700 }] });
+  const after = Bill.buildInvoice(edited, ledgerWith([edited]), { customer: TRADER });
+  eq(before.total, 16100, "the original total");
+  eq(after.total, 20000, "the edited total");
+  eq(after.lines[0].qty, 9, "the edited quantity");
+  eq(after.account.onAccount, 20000, "and the account follows it");
+});
+
+it("an item discount is folded into the rate the buyer was charged", () => {
+  // 700 off 9 units at 2,300 is 2,222 a unit, which is what the buyer sees.
+  const sale = billSale({ lines: [{ productId: "p1", name: "Chand Maxi", qty: 9, price: 2300, cost: 1800, discount: 700 }] });
+  const inv = Bill.buildInvoice(sale, ledgerWith([sale]), { customer: TRADER });
+  eq(inv.lines[0].rate, 2222, "the rate on the bill");
+});
+
+it("the shop the goods left from is on the bill", () => {
+  const sale = billSale();
+  const inv = Bill.buildInvoice(sale, ledgerWith([sale]), { customer: TRADER, shop: { id: "shop-1", name: "Wholesale Counter" } });
+  eq(inv.shopName, "Wholesale Counter", "the outlet");
+});
+
+it("rupees are written in words on the South Asian scale", () => {
+  eq(BillView.amountInWords(120000), "One lakh twenty thousand rupees only", "a lakh");
+  eq(BillView.amountInWords(0), "Zero rupees only", "nothing");
+  eq(BillView.amountInWords(10350000), "One crore three lakh fifty thousand rupees only", "a crore");
+});
+
+it("every demo credit sale produces a bill that reconciles", () => {
+  const data = { sales: S.sales, customerPayments: S.customerPayments, setOffs: S.setOffs, adjustments: [] };
+  let checked = 0;
+  for (const sale of S.sales.filter((x) => x.customerId)) {
+    const customer = seed.CUSTOMERS.find((c) => c.id === sale.customerId);
+    if (!customer) continue;
+    const inv = Bill.buildInvoice(sale, data, { customer });
+    const a = inv.account;
+    ok(a, `${sale.invoice} has an account block`);
+    eq(a.previousBalance + a.onAccount - a.received, a.closingBalance, `${sale.invoice} reconciles`);
+    ok(!Number.isNaN(a.closingBalance), `${sale.invoice} has a real closing balance`);
+    checked++;
+  }
+  ok(checked > 0, `bills were checked (${checked})`);
 });
 
 /* ================================================================ REPORT */

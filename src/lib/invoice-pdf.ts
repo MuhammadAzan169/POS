@@ -1,0 +1,399 @@
+/**
+ * The bill as an actual PDF file.
+ *
+ * Drawn directly with jsPDF's text and line primitives rather than screenshotted
+ * from the DOM. Two reasons, both of which were the ask:
+ *
+ *  1. Pressing Download downloads. No print dialog to steer, no preview window
+ *     to dismiss — the file lands in the downloads folder.
+ *  2. Nothing overlaps and no blank page comes out the back. Every string is
+ *     measured and wrapped against the column it sits in, every row knows its
+ *     own height, and a page break can only happen where a row would not fit —
+ *     so the last page ends with the signature rather than being followed by an
+ *     empty one, which is what an HTML-to-canvas capture does at the slightest
+ *     overhang.
+ *
+ * The trade-off is that this layout and the on-screen `<Invoice>` are two
+ * implementations of one design. They are kept honest by both reading the same
+ * `InvoiceDesign` toggles and the same `InvoiceData` — if a block is switched
+ * off in Settings it disappears from both.
+ */
+import type { InvoiceData } from "@/components/Invoice";
+import { accountRows, amountInWords } from "@/components/Invoice";
+import type { Settings } from "./store-types";
+import { invoiceFileName } from "./invoice";
+
+/** mm. A4 and A5 portrait, with the same generous margin a bill book leaves. */
+const PAGE = { A4: { w: 210, h: 297 }, A5: { w: 148, h: 210 } };
+const MARGIN = 14;
+
+const BASE_SIZE = { sm: 9, md: 10, lg: 11 } as const;
+
+const num = (n: number) => n.toLocaleString("en-PK", { maximumFractionDigits: 0 });
+
+/**
+ * jsPDF's built-in fonts are WinAnsi, and the characters this app's own product
+ * names lean on hardest are exactly the ones it drops silently — an em dash in
+ * "Cotton Kurti — Medium" came out as a gap, not as a missing-glyph box, so it
+ * would have shipped unnoticed. Folded to their ASCII equivalents instead.
+ */
+function ascii(value: string) {
+  return String(value)
+    // U+2212 is the real minus sign the account rows are written with, and it
+    // is NOT in the dash block above — left out, jsPDF fell back to a
+    // multi-byte encoding and printed "- 32,000" as spaced-out gibberish.
+    .replace(/[‒-―−－]/g, "-")
+    .replace(/[‘’‛]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/…/g, "...")
+    .replace(/[   ]/g, " ")
+    .replace(/[•·]/g, "-");
+}
+
+export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) {
+  // Loaded on demand: the till and every other screen should not carry a PDF
+  // engine in their bundle for a button most sales never press.
+  const { jsPDF } = await import("jspdf");
+
+  const d = settings.invoice;
+  const page = PAGE[d.paperSize];
+  const doc = new jsPDF({ unit: "mm", format: [page.w, page.h], orientation: "portrait" });
+
+  // Folded once, at the door, rather than at fifteen call sites — every string
+  // that reaches the page goes through `text` or `splitTextToSize`.
+  const drawText = doc.text.bind(doc);
+  doc.text = ((value: string | string[], x: number, ty: number, options?: object) =>
+    drawText(
+      Array.isArray(value) ? value.map(ascii) : ascii(value),
+      x,
+      ty,
+      options,
+    )) as typeof doc.text;
+  const splitText = doc.splitTextToSize.bind(doc);
+  doc.splitTextToSize = ((value: string, size: number, options?: object) =>
+    splitText(ascii(value), size, options)) as typeof doc.splitTextToSize;
+
+  const base = BASE_SIZE[d.fontSize];
+  const left = MARGIN;
+  const right = page.w - MARGIN;
+  const width = right - left;
+  /** Space kept at the foot of every page for the words/terms/signature block. */
+  const FOOTER_RESERVE = 42;
+
+  let y = MARGIN;
+
+  const text = (
+    s: string,
+    x: number,
+    opts: { size?: number; bold?: boolean; align?: "left" | "center" | "right"; grey?: boolean } = {},
+  ) => {
+    doc.setFont("helvetica", opts.bold ? "bold" : "normal");
+    doc.setFontSize(opts.size ?? base);
+    doc.setTextColor(opts.grey ? 110 : 20);
+    doc.text(s, x, y, { align: opts.align ?? "left" });
+  };
+
+  /* ------------------------------------------------------------- the header */
+
+  if (d.showBillTag) {
+    const label = "INVOICE / BILL";
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(base - 1);
+    const w = doc.getTextWidth(label) + 10;
+    const x = (page.w - w) / 2;
+    doc.setFillColor(23, 37, 84);
+    doc.roundedRect(x, y - 1, w, 7, 3.5, 3.5, "F");
+    doc.setTextColor(255);
+    doc.text(label, page.w / 2, y + 3.6, { align: "center" });
+    y += 12;
+  }
+
+  if (data.status === "Returned") {
+    doc.setDrawColor(190, 30, 45);
+    doc.setTextColor(190, 30, 45);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(base);
+    doc.rect(left, y - 1, width, 7);
+    doc.text("RETURNED - CANCELLED", page.w / 2, y + 3.8, { align: "center" });
+    y += 12;
+  }
+
+  if (d.showBusinessName) {
+    text(settings.businessName, page.w / 2, { size: base + 11, bold: true, align: "center" });
+    y += base * 0.62 + 4;
+  }
+  if (d.showShopName && data.shopName) {
+    // Which outlet the goods left from. On a multi-shop business this is the
+    // difference between a bill you can trace and one you can't.
+    text(data.shopName, page.w / 2, { size: base + 1, bold: true, align: "center" });
+    y += 5;
+  }
+  const contact = [d.showAddress && settings.address, d.showPhone && settings.phone]
+    .filter(Boolean)
+    .join("   ·   ");
+  if (contact) {
+    text(contact, page.w / 2, { size: base - 1, align: "center", grey: true });
+    y += 4.5;
+  }
+  if (d.showTaxNumber && settings.taxNumber) {
+    text(`NTN: ${settings.taxNumber}`, page.w / 2, { size: base - 1, align: "center", grey: true });
+    y += 4.5;
+  }
+
+  y += 3;
+  doc.setDrawColor(180);
+  doc.line(left, y, right, y);
+  y += 6;
+
+  /* ----------------------------------------------- who the bill is for, when */
+
+  const metaTop = y;
+  const field = (label: string, value: string, x: number, align: "left" | "right") => {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(base - 0.5);
+    doc.setTextColor(110);
+    const labelText = `${label}  `;
+    if (align === "left") {
+      doc.text(labelText, x, y);
+      const w = doc.getTextWidth(labelText);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(20);
+      // Clipped to its half of the row so a long trade name can never run into
+      // the date on the other side.
+      doc.text(clip(doc, value, width / 2 - w - 4), x + w, y);
+    } else {
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(20);
+      doc.text(value, x, y, { align: "right" });
+      const w = doc.getTextWidth(value);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(110);
+      doc.text(labelText, x - w - 2, y, { align: "right" });
+    }
+    y += 5.5;
+  };
+
+  if (d.showInvoiceNo) field("S.No.", data.invoice, left, "left");
+  if (d.showCustomer) field("M/s", data.customer, left, "left");
+  if (d.showCustomerPhone && data.customerPhone) field("Phone", data.customerPhone, left, "left");
+
+  const metaLeftEnd = y;
+  y = metaTop;
+  if (d.showDate)
+    field(
+      "Date",
+      data.at.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }),
+      right,
+      "right",
+    );
+  if (d.showCashier) field("By", data.cashier, right, "right");
+  y = Math.max(metaLeftEnd, y) + 2;
+
+  if (settings.invoiceNote) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(base - 1);
+    doc.setTextColor(110);
+    for (const line of doc.splitTextToSize(settings.invoiceNote, width) as string[]) {
+      doc.text(line, left, y);
+      y += 4.2;
+    }
+    y += 1;
+  }
+
+  /* ------------------------------------------------------------- the table */
+
+  const cols = columnsFor(d, width, left);
+  const rowPad = 2.2;
+  const lineHeight = base * 0.42 + 1.6;
+
+  const drawHead = () => {
+    const h = lineHeight + rowPad * 2;
+    if (d.accent === "ink") {
+      doc.setFillColor(23, 37, 84);
+      doc.rect(left, y, width, h, "F");
+      doc.setTextColor(255);
+    } else {
+      doc.setFillColor(238, 240, 244);
+      doc.rect(left, y, width, h, "F");
+      doc.setTextColor(20);
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(base - 0.5);
+    for (const c of cols) {
+      doc.text(c.title, cellAnchor(c), y + h - rowPad - 0.8, { align: c.align });
+    }
+    doc.setDrawColor(150);
+    doc.rect(left, y, width, h);
+    for (const c of cols.slice(1)) doc.line(c.x, y, c.x, y + h);
+    y += h;
+  };
+
+  /** A break can only land between rows, so nothing is ever cut in half. */
+  const ensureRoom = (needed: number) => {
+    if (y + needed <= page.h - MARGIN - FOOTER_RESERVE) return;
+    doc.addPage();
+    y = MARGIN;
+    drawHead();
+  };
+
+  const drawRow = (cells: string[], opts: { bold?: boolean; height?: number } = {}) => {
+    const particulars = cols.findIndex((c) => c.key === "name");
+    const wrapped =
+      particulars >= 0 && cells[particulars]
+        ? (doc.splitTextToSize(cells[particulars], cols[particulars].w - 4) as string[])
+        : [""];
+    const h = opts.height ?? Math.max(lineHeight * wrapped.length + rowPad * 2, 7.5);
+    ensureRoom(h);
+
+    doc.setDrawColor(150);
+    doc.rect(left, y, width, h);
+    for (const c of cols.slice(1)) doc.line(c.x, y, c.x, y + h);
+
+    doc.setFont("helvetica", opts.bold ? "bold" : "normal");
+    doc.setFontSize(base);
+    doc.setTextColor(20);
+    // One baseline for the whole row. The particulars column used to compute its
+    // own, which put a product name a millimetre above the figures beside it —
+    // invisible on screen, obvious on paper.
+    const baseline = y + rowPad + lineHeight * 0.75 + 0.4;
+    cols.forEach((c, i) => {
+      const value = cells[i] ?? "";
+      if (!value) return;
+      if (i === particulars) {
+        wrapped.forEach((l, n) => doc.text(l, c.x + 2, baseline + lineHeight * n));
+      } else {
+        doc.text(value, cellAnchor(c), baseline, { align: c.align });
+      }
+    });
+    y += h;
+  };
+
+  drawHead();
+
+  data.lines.forEach((l, i) => {
+    drawRow(
+      cols.map((c) => {
+        switch (c.key) {
+          case "n": return String(i + 1);
+          case "qty": return String(l.qty).padStart(2, "0");
+          case "name": return l.name;
+          case "rate": return num(l.rate);
+          case "amount": return num(l.qty * l.rate);
+        }
+      }),
+    );
+  });
+
+  if (d.ruledRows) {
+    // Padded to a full-looking page, but never onto a page of their own: blank
+    // rows are decoration, and a second sheet of them is the "extra page" that
+    // makes a bill look broken.
+    const blanks = Math.max(0, 8 - data.lines.length);
+    for (let i = 0; i < blanks; i++) {
+      if (y + 7.5 > page.h - MARGIN - FOOTER_RESERVE) break;
+      drawRow(cols.map(() => ""), { height: 7.5 });
+    }
+  }
+
+  /* --------------------------------------------------------- what is owed */
+
+  const summary = (label: string, value: string, strong = false) => {
+    const h = 7.5;
+    ensureRoom(h);
+    const amount = cols[cols.length - 1];
+    doc.setDrawColor(150);
+    doc.rect(left, y, width, h);
+    doc.line(amount.x, y, amount.x, y + h);
+    doc.setFont("helvetica", strong ? "bold" : "normal");
+    doc.setFontSize(strong ? base + 0.5 : base);
+    doc.setTextColor(20);
+    doc.text(label, amount.x - 3, y + 5.2, { align: "right" });
+    doc.text(value, right - 2, y + 5.2, { align: "right" });
+    y += h;
+  };
+
+  if (data.discount > 0) {
+    summary("Total", num(data.subtotal));
+    summary("Less discount", `- ${num(data.discount)}`);
+  }
+  summary(data.discount > 0 ? "Net total" : "Total", num(data.total), true);
+
+  if (d.showAccountBlock && data.account) {
+    // Built by the same function the on-screen bill uses, so a figure can never
+    // differ between what was previewed and what was sent.
+    for (const row of accountRows(data)) summary(row.label, row.value, row.strong);
+  }
+
+  /* ------------------------------------------------- words, terms, signature */
+
+  y += 5;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(base - 1);
+  doc.setTextColor(80);
+  for (const line of doc.splitTextToSize(
+    `Amount in words: ${amountInWords(Math.abs(data.account?.closingBalance ?? data.total))}`,
+    width,
+  ) as string[]) {
+    doc.text(line, left, y);
+    y += 4.4;
+  }
+
+  y += 6;
+  const blockTop = y;
+  if (d.showTerms && settings.invoiceTerms) {
+    doc.setFontSize(base - 1.5);
+    doc.setTextColor(110);
+    // Held to 55% of the width so it can never reach the signature rule.
+    for (const line of doc.splitTextToSize(settings.invoiceTerms, width * 0.55) as string[]) {
+      doc.text(line, left, y);
+      y += 4;
+    }
+  }
+  if (d.showSignature) {
+    const sigY = Math.max(blockTop + 10, y - 2);
+    doc.setDrawColor(120);
+    doc.line(right - 50, sigY, right, sigY);
+    doc.setFontSize(base - 1.5);
+    doc.setTextColor(110);
+    doc.text("Authorised signature", right - 25, sigY + 4.5, { align: "center" });
+    y = Math.max(y, sigY + 6);
+  }
+
+  doc.save(`${invoiceFileName(data)}.pdf`);
+}
+
+type Col = { key: "n" | "qty" | "name" | "rate" | "amount"; title: string; x: number; w: number; align: "left" | "center" | "right" };
+
+/** Column widths, resolved once so every row and rule agrees on them. */
+function columnsFor(d: Settings["invoice"], width: number, left: number): Col[] {
+  const fixed: Omit<Col, "x">[] = [];
+  if (d.showLineNumbers) fixed.push({ key: "n", title: "#", w: 9, align: "center" });
+  fixed.push({ key: "qty", title: "Qty", w: 15, align: "center" });
+  fixed.push({ key: "name", title: "Particulars", w: 0, align: "left" });
+  if (d.showUnitRate) fixed.push({ key: "rate", title: "Rate", w: 24, align: "right" });
+  fixed.push({ key: "amount", title: "Amount", w: 30, align: "right" });
+
+  // Particulars takes whatever the fixed columns leave, so the grid always adds
+  // up to the page width exactly — no sliver of unruled paper on the right.
+  const used = fixed.reduce((a, c) => a + c.w, 0);
+  const flexible = fixed.find((c) => c.key === "name");
+  if (flexible) flexible.w = width - used;
+
+  let x = left;
+  return fixed.map((c) => {
+    const col = { ...c, x } as Col;
+    x += c.w;
+    return col;
+  });
+}
+
+const cellAnchor = (c: Col) =>
+  c.align === "left" ? c.x + 2 : c.align === "right" ? c.x + c.w - 2 : c.x + c.w / 2;
+
+/** Trims a value to the space it has, so two fields can never print on top of each other. */
+function clip(doc: { getTextWidth: (s: string) => number }, value: string, max: number) {
+  if (doc.getTextWidth(value) <= max) return value;
+  let out = value;
+  while (out.length > 1 && doc.getTextWidth(`${out}…`) > max) out = out.slice(0, -1);
+  return `${out}…`;
+}
