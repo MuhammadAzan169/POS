@@ -17,7 +17,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
-import { hasOwner, requestPasswordReset, resetPasswordWithCode } from "@/lib/auth";
+import {
+  hasOwner,
+  onPasswordRecovery,
+  requestPasswordReset,
+  resetPasswordWithCode,
+  setNewPassword,
+} from "@/lib/auth";
 import { SignInLayout } from "@/components/SignInLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,7 +62,7 @@ function AdminSignIn() {
    * back into the screen already in front of you works from any device, and
    * needs no redirect URL registered anywhere.
    */
-  const [mode, setMode] = useState<"signIn" | "forgot">("signIn");
+  const [mode, setMode] = useState<"signIn" | "forgot" | "recovering">("signIn");
   const [codeSent, setCodeSent] = useState(false);
   const [code, setCode] = useState("");
 
@@ -70,6 +76,12 @@ function AdminSignIn() {
     void hasOwner().then((exists) => setFirstRun(!exists));
   }, [usingSupabase]);
 
+  /*
+   * Arriving from the link in a reset email. The session is already valid by
+   * the time this runs, so the only thing left to collect is the new password.
+   */
+  useEffect(() => onPasswordRecovery(() => setMode("recovering")), []);
+
   const sendCode = async () => {
     if (!email.trim()) return toast.error("Enter your email address first");
     setLoading(true);
@@ -79,7 +91,18 @@ function AdminSignIn() {
     setCodeSent(true);
     // Said the same way whether or not the address exists, so this cannot be
     // used to find out which addresses are registered.
-    toast.success("If that address has an account, a code is on its way");
+    toast.success("If that address has an account, an email is on its way");
+  };
+
+  const applyLinkPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password.length < 8) return toast.error("Use at least 8 characters");
+    setLoading(true);
+    const result = await setNewPassword(password);
+    setLoading(false);
+    if (!result.user) return toast.error(result.error ?? "Could not set the password");
+    toast.success("Password changed");
+    navigate({ to: "/app/dashboard" });
   };
 
   const applyNewPassword = async (e: React.FormEvent) => {
@@ -118,14 +141,48 @@ function AdminSignIn() {
     navigate({ to: "/app/dashboard" });
   };
 
+  if (mode === "recovering") {
+    return (
+      <SignInLayout
+        title="Choose a new password"
+        subtitle="Opening the link proved the account is yours. Pick a password and you are in."
+        eyebrow={
+          <div className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border bg-muted text-muted-foreground mb-4">
+            <KeyRound className="h-3.5 w-3.5" />
+            Password reset
+          </div>
+        }
+      >
+        <form onSubmit={applyLinkPassword} className="mt-6 sm:mt-8 space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="link-password">New password</Label>
+            <PasswordInput
+              id="link-password"
+              autoComplete="new-password"
+              minLength={8}
+              required
+              autoFocus
+              value={password}
+              onChange={setPassword}
+            />
+            <p className="text-xs text-muted-foreground">At least 8 characters.</p>
+          </div>
+          <Button type="submit" className="w-full h-11" disabled={loading}>
+            {loading ? "Saving…" : "Set password and sign in"}
+          </Button>
+        </form>
+      </SignInLayout>
+    );
+  }
+
   if (mode === "forgot") {
     return (
       <SignInLayout
         title="Reset your password"
         subtitle={
           codeSent
-            ? "Enter the code from your email, and pick a new password."
-            : "We will email you a code to prove the account is yours."
+            ? "Open the link we emailed you. If your email contained a code instead, enter it below."
+            : "We will email you a link to prove the account is yours."
         }
         eyebrow={
           <div className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border bg-muted text-muted-foreground mb-4">
@@ -168,14 +225,18 @@ function AdminSignIn() {
 
           {!codeSent ? (
             <Button type="button" className="w-full h-11" onClick={sendCode} disabled={loading}>
-              {loading ? "Sending…" : "Send code"}
+              {loading ? "Sending…" : "Email me a reset link"}
             </Button>
           ) : (
             <>
               <div className="space-y-2">
                 {/* The length is a project setting (Authentication -> Email ->
                     Email OTP length), so the field does not claim a number. */}
-                <Label htmlFor="reset-code">Code from the email</Label>
+                {/* Only projects with custom SMTP can switch the template from
+                    a link to a code, so this is the secondary path — kept
+                    because it costs nothing and becomes the better one the day
+                    SMTP is connected. */}
+                <Label htmlFor="reset-code">Or paste a code, if you got one</Label>
                 <Input
                   id="reset-code"
                   inputMode="numeric"
@@ -199,7 +260,7 @@ function AdminSignIn() {
                 />
                 <p className="text-xs text-muted-foreground">At least 8 characters.</p>
               </div>
-              <Button type="submit" className="w-full h-11" disabled={loading}>
+              <Button type="submit" className="w-full h-11" disabled={loading || !code.trim()}>
                 {loading ? "Saving…" : "Set new password"}
               </Button>
               <button
@@ -208,7 +269,7 @@ function AdminSignIn() {
                 disabled={loading}
                 className="w-full text-xs text-muted-foreground hover:text-foreground cursor-pointer"
               >
-                Didn't arrive? Send another code
+                Didn&apos;t arrive? Send it again
               </button>
             </>
           )}

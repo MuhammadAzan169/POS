@@ -360,7 +360,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    const restoreSession = () => {
+    /*
+     * Who is signed in, from whichever source is in charge.
+     *
+     * With a database behind the app, Supabase owns the session and keeps it in
+     * its own storage — so the profile is re-read from it on every boot. The
+     * localStorage copy is the demo mode's memory only; using it when Supabase
+     * is configured would let a deactivated worker keep a stale role simply by
+     * not signing out.
+     */
+    const restoreSession = async () => {
+      if (isSupabaseConfigured) {
+        const account = await auth.currentUser();
+        if (!cancelled) setUser(account);
+        return;
+      }
       try {
         const raw = typeof window !== "undefined" ? window.localStorage.getItem(LS_USER) : null;
         if (raw) setUser(JSON.parse(raw));
@@ -370,7 +384,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
 
     const boot = async () => {
-      restoreSession();
+      await restoreSession();
 
       // No Supabase configured: keep the built-in demo data so a fresh clone runs.
       if (!isSupabaseConfigured) {

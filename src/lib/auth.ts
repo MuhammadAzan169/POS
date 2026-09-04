@@ -169,7 +169,18 @@ export async function requestPasswordReset(email: string): Promise<{ error?: str
     return { error: "Shop accounts have no email. Ask the owner to reset your password." };
   }
 
-  const { error } = await supabase.auth.resetPasswordForEmail(address);
+  /*
+   * Sent back to /admin specifically, not to the site root.
+   *
+   * Without this the link falls back to the project's Site URL, which is the
+   * shop counter's sign-in page — the owner would land on a screen that has no
+   * idea a password reset is in progress, and nothing would happen. The screen
+   * that listens for a recovery session is the one this points at.
+   */
+  const redirectTo =
+    typeof window === "undefined" ? undefined : `${window.location.origin}/admin`;
+
+  const { error } = await supabase.auth.resetPasswordForEmail(address, { redirectTo });
   // Deliberately not reporting "no such account": whether an address is
   // registered is not something a stranger should be able to test for.
   return error && !/not found|no user/i.test(error.message) ? { error: error.message } : {};
@@ -238,6 +249,53 @@ export async function changePassword(
 
   const { error } = await supabase.auth.updateUser({ password: newPassword });
   return error ? { error: error.message } : {};
+}
+
+/**
+ * Watches for the app being opened from a reset LINK.
+ *
+ * Supabase will not let a project edit its email templates until custom SMTP is
+ * configured, so the default "Reset password" email sends a link rather than a
+ * code. Opening it lands back here with a recovery session already established
+ * — no code to type, because clicking the link in that inbox is itself the
+ * proof that the mailbox belongs to them.
+ *
+ * The returned function unsubscribes.
+ */
+export function onPasswordRecovery(handler: () => void) {
+  if (!supabase) return () => {};
+  const { data } = supabase.auth.onAuthStateChange((event) => {
+    if (event === "PASSWORD_RECOVERY") handler();
+  });
+
+  /*
+   * The event can fire before this listener is attached — the client parses the
+   * URL as soon as it is created, which on a cold page load is earlier than any
+   * component mounts. So the address bar is checked directly as well.
+   */
+  if (typeof window !== "undefined" && /type=recovery/.test(window.location.hash)) handler();
+
+  return () => data.subscription.unsubscribe();
+}
+
+/**
+ * Sets a new password for a session that arrived from a reset link.
+ *
+ * No current password is asked for, and none can be: the person following this
+ * path is here precisely because they do not have it. The proof is the link.
+ */
+export async function setNewPassword(password: string): Promise<AuthResult> {
+  if (!supabase) return { user: null, error: "Sign-in is not configured" };
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { user: null, error: error.message };
+
+  const user = await currentUser();
+  if (!user) {
+    await signOut();
+    return { user: null, error: "Password changed, but this account has no access." };
+  }
+  return { user };
 }
 
 /** Re-reads the profile whenever the session changes in another tab. */
