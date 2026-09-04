@@ -8,6 +8,7 @@
  */
 import type { InvoiceData } from "@/components/Invoice";
 import { customerBalance } from "./day-book";
+import { dayOf } from "./dates";
 import type { Adjustment, Customer, CustomerPayment, Sale, SetOff, Shop } from "./store-types";
 import { customerNameOf, isWalkIn } from "./store-types";
 
@@ -63,12 +64,17 @@ export function buildInvoice(
   };
 
   if (customer && !isWalkIn(sale)) {
-    // Dates on payments, set-offs and adjustments are plain days; a sale
-    // carries a full timestamp. Compared on the day so a payment taken the
-    // same morning still counts as having come in against this bill.
-    const day = sale.date.slice(0, 10);
+    /*
+     * Dates on payments, set-offs and adjustments are plain days; a sale carries
+     * a full timestamp. Both go through `dayOf`, which resolves a timestamp to
+     * the LOCAL calendar day — slicing the first ten characters off an ISO
+     * string gives the UTC day, so east of Greenwich a sale rung up after 7pm
+     * lands on yesterday and every payment taken that day is misfiled as having
+     * arrived after the bill.
+     */
+    const day = dayOf(sale.date);
     const upto = <T extends { date: string }>(rows: T[] | undefined) =>
-      (rows ?? []).filter((r) => r.date.slice(0, 10) < day);
+      (rows ?? []).filter((r) => dayOf(r.date) < day);
 
     /*
      * What the account stood at BEFORE this bill — the figure the shopkeeper

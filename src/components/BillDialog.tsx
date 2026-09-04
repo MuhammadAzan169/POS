@@ -28,7 +28,9 @@ export function BillDialog({ sale: opened, onClose }: { sale: Sale | null; onClo
    */
   const sale = sales.find((s) => s.id === opened.id) ?? opened;
 
-  const customer = sale.customerId ? (customers.find((c) => c.id === sale.customerId) ?? null) : null;
+  const customer = sale.customerId
+    ? (customers.find((c) => c.id === sale.customerId) ?? null)
+    : null;
   const shop = shops.find((s) => s.id === sale.shopId) ?? null;
   const data = buildInvoice(
     sale,

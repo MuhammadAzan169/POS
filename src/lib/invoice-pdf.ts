@@ -19,7 +19,7 @@
  * off in Settings it disappears from both.
  */
 import type { InvoiceData } from "@/components/Invoice";
-import { accountRows, amountInWords } from "@/components/Invoice";
+import { accountRows, amountInWords, billDate, billNumber } from "./bill-format";
 import type { Settings } from "./store-types";
 import { invoiceFileName } from "./invoice";
 
@@ -29,7 +29,9 @@ const MARGIN = 14;
 
 const BASE_SIZE = { sm: 9, md: 10, lg: 11 } as const;
 
-const num = (n: number) => n.toLocaleString("en-PK", { maximumFractionDigits: 0 });
+// The same formatter the on-screen bill uses, so the printed and the downloaded
+// copy of one sale can never show a total differently.
+const num = billNumber;
 
 /**
  * jsPDF's built-in fonts are WinAnsi, and the characters this app's own product
@@ -38,16 +40,20 @@ const num = (n: number) => n.toLocaleString("en-PK", { maximumFractionDigits: 0 
  * would have shipped unnoticed. Folded to their ASCII equivalents instead.
  */
 function ascii(value: string) {
-  return String(value)
-    // U+2212 is the real minus sign the account rows are written with, and it
-    // is NOT in the dash block above — left out, jsPDF fell back to a
-    // multi-byte encoding and printed "- 32,000" as spaced-out gibberish.
-    .replace(/[‒-―−－]/g, "-")
-    .replace(/[‘’‛]/g, "'")
-    .replace(/[“”]/g, '"')
-    .replace(/…/g, "...")
-    .replace(/[   ]/g, " ")
-    .replace(/[•·]/g, "-");
+  return (
+    String(value)
+      // U+2212 is the real minus sign the account rows are written with, and
+      // it is NOT in the dash block beside it - left out, jsPDF fell back to a
+      // multi-byte encoding and printed "- 32,000" as spaced-out gibberish.
+      .replace(/[\u2012-\u2015\u2212\uFF0D]/g, "-")
+      .replace(/[\u2018\u2019\u201B]/g, "'")
+      .replace(/[\u201C\u201D]/g, '"')
+      .replace(/\u2026/g, "...")
+      // Non-breaking and thin spaces: written as escapes because a literal
+      // one in the source is indistinguishable from an ordinary space.
+      .replace(/[\u00A0\u2007\u202F]/g, " ")
+      .replace(/[\u2022\u00B7]/g, "-")
+  );
 }
 
 export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) {
@@ -85,7 +91,12 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
   const text = (
     s: string,
     x: number,
-    opts: { size?: number; bold?: boolean; align?: "left" | "center" | "right"; grey?: boolean } = {},
+    opts: {
+      size?: number;
+      bold?: boolean;
+      align?: "left" | "center" | "right";
+      grey?: boolean;
+    } = {},
   ) => {
     doc.setFont("helvetica", opts.bold ? "bold" : "normal");
     doc.setFontSize(opts.size ?? base);
@@ -179,13 +190,7 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
 
   const metaLeftEnd = y;
   y = metaTop;
-  if (d.showDate)
-    field(
-      "Date",
-      data.at.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }),
-      right,
-      "right",
-    );
+  if (d.showDate) field("Date", billDate(data.at), right, "right");
   if (d.showCashier) field("By", data.cashier, right, "right");
   y = Math.max(metaLeftEnd, y) + 2;
 
@@ -202,7 +207,7 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
 
   /* ------------------------------------------------------------- the table */
 
-  const cols = columnsFor(d, width, left);
+  const cols = columnsFor(d, width, left, settings.currency);
   const rowPad = 2.2;
   const lineHeight = base * 0.42 + 1.6;
 
@@ -274,11 +279,16 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
     drawRow(
       cols.map((c) => {
         switch (c.key) {
-          case "n": return String(i + 1);
-          case "qty": return String(l.qty).padStart(2, "0");
-          case "name": return l.name;
-          case "rate": return num(l.rate);
-          case "amount": return num(l.qty * l.rate);
+          case "n":
+            return String(i + 1);
+          case "qty":
+            return String(l.qty).padStart(2, "0");
+          case "name":
+            return l.name;
+          case "rate":
+            return num(l.rate);
+          case "amount":
+            return num(l.qty * l.rate);
         }
       }),
     );
@@ -291,7 +301,10 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
     const blanks = Math.max(0, 8 - data.lines.length);
     for (let i = 0; i < blanks; i++) {
       if (y + 7.5 > page.h - MARGIN - FOOTER_RESERVE) break;
-      drawRow(cols.map(() => ""), { height: 7.5 });
+      drawRow(
+        cols.map(() => ""),
+        { height: 7.5 },
+      );
     }
   }
 
@@ -331,7 +344,7 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
   doc.setFontSize(base - 1);
   doc.setTextColor(80);
   for (const line of doc.splitTextToSize(
-    `Amount in words: ${amountInWords(Math.abs(data.account?.closingBalance ?? data.total))}`,
+    `Amount in words: ${amountInWords(Math.abs(data.account?.closingBalance ?? data.total), settings.currency)}`,
     width,
   ) as string[]) {
     doc.text(line, left, y);
@@ -362,16 +375,22 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
   doc.save(`${invoiceFileName(data)}.pdf`);
 }
 
-type Col = { key: "n" | "qty" | "name" | "rate" | "amount"; title: string; x: number; w: number; align: "left" | "center" | "right" };
+type Col = {
+  key: "n" | "qty" | "name" | "rate" | "amount";
+  title: string;
+  x: number;
+  w: number;
+  align: "left" | "center" | "right";
+};
 
 /** Column widths, resolved once so every row and rule agrees on them. */
-function columnsFor(d: Settings["invoice"], width: number, left: number): Col[] {
+function columnsFor(d: Settings["invoice"], width: number, left: number, currency: string): Col[] {
   const fixed: Omit<Col, "x">[] = [];
   if (d.showLineNumbers) fixed.push({ key: "n", title: "#", w: 9, align: "center" });
   fixed.push({ key: "qty", title: "Qty", w: 15, align: "center" });
   fixed.push({ key: "name", title: "Particulars", w: 0, align: "left" });
   if (d.showUnitRate) fixed.push({ key: "rate", title: "Rate", w: 24, align: "right" });
-  fixed.push({ key: "amount", title: "Amount", w: 30, align: "right" });
+  fixed.push({ key: "amount", title: `Amount (${currency})`, w: 30, align: "right" });
 
   // Particulars takes whatever the fixed columns leave, so the grid always adds
   // up to the page width exactly — no sliver of unruled paper on the right.

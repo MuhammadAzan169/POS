@@ -27,7 +27,7 @@ const I = await import("../src/lib/insights.ts");
 const seed = await import("../src/lib/seed-data.ts");
 const Store = await import("../src/lib/store.tsx");
 const Bill = await import("../src/lib/invoice.ts");
-const BillView = await import("../src/components/Invoice.tsx");
+const BillView = await import("../src/lib/bill-format.ts");
 
 /* ------------------------------------------------------------------ runner */
 
@@ -1784,6 +1784,33 @@ it("rupees are written in words on the South Asian scale", () => {
   eq(BillView.amountInWords(120000), "One lakh twenty thousand rupees only", "a lakh");
   eq(BillView.amountInWords(0), "Zero rupees only", "nothing");
   eq(BillView.amountInWords(10350000), "One crore three lakh fifty thousand rupees only", "a crore");
+});
+
+it("a sale rung up late at night is dated by the shop's clock, not UTC", () => {
+  // 01:00 local. Slicing the ISO string would call this yesterday east of
+  // Greenwich, and misfile the same day's earlier payment as arriving after.
+  const local = new Date(2026, 7, 29, 1, 0, 0);
+  const sale = billSale({ date: local.toISOString(), total: 10000 });
+  const earlier = billSale({ id: "sale-old", date: new Date(2026, 7, 20, 10, 0, 0).toISOString(), total: 30000 });
+  const paidBefore = { id: "pay-0", customerId: TRADER.id, date: "2026-08-28", amount: 5000, method: "Cash", shopId: "shop-1", note: "", receivedBy: "Owner" };
+
+  const a = Bill.buildInvoice(sale, ledgerWith([earlier, sale], [paidBefore]), { customer: TRADER }).account;
+  eq(a.previousBalance, 25000, "yesterday's payment is already in the balance carried forward");
+  eq(a.received, 0, "and is not double-counted as money received since");
+  eq(a.closingBalance, 35000, "closing balance");
+});
+
+it("the currency is whatever Settings says, in the words as well", () => {
+  eq(BillView.amountInWords(1500, "Rs"), "One thousand five hundred rupees only", "rupees");
+  eq(BillView.amountInWords(1500, "PKR"), "One thousand five hundred rupees only", "the PKR code still reads as rupees");
+  eq(BillView.amountInWords(1500, "AED"), "One thousand five hundred AED only", "another currency is not called rupees");
+});
+
+it("figures are grouped the same way wherever they are rendered", () => {
+  // The bill and the PDF must not each reach for their own formatter.
+  eq(BillView.billNumber(115450), "115,450", "grouping");
+  eq(BillView.billNumber(1035000.4), "1,035,000", "rounded, no stray decimals");
+  eq(BillView.billDate(new Date(2026, 7, 28)), "28/08/2026", "day-first dates");
 });
 
 it("every demo credit sale produces a bill that reconciles", () => {

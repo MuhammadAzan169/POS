@@ -18,6 +18,7 @@ import {
   type Sale,
   type Settings,
 } from "@/lib/store";
+import { accountRows, amountInWords, billDate, billNumber } from "@/lib/bill-format";
 
 export interface InvoiceLine {
   name: string;
@@ -159,16 +160,7 @@ export function Invoice({
           )}
         </div>
         <div className="space-y-1 text-right shrink-0">
-          {d.showDate && (
-            <Written
-              label="Date"
-              value={data.at.toLocaleDateString("en-GB", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-              })}
-            />
-          )}
+          {d.showDate && <Written label="Date" value={billDate(data.at)} />}
           {d.showCashier && <Written label="By" value={data.cashier} />}
         </div>
       </div>
@@ -177,88 +169,102 @@ export function Invoice({
         <p className="mt-3 text-[0.85em] text-muted-foreground">{settings.invoiceNote}</p>
       )}
 
-      {/* ------------------------------------------------------- items table */}
-      <table className="w-full table-fixed mt-4 border-collapse tabular-nums">
-        <thead>
-          <tr className="text-center">
-            {d.showLineNumbers && <th className={`${headCell} w-10`}>#</th>}
-            <th className={`${headCell} w-16`}>Qty</th>
-            <th className={headCell}>Particulars</th>
-            {d.showUnitRate && <th className={`${headCell} w-24`}>Rate</th>}
-            <th className={`${headCell} w-28`}>Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.lines.map((l, i) => (
-            <tr key={i}>
-              {d.showLineNumbers && (
-                <td className={`${cellBorder} px-2 py-1.5 text-center text-muted-foreground`}>
-                  {i + 1}
-                </td>
-              )}
-              <td className={`${cellBorder} px-2 py-1.5 text-center`}>
-                {String(l.qty).padStart(2, "0")}
-              </td>
-              <td className={`${cellBorder} px-2 py-1.5 break-words`}>{l.name}</td>
-              {d.showUnitRate && (
-                <td className={`${cellBorder} px-2 py-1.5 text-right`}>
-                  {l.rate.toLocaleString("en-PK")}
-                </td>
-              )}
-              <td className={`${cellBorder} px-2 py-1.5 text-right font-medium`}>
-                {(l.qty * l.rate).toLocaleString("en-PK")}
-              </td>
-            </tr>
-          ))}
-          {Array.from({ length: blanks }).map((_, i) => (
-            <tr key={`blank-${i}`}>
-              {d.showLineNumbers && <td className={`${cellBorder} px-2 py-1.5`}>&nbsp;</td>}
-              <td className={`${cellBorder} px-2 py-1.5`}>&nbsp;</td>
-              <td className={cellBorder}>&nbsp;</td>
-              {d.showUnitRate && <td className={cellBorder}>&nbsp;</td>}
-              <td className={cellBorder}>&nbsp;</td>
-            </tr>
-          ))}
+      {/*
+        ------------------------------------------------------- items table
 
-          {/*
+        Five ruled columns cannot be squeezed into a 360px phone and stay
+        legible, so the table scrolls inside its own box rather than pushing the
+        page sideways — which is what it did, taking the header and the totals
+        with it. The min-width is the narrowest the grid still reads at.
+      */}
+      <div className="mt-4 -mx-1 overflow-x-auto">
+        <table className="w-full min-w-[30rem] table-fixed border-collapse tabular-nums">
+          <thead>
+            <tr className="text-center">
+              {d.showLineNumbers && <th className={`${headCell} w-10`}>#</th>}
+              <th className={`${headCell} w-16`}>Qty</th>
+              <th className={headCell}>Particulars</th>
+              {d.showUnitRate && <th className={`${headCell} w-24`}>Rate</th>}
+              {/* The one place the currency is named, so a bill is never a page of
+                bare numbers — and never says Rs when Settings says otherwise. */}
+              <th className={`${headCell} w-28`}>Amount ({settings.currency})</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.lines.map((l, i) => (
+              <tr key={i}>
+                {d.showLineNumbers && (
+                  <td className={`${cellBorder} px-2 py-1.5 text-center text-muted-foreground`}>
+                    {i + 1}
+                  </td>
+                )}
+                <td className={`${cellBorder} px-2 py-1.5 text-center`}>
+                  {String(l.qty).padStart(2, "0")}
+                </td>
+                <td className={`${cellBorder} px-2 py-1.5 break-words`}>{l.name}</td>
+                {d.showUnitRate && (
+                  <td className={`${cellBorder} px-2 py-1.5 text-right`}>{billNumber(l.rate)}</td>
+                )}
+                <td className={`${cellBorder} px-2 py-1.5 text-right font-medium`}>
+                  {billNumber(l.qty * l.rate)}
+                </td>
+              </tr>
+            ))}
+            {Array.from({ length: blanks }).map((_, i) => (
+              <tr key={`blank-${i}`}>
+                {d.showLineNumbers && <td className={`${cellBorder} px-2 py-1.5`}>&nbsp;</td>}
+                <td className={`${cellBorder} px-2 py-1.5`}>&nbsp;</td>
+                <td className={cellBorder}>&nbsp;</td>
+                {d.showUnitRate && <td className={cellBorder}>&nbsp;</td>}
+                <td className={cellBorder}>&nbsp;</td>
+              </tr>
+            ))}
+
+            {/*
             The totals sit inside the same ruled grid rather than in a block
             underneath it — on a bill book they are written on the next line
             down, and keeping the rules unbroken is what makes a printed bill
             read as one document instead of a table with a caption.
           */}
-          {data.discount > 0 && (
-            <>
-              <SummaryRow
-                design={d}
-                label="Total"
-                value={data.subtotal.toLocaleString("en-PK")}
-              />
-              <SummaryRow
-                design={d}
-                label="Less discount"
-                value={`− ${data.discount.toLocaleString("en-PK")}`}
-              />
-            </>
-          )}
-          <SummaryRow
-            design={d}
-            label={data.discount > 0 ? "Net total" : "Total"}
-            value={data.total.toLocaleString("en-PK")}
-            strong
-          />
+            {data.discount > 0 && (
+              <>
+                <SummaryRow design={d} label="Total" value={billNumber(data.subtotal)} />
+                <SummaryRow
+                  design={d}
+                  label="Less discount"
+                  value={`− ${billNumber(data.discount)}`}
+                />
+              </>
+            )}
+            <SummaryRow
+              design={d}
+              label={data.discount > 0 ? "Net total" : "Total"}
+              value={billNumber(data.total)}
+              strong
+            />
 
-          {d.showAccountBlock &&
-            data.account &&
-            accountRows(data).map((r) => (
-              <SummaryRow key={r.label} design={d} label={r.label} value={r.value} strong={r.strong} />
-            ))}
-        </tbody>
-      </table>
+            {d.showAccountBlock &&
+              data.account &&
+              accountRows(data).map((r) => (
+                <SummaryRow
+                  key={r.label}
+                  design={d}
+                  label={r.label}
+                  value={r.value}
+                  strong={r.strong}
+                />
+              ))}
+          </tbody>
+        </table>
+      </div>
 
       {/* The one figure read aloud on the phone, spelled out in words as well —
           "one lakh twenty" and "120,000" disagreeing is how bills get disputed. */}
       <div className="mt-2 text-[0.85em] text-muted-foreground">
-        Amount in words: <span className="text-foreground">{amountInWords(data.account?.closingBalance ?? data.total)}</span>
+        Amount in words:{" "}
+        <span className="text-foreground">
+          {amountInWords(Math.abs(data.account?.closingBalance ?? data.total), settings.currency)}
+        </span>
       </div>
 
       <div className="mt-5 flex items-end justify-between gap-6">
@@ -274,40 +280,6 @@ export function Invoice({
       </div>
     </div>
   );
-}
-
-/**
- * The account block, as rows.
- *
- * Shared with the PDF renderer so the two documents can never disagree about a
- * customer's balance — which is the one number on a bill worth arguing over.
- */
-export function accountRows(data: InvoiceData): { label: string; value: string; strong?: boolean }[] {
-  const a = data.account;
-  if (!a) return [];
-  const n = (v: number) => Math.abs(v).toLocaleString("en-PK");
-  const rows: { label: string; value: string; strong?: boolean }[] = [];
-
-  rows.push({ label: "Previous balance", value: n(a.previousBalance) });
-
-  if (a.onAccount > 0) {
-    rows.push({ label: "Balance", value: n(a.previousBalance + a.onAccount) });
-  } else if (data.status !== "Returned" && data.payment && data.payment !== "Credit") {
-    // Paid at the counter, so this bill never joined the account. Saying so is
-    // the difference between a settled delivery and one the buyer thinks is
-    // still outstanding because the balance below did not move.
-    rows.push({ label: `Paid by ${data.payment.toLowerCase()}`, value: n(data.total) });
-  }
-
-  if (a.received > 0) rows.push({ label: "Received", value: `− ${n(a.received)}` });
-
-  rows.push({
-    // A negative balance is money of theirs you are holding, not a debt.
-    label: a.closingBalance < 0 ? "Advance in hand" : "Closing balance",
-    value: n(a.closingBalance),
-    strong: true,
-  });
-  return rows;
 }
 
 /** A label with the value written after it, the way a form is filled in by hand. */
@@ -350,8 +322,7 @@ function SummaryRow({
   strong?: boolean;
 }) {
   const border = "border border-foreground/25";
-  const span =
-    (design.showLineNumbers ? 1 : 0) + (design.showUnitRate ? 1 : 0) + 2; // qty + particulars
+  const span = (design.showLineNumbers ? 1 : 0) + (design.showUnitRate ? 1 : 0) + 2; // qty + particulars
   return (
     <tr>
       <td
@@ -367,47 +338,4 @@ function SummaryRow({
       </td>
     </tr>
   );
-}
-
-const ONES = [
-  "", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-  "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen",
-  "eighteen", "nineteen",
-];
-const TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
-
-/**
- * Rupees in words on the South Asian scale — lakh and crore, not million.
- * A bill that says "one hundred twenty thousand" to a Lahore trader is a bill
- * that gets read twice.
- */
-export function amountInWords(n: number): string {
-  const value = Math.max(0, Math.round(n));
-  if (value === 0) return "Zero rupees only";
-
-  const under1000 = (x: number): string => {
-    if (x === 0) return "";
-    if (x < 20) return ONES[x];
-    if (x < 100) return `${TENS[Math.floor(x / 10)]}${x % 10 ? `-${ONES[x % 10]}` : ""}`;
-    return `${ONES[Math.floor(x / 100)]} hundred${x % 100 ? ` ${under1000(x % 100)}` : ""}`;
-  };
-
-  const parts: string[] = [];
-  const units: [number, string][] = [
-    [10000000, "crore"],
-    [100000, "lakh"],
-    [1000, "thousand"],
-  ];
-  let rest = value;
-  for (const [size, name] of units) {
-    const count = Math.floor(rest / size);
-    if (count > 0) {
-      parts.push(`${under1000(count)} ${name}`);
-      rest %= size;
-    }
-  }
-  if (rest > 0) parts.push(under1000(rest));
-
-  const words = parts.join(" ");
-  return `${words.charAt(0).toUpperCase()}${words.slice(1)} rupees only`;
 }
