@@ -663,5 +663,8 @@ export const DEFAULT_SETTINGS: Settings = {
   receipt: DEFAULT_RECEIPT,
   invoiceNote: "",
   invoiceTerms: "Goods once sold are not returnable. Please check items on delivery.",
+  invoiceTitle: "INVOICE / BILL",
+  invoiceSignatory: "Authorised signature",
+  invoiceCopyLabel: "ORIGINAL",
   invoice: DEFAULT_INVOICE,
 };

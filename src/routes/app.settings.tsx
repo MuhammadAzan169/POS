@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { useStore, type InvoiceDesign, type ReceiptDesign } from "@/lib/store";
+import { useStore, INVOICE_ACCENTS, type InvoiceDesign, type ReceiptDesign } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { Receipt as ReceiptView } from "@/components/Receipt";
 import { Invoice as InvoiceView, type InvoiceData } from "@/components/Invoice";
@@ -183,7 +183,9 @@ function SettingsPage() {
     { key: "showLineNumbers", label: "Line numbers" },
     { key: "showUnitRate", label: "Rate column" },
     { key: "showAccountBlock", label: "Previous balance & account" },
+    { key: "showAmountInWords", label: "Total written in words" },
     { key: "ruledRows", label: "Empty ruled rows" },
+    { key: "showCopyLabel", label: "Copy stamp (Original / Office)" },
     { key: "showTerms", label: "Terms line" },
     { key: "showSignature", label: "Signature space" },
   ];
@@ -328,9 +330,17 @@ function SettingsPage() {
           </Card>
         </TabsContent>
 
+        {/*
+          The columns are the other way round from the receipt tab, and on
+          purpose. A 340px rail cannot hold an A4 sheet: the bill was shrunk to
+          62% and still had to be scrolled in both directions to be read, which
+          is not a preview of anything. The controls are the narrow thing here —
+          they are a list of switches — so the sheet gets the rest of the page
+          and prints at its real proportions.
+        */}
         <TabsContent
           value="bill"
-          className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] items-start"
+          className="grid gap-5 lg:grid-cols-[22rem_minmax(0,1fr)] items-start"
         >
           <div className="grid gap-5 min-w-0">
           <Section title="Bill text" description="The lines printed on a bill, above the items and under the totals.">
@@ -348,11 +358,32 @@ function SettingsPage() {
                   onChange={(e) => updateSettings({ invoiceTerms: e.target.value })}
                 />
               </Field>
+              <Field label="Title in the tab" hint="Some shops send a delivery challan rather than a bill.">
+                <Input
+                  value={settings.invoiceTitle}
+                  placeholder="INVOICE / BILL"
+                  onChange={(e) => updateSettings({ invoiceTitle: e.target.value })}
+                />
+              </Field>
+              <Field label="Under the signature line">
+                <Input
+                  value={settings.invoiceSignatory}
+                  placeholder="Authorised signature"
+                  onChange={(e) => updateSettings({ invoiceSignatory: e.target.value })}
+                />
+              </Field>
+              <Field label="Copy stamp" hint="Shown in the corner when the stamp is switched on below.">
+                <Input
+                  value={settings.invoiceCopyLabel}
+                  placeholder="ORIGINAL"
+                  onChange={(e) => updateSettings({ invoiceCopyLabel: e.target.value })}
+                />
+              </Field>
             </div>
           </Section>
 
           <Section title="Bill design" description="What appears on a printed or downloaded bill. The preview updates as you change these.">
-            <div className="grid gap-5 sm:grid-cols-3">
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
               <Field label="Paper size">
                 <Segmented
                   value={b.paperSize}
@@ -374,11 +405,73 @@ function SettingsPage() {
                   options={[{ value: "ink", label: "Solid" }, { value: "plain", label: "Plain" }]}
                 />
               </Field>
+              <Field
+                label="Letterhead"
+                hint="Split puts your details down the left with the title centred under a rule, the way a printed invoice reads."
+              >
+                <Segmented
+                  value={b.headerAlign}
+                  onChange={(v) => updateInvoiceDesign({ headerAlign: v })}
+                  options={[
+                    { value: "split", label: "Split" },
+                    { value: "center", label: "Centred" },
+                    { value: "left", label: "Left" },
+                  ]}
+                />
+              </Field>
+              <Field label="Row height" hint="Compact fits about a third more items on a sheet.">
+                <Segmented
+                  value={b.density}
+                  onChange={(v) => updateInvoiceDesign({ density: v })}
+                  options={[{ value: "normal", label: "Normal" }, { value: "compact", label: "Compact" }]}
+                />
+              </Field>
+
+              {/*
+                Four inks rather than a colour picker: these are the ones that
+                still read as white type on a mono laser, which is what most of
+                these bills are actually printed on. A free picker invites yellow.
+              */}
+              <Field label="Ink" hint="Colours the heading band and the title tab.">
+                <div className="flex gap-2">
+                  {(Object.keys(INVOICE_ACCENTS) as (keyof typeof INVOICE_ACCENTS)[]).map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => updateInvoiceDesign({ accentColor: key })}
+                      title={INVOICE_ACCENTS[key].label}
+                      aria-label={INVOICE_ACCENTS[key].label}
+                      aria-pressed={b.accentColor === key}
+                      className={`h-9 w-9 rounded-md border-2 transition-all cursor-pointer ${
+                        b.accentColor === key ? "border-ring scale-105" : "border-transparent hover:scale-105"
+                      }`}
+                      style={{ backgroundColor: INVOICE_ACCENTS[key].hex }}
+                    />
+                  ))}
+                </div>
+              </Field>
+
+              <Field
+                label={`Ruled rows: ${b.ruledRowCount}`}
+                hint="How far the table is padded out when a bill is short."
+              >
+                <input
+                  type="range"
+                  min={0}
+                  max={20}
+                  value={b.ruledRowCount}
+                  onChange={(e) => updateInvoiceDesign({ ruledRowCount: Number(e.target.value) })}
+                  className="w-full accent-primary cursor-pointer"
+                  disabled={!b.ruledRows}
+                />
+              </Field>
             </div>
 
             <Separator className="my-5" />
 
-            <div className="grid sm:grid-cols-2 gap-x-8">
+            {/* One per row: the column is 22rem now, and "Previous balance &
+                account" wrapped onto two lines in half of that. */}
+            <div className="grid">
               {billToggles.map((t) => (
                 <Toggle
                   key={t.key}
@@ -392,22 +485,20 @@ function SettingsPage() {
           </div>
 
 
-          <Card className="p-5 lg:sticky lg:top-0 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            <h3 className="font-semibold">Bill preview</h3>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            A trade order carrying a balance forward - the same layout that prints and downloads.
-          </p>
-          <Separator className="my-4" />
-          {/* Scaled rather than squeezed: an A4 bill in a sidebar has to keep its
-              proportions or the preview stops predicting the printout. */}
-          <div className="max-h-[70dvh] overflow-auto">
-            <div className="origin-top-left scale-[0.62] w-[161%]">
-              <InvoiceView data={SAMPLE_BILL} settings={settings} />
+          <Card className="p-4 sm:p-6 lg:sticky lg:top-0 min-w-0 bg-muted/30">
+            <div className="flex items-center gap-2 mb-1">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              <h3 className="font-semibold">Bill preview</h3>
             </div>
-          </div>
+            <p className="text-xs text-muted-foreground">
+              A trade order carrying a balance forward — the same layout that prints and downloads.
+            </p>
+            <Separator className="my-4" />
+            {/* At its own size, centred, with nothing clipping it. The sheet is
+                capped at A4's width and simply narrows on a smaller screen. */}
+            <div className="mx-auto w-full max-w-[820px]">
+              <InvoiceView data={SAMPLE_BILL} settings={settings} className="shadow-sm" />
+            </div>
           </Card>
         </TabsContent>
       </Tabs>

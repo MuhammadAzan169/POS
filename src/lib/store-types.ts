@@ -939,10 +939,43 @@ export interface InvoiceDesign {
   showTerms: boolean;
   /** Empty ruled rows padded under the items, as a printed bill book has. */
   ruledRows: boolean;
+  /** How many rows the table is padded out to. 0 leaves it exactly as long as the items. */
+  ruledRowCount: number;
+  /** The total spelled out underneath — the line that settles phone disputes. */
+  showAmountInWords: boolean;
+  /** "ORIGINAL" / "OFFICE COPY" stamped in the corner, for a two-part bill book. */
+  showCopyLabel: boolean;
   paperSize: "A4" | "A5";
   fontSize: "sm" | "md" | "lg";
+  /**
+   * How the top of the bill is arranged.
+   *
+   * `split` puts who is sending it down the left and what the document is on
+   * the right, which is what a printed invoice does. `center` is the bill-book
+   * look. `left` stacks everything against the left margin with the title tab
+   * still centred above it.
+   */
+  headerAlign: "center" | "left" | "split";
+  /** How tall the ruled rows are. Compact fits about a third more on a sheet. */
+  density: "compact" | "normal";
   accent: "ink" | "plain";
+  /**
+   * The colour of the solid headings, in the shop's own ink.
+   *
+   * A named choice rather than a free colour field: these are the four that
+   * print legibly in white type on a mono laser, which is what a bill is
+   * actually printed on. A picker would let someone choose yellow.
+   */
+  accentColor: "navy" | "black" | "green" | "maroon";
 }
+
+/** The accent choices, as ink. Shared by the screen and the PDF. */
+export const INVOICE_ACCENTS: Record<InvoiceDesign["accentColor"], { hex: string; rgb: [number, number, number]; label: string }> = {
+  navy: { hex: "#172554", rgb: [23, 37, 84], label: "Navy" },
+  black: { hex: "#111827", rgb: [17, 24, 39], label: "Black" },
+  green: { hex: "#14532d", rgb: [20, 83, 45], label: "Green" },
+  maroon: { hex: "#7f1d1d", rgb: [127, 29, 29], label: "Maroon" },
+};
 
 export const DEFAULT_INVOICE: InvoiceDesign = {
   showBusinessName: true,
@@ -962,9 +995,15 @@ export const DEFAULT_INVOICE: InvoiceDesign = {
   showSignature: true,
   showTerms: true,
   ruledRows: true,
+  ruledRowCount: 8,
+  showAmountInWords: true,
+  showCopyLabel: false,
   paperSize: "A4",
   fontSize: "md",
+  headerAlign: "split",
+  density: "normal",
   accent: "ink",
+  accentColor: "navy",
 };
 
 /**
@@ -1030,5 +1069,11 @@ export interface Settings {
   invoiceNote: string;
   /** The small print under the totals. */
   invoiceTerms: string;
+  /** The words in the tab across the top. Some shops want "DELIVERY CHALLAN". */
+  invoiceTitle: string;
+  /** What is written under the signature rule. */
+  invoiceSignatory: string;
+  /** The corner stamp, when it is switched on. */
+  invoiceCopyLabel: string;
   invoice: InvoiceDesign;
 }

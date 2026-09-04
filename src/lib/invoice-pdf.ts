@@ -20,7 +20,7 @@
  */
 import type { InvoiceData } from "@/components/Invoice";
 import { accountRows, amountInWords, billDate, billNumber } from "./bill-format";
-import type { Settings } from "./store-types";
+import { INVOICE_ACCENTS, type Settings } from "./store-types";
 import { invoiceFileName } from "./invoice";
 
 /** mm. A4 and A5 portrait, with the same generous margin a bill book leaves. */
@@ -79,6 +79,11 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
   doc.splitTextToSize = ((value: string, size: number, options?: object) =>
     splitText(ascii(value), size, options)) as typeof doc.splitTextToSize;
 
+  const accent = INVOICE_ACCENTS[d.accentColor] ?? INVOICE_ACCENTS.navy;
+  // Only the centred arrangement centres. `!== "left"` was true for `split`
+  // too, which quietly centred the letterhead it was supposed to move left.
+  const centred = d.headerAlign === "center";
+
   const base = BASE_SIZE[d.fontSize];
   const left = MARGIN;
   const right = page.w - MARGIN;
@@ -106,17 +111,33 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
 
   /* ------------------------------------------------------------- the header */
 
-  if (d.showBillTag) {
-    const label = "INVOICE / BILL";
+  /**
+   * Draws the title tab and hands back how wide it is, so a caller that wants
+   * it beside the letterhead can lay the two out against each other.
+   */
+  const drawTitleTab = (atY: number, anchor: "left" | "center" | "right") => {
+    const label = settings.invoiceTitle;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(base - 1);
     const w = doc.getTextWidth(label) + 10;
-    const x = (page.w - w) / 2;
-    doc.setFillColor(23, 37, 84);
-    doc.roundedRect(x, y - 1, w, 7, 3.5, 3.5, "F");
+    const x = anchor === "center" ? (page.w - w) / 2 : anchor === "right" ? right - w : left;
+    doc.setFillColor(...accent.rgb);
+    doc.roundedRect(x, atY - 1, w, 7, 3.5, 3.5, "F");
     doc.setTextColor(255);
-    doc.text(label, page.w / 2, y + 3.6, { align: "center" });
-    y += 12;
+    doc.text(label, x + w / 2, atY + 3.6, { align: "center" });
+    return w;
+  };
+
+  if (d.showCopyLabel && settings.invoiceCopyLabel) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(base - 2);
+    doc.setTextColor(110);
+    doc.setDrawColor(160);
+    const label = settings.invoiceCopyLabel;
+    const w = doc.getTextWidth(label) + 6;
+    doc.rect(right - w, y - 1, w, 5.5);
+    doc.text(label, right - w / 2, y + 2.8, { align: "center" });
+    y += 8;
   }
 
   if (data.status === "Returned") {
@@ -129,32 +150,83 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
     y += 12;
   }
 
+  /*
+   * The letterhead.
+   *
+   * `split` is how a printed invoice is actually laid out: who is sending it
+   * down the left in labelled lines, a rule under it, and the document's name
+   * centred beneath that. Centring the whole block stacked the name, the branch
+   * and the address down the middle of the sheet with the title floating above
+   * them, which reads as a flyer rather than as a business document.
+   *
+   * The right of the split band is deliberately left empty — that is where a
+   * logo goes.
+   */
+  const split = d.headerAlign === "split";
+  const headX = centred ? page.w / 2 : left;
+  const headAlign = centred ? ("center" as const) : ("left" as const);
+
+  // Above the letterhead in both stacked arrangements; under the rule in split.
+  if (d.showBillTag && settings.invoiceTitle && !split) {
+    drawTitleTab(y, "center");
+    y += 12;
+  }
+
   if (d.showBusinessName) {
-    text(settings.businessName, page.w / 2, { size: base + 11, bold: true, align: "center" });
-    y += base * 0.62 + 4;
+    // Advance by the type's own height rather than a guessed constant: at 21pt
+    // the old figure left a visible hole between the name and the branch.
+    const size = split ? base + 6 : base + 11;
+    text(settings.businessName, headX, { size, bold: true, align: headAlign });
+    y += size * 0.36 + 1.8;
   }
   if (d.showShopName && data.shopName) {
     // Which outlet the goods left from. On a multi-shop business this is the
     // difference between a bill you can trace and one you can't.
-    text(data.shopName, page.w / 2, { size: base + 1, bold: true, align: "center" });
-    y += 5;
+    text(data.shopName, headX, { size: base + 1, bold: true, align: headAlign });
+    y += 4.8;
   }
-  const contact = [d.showAddress && settings.address, d.showPhone && settings.phone]
-    .filter(Boolean)
-    .join("   ·   ");
-  if (contact) {
-    text(contact, page.w / 2, { size: base - 1, align: "center", grey: true });
-    y += 4.5;
-  }
-  if (d.showTaxNumber && settings.taxNumber) {
-    text(`NTN: ${settings.taxNumber}`, page.w / 2, { size: base - 1, align: "center", grey: true });
-    y += 4.5;
+
+  if (split) {
+    // One labelled line each, as a letterhead is written — not a run-on line
+    // with separators, which is a caption, not an address block.
+    const lines = [
+      d.showAddress && settings.address ? settings.address : "",
+      d.showPhone && settings.phone ? `Phone no.: ${settings.phone}` : "",
+      d.showTaxNumber && settings.taxNumber ? `NTN No.: ${settings.taxNumber}` : "",
+    ].filter(Boolean);
+    for (const line of lines) {
+      text(line, left, { size: base - 1, align: "left" });
+      y += 4.4;
+    }
+  } else {
+    const contact = [d.showAddress && settings.address, d.showPhone && settings.phone]
+      .filter(Boolean)
+      .join("   ·   ");
+    if (contact) {
+      text(contact, headX, { size: base - 1, align: headAlign, grey: true });
+      y += 4.2;
+    }
+    if (d.showTaxNumber && settings.taxNumber) {
+      text(`NTN: ${settings.taxNumber}`, headX, { size: base - 1, align: headAlign, grey: true });
+      y += 4.2;
+    }
   }
 
   y += 3;
-  doc.setDrawColor(180);
+  doc.setDrawColor(...(split ? accent.rgb : ([180, 180, 180] as [number, number, number])));
+  doc.setLineWidth(split ? 0.4 : 0.2);
   doc.line(left, y, right, y);
-  y += 6;
+  doc.setLineWidth(0.2);
+  y += split ? 7 : 6;
+
+  if (split && d.showBillTag && settings.invoiceTitle) {
+    // The document's name, centred under the rule and set in the shop's ink.
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(base + 4);
+    doc.setTextColor(...accent.rgb);
+    doc.text(settings.invoiceTitle, page.w / 2, y, { align: "center" });
+    y += 7;
+  }
 
   /* ----------------------------------------------- who the bill is for, when */
 
@@ -208,13 +280,16 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
   /* ------------------------------------------------------------- the table */
 
   const cols = columnsFor(d, width, left, settings.currency);
-  const rowPad = 2.2;
+  // Density: compact fits about a third more rows on a sheet, which is what a
+  // long wholesale order needs to stay on one page.
+  const rowPad = d.density === "compact" ? 1.4 : 2.2;
+  const minRow = d.density === "compact" ? 6 : 7.5;
   const lineHeight = base * 0.42 + 1.6;
 
   const drawHead = () => {
     const h = lineHeight + rowPad * 2;
     if (d.accent === "ink") {
-      doc.setFillColor(23, 37, 84);
+      doc.setFillColor(...accent.rgb);
       doc.rect(left, y, width, h, "F");
       doc.setTextColor(255);
     } else {
@@ -247,7 +322,7 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
       particulars >= 0 && cells[particulars]
         ? (doc.splitTextToSize(cells[particulars], cols[particulars].w - 4) as string[])
         : [""];
-    const h = opts.height ?? Math.max(lineHeight * wrapped.length + rowPad * 2, 7.5);
+    const h = opts.height ?? Math.max(lineHeight * wrapped.length + rowPad * 2, minRow);
     ensureRoom(h);
 
     doc.setDrawColor(150);
@@ -298,12 +373,12 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
     // Padded to a full-looking page, but never onto a page of their own: blank
     // rows are decoration, and a second sheet of them is the "extra page" that
     // makes a bill look broken.
-    const blanks = Math.max(0, 8 - data.lines.length);
+    const blanks = Math.max(0, d.ruledRowCount - data.lines.length);
     for (let i = 0; i < blanks; i++) {
-      if (y + 7.5 > page.h - MARGIN - FOOTER_RESERVE) break;
+      if (y + minRow > page.h - MARGIN - FOOTER_RESERVE) break;
       drawRow(
         cols.map(() => ""),
-        { height: 7.5 },
+        { height: minRow },
       );
     }
   }
@@ -311,7 +386,7 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
   /* --------------------------------------------------------- what is owed */
 
   const summary = (label: string, value: string, strong = false) => {
-    const h = 7.5;
+    const h = minRow;
     ensureRoom(h);
     const amount = cols[cols.length - 1];
     doc.setDrawColor(150);
@@ -320,8 +395,8 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
     doc.setFont("helvetica", strong ? "bold" : "normal");
     doc.setFontSize(strong ? base + 0.5 : base);
     doc.setTextColor(20);
-    doc.text(label, amount.x - 3, y + 5.2, { align: "right" });
-    doc.text(value, right - 2, y + 5.2, { align: "right" });
+    doc.text(label, amount.x - 3, y + h - 2.3, { align: "right" });
+    doc.text(value, right - 2, y + h - 2.3, { align: "right" });
     y += h;
   };
 
@@ -340,15 +415,17 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
   /* ------------------------------------------------- words, terms, signature */
 
   y += 5;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(base - 1);
-  doc.setTextColor(80);
-  for (const line of doc.splitTextToSize(
-    `Amount in words: ${amountInWords(Math.abs(data.account?.closingBalance ?? data.total), settings.currency)}`,
-    width,
-  ) as string[]) {
-    doc.text(line, left, y);
-    y += 4.4;
+  if (d.showAmountInWords) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(base - 1);
+    doc.setTextColor(80);
+    for (const line of doc.splitTextToSize(
+      `Amount in words: ${amountInWords(Math.abs(data.account?.closingBalance ?? data.total), settings.currency)}`,
+      width,
+    ) as string[]) {
+      doc.text(line, left, y);
+      y += 4.4;
+    }
   }
 
   y += 6;
@@ -368,7 +445,7 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
     doc.line(right - 50, sigY, right, sigY);
     doc.setFontSize(base - 1.5);
     doc.setTextColor(110);
-    doc.text("Authorised signature", right - 25, sigY + 4.5, { align: "center" });
+    doc.text(settings.invoiceSignatory, right - 25, sigY + 4.5, { align: "center" });
     y = Math.max(y, sigY + 6);
   }
 

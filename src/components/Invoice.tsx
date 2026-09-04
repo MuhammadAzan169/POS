@@ -12,6 +12,7 @@
  * arrangement `Receipt` uses.
  */
 import {
+  INVOICE_ACCENTS,
   WALK_IN,
   type InvoiceDesign,
   type PaymentMethod,
@@ -74,8 +75,11 @@ const SIZES: Record<InvoiceDesign["fontSize"], string> = {
   lg: "text-[15px]",
 };
 
-/** Minimum ruled rows in the table, so a three-line bill still reads as a bill. */
-const MIN_ROWS = 8;
+/** Row padding, per density. Compact fits about a third more on a sheet. */
+const ROW_PAD: Record<InvoiceDesign["density"], string> = {
+  compact: "px-2 py-1",
+  normal: "px-2 py-1.5",
+};
 
 export function Invoice({
   data,
@@ -88,85 +92,130 @@ export function Invoice({
 }) {
   const d = settings.invoice;
   const ink = d.accent === "ink";
+  const accent = INVOICE_ACCENTS[d.accentColor]?.hex ?? INVOICE_ACCENTS.navy.hex;
+  const pad = ROW_PAD[d.density];
 
   // A hand-written book has ruled rows whether or not there is anything to
   // write on them; without the padding a short bill floats in white space.
-  const blanks = d.ruledRows ? Math.max(0, MIN_ROWS - data.lines.length) : 0;
+  const blanks = d.ruledRows ? Math.max(0, d.ruledRowCount - data.lines.length) : 0;
 
-  const cellBorder = "border border-foreground/25";
-  const headCell = `${cellBorder} px-2 py-1.5 font-semibold ${ink ? "bg-foreground text-background" : "bg-muted"}`;
+  const cellBorder = "border border-neutral-300";
+  const headCell = `${cellBorder} ${pad} font-semibold ${ink ? "text-white" : "bg-neutral-100"}`;
+  const headStyle = ink ? { backgroundColor: accent } : undefined;
+  const muted = "text-neutral-500";
+  const split = d.headerAlign === "split";
+
+  const titleTab =
+    d.showBillTag && settings.invoiceTitle ? (
+      <span
+        className={`inline-block text-[0.75em] tracking-[0.2em] font-semibold px-4 py-1 rounded-full ${ink ? "text-white" : "border border-neutral-400"}`}
+        style={ink ? { backgroundColor: accent } : undefined}
+      >
+        {settings.invoiceTitle}
+      </span>
+    ) : null;
 
   return (
+    /*
+     * Always paper: white ground, dark ink, fixed neutrals — never the app's
+     * theme tokens. In dark mode this used to render as a dark sheet with pale
+     * type, which is not what any printer does, so the preview stopped
+     * predicting the printout exactly when someone was designing against it.
+     */
     <div
-      className={`${SIZES[d.fontSize]} ${PAPER[d.paperSize]} mx-auto bg-card text-foreground border rounded-lg p-5 sm:p-7 print:border-0 print:rounded-none ${className}`}
+      className={`${SIZES[d.fontSize]} ${PAPER[d.paperSize]} mx-auto bg-white text-neutral-900 border border-neutral-200 rounded-lg p-5 sm:p-7 print:border-0 print:rounded-none ${className}`}
     >
-      {/* A returned sale keeps its bill — the goods came back and the paperwork
-          has to say so, or the copy in the buyer's file still reads as a debt. */}
-      {data.status === "Returned" && (
-        <div className="mb-3 text-center border border-destructive text-destructive rounded-md py-1 text-[0.9em] font-bold tracking-[0.15em]">
-          RETURNED — CANCELLED
-        </div>
-      )}
-
-      {/* ------------------------------------------------------------ header */}
-      {d.showBillTag && (
-        <div className="flex justify-center mb-2">
-          <span
-            className={`text-[0.75em] tracking-[0.2em] font-semibold px-4 py-1 rounded-full ${ink ? "bg-foreground text-background" : "border"}`}
-          >
-            INVOICE / BILL
+      {d.showCopyLabel && settings.invoiceCopyLabel && (
+        <div className="flex justify-end -mt-1 mb-1">
+          <span className="text-[0.7em] tracking-[0.18em] font-semibold border border-neutral-400 rounded px-2 py-0.5 text-neutral-600">
+            {settings.invoiceCopyLabel}
           </span>
         </div>
       )}
 
-      <div className="text-center">
-        {d.showBusinessName && (
-          <div className="font-display text-[2.1em] font-bold leading-tight tracking-tight">
-            {settings.businessName}
-          </div>
-        )}
-        {/* Which outlet the goods actually left from. On a multi-shop business
-            this is the difference between a bill you can trace and one you
-            can't, so it is set in the same ink as the business name. */}
-        {d.showShopName && data.shopName && (
-          <div className="text-[1em] font-semibold">{data.shopName}</div>
-        )}
-        <div className="text-[0.85em] text-muted-foreground">
-          {[d.showAddress && settings.address, d.showPhone && settings.phone]
-            .filter(Boolean)
-            .join("  ·  ")}
+      {/* A returned sale keeps its bill — the goods came back and the paperwork
+          has to say so, or the copy in the buyer's file still reads as a debt. */}
+      {data.status === "Returned" && (
+        <div className="mb-3 text-center border border-red-600 text-red-700 rounded-md py-1 text-[0.9em] font-bold tracking-[0.15em]">
+          RETURNED — CANCELLED
         </div>
-        {d.showTaxNumber && settings.taxNumber && (
-          <div className="text-[0.85em] text-muted-foreground">NTN: {settings.taxNumber}</div>
-        )}
-      </div>
+      )}
 
-      {/* ----------------------------------------------- who, and which bill */}
-      <div className="mt-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
-        <div className="space-y-1 min-w-0 max-w-[60%]">
-          {d.showInvoiceNo && (
-            <Written label="S.No." value={data.invoice} className="font-semibold" />
+      {/*
+        ------------------------------------------------------------ header
+
+        `split` is how a printed invoice is actually laid out: who is sending it
+        down the left in labelled lines, a rule under it, and the document's
+        name centred beneath that. Centring the whole block stacked the name,
+        the branch and the address down the middle with the title floating above
+        them — which reads as a flyer, not a business document.
+
+        The right of the split band is deliberately empty: that is where a logo
+        goes.
+      */}
+      {split ? (
+        <>
+          <div className="flex items-start justify-between gap-6">
+            <div className="min-w-0">
+              {d.showBusinessName && (
+                <div className="font-display text-[1.6em] font-bold leading-none tracking-tight">
+                  {settings.businessName}
+                </div>
+              )}
+              {d.showShopName && data.shopName && (
+                <div className="text-[0.95em] font-semibold mt-1">{data.shopName}</div>
+              )}
+              {/* One labelled line each, as a letterhead is written — not a
+                  run-on line with separators, which is a caption. */}
+              <div className="mt-1 space-y-0.5 text-[0.82em] text-neutral-600">
+                {d.showAddress && settings.address && <div>{settings.address}</div>}
+                {d.showPhone && settings.phone && <div>Phone no.: {settings.phone}</div>}
+                {d.showTaxNumber && settings.taxNumber && <div>NTN No.: {settings.taxNumber}</div>}
+              </div>
+            </div>
+            {/* Reserved for the logo. */}
+            <div className="shrink-0" />
+          </div>
+
+          <div className="mt-3 border-t-2" style={{ borderColor: accent }} />
+
+          {d.showBillTag && settings.invoiceTitle && (
+            <div
+              className="text-center font-bold text-[1.3em] mt-2 tracking-wide"
+              style={{ color: accent }}
+            >
+              {settings.invoiceTitle}
+            </div>
           )}
-          {d.showCustomer && (
-            <Written
-              label="M/s"
-              value={data.customer?.trim() || WALK_IN}
-              className="font-semibold"
-              wide
-            />
+        </>
+      ) : (
+        <div className={d.headerAlign === "left" ? "text-left" : "text-center"}>
+          {titleTab && <div className="flex justify-center mb-2">{titleTab}</div>}
+
+          {d.showBusinessName && (
+            <div className="font-display text-[2.1em] font-bold leading-none tracking-tight">
+              {settings.businessName}
+            </div>
           )}
-          {d.showCustomerPhone && data.customerPhone && (
-            <Written label="Phone" value={data.customerPhone} />
+          {/* Which outlet the goods actually left from. On a multi-shop business
+              this is the difference between a bill you can trace and one you
+              can't, so it is set in the same ink as the business name. */}
+          {d.showShopName && data.shopName && (
+            <div className="text-[1em] font-semibold mt-1">{data.shopName}</div>
+          )}
+          <div className={`text-[0.85em] ${muted} mt-0.5`}>
+            {[d.showAddress && settings.address, d.showPhone && settings.phone]
+              .filter(Boolean)
+              .join("  ·  ")}
+          </div>
+          {d.showTaxNumber && settings.taxNumber && (
+            <div className={`text-[0.85em] ${muted}`}>NTN: {settings.taxNumber}</div>
           )}
         </div>
-        <div className="space-y-1 text-right shrink-0">
-          {d.showDate && <Written label="Date" value={billDate(data.at)} />}
-          {d.showCashier && <Written label="By" value={data.cashier} />}
-        </div>
-      </div>
+      )}
 
       {settings.invoiceNote && (
-        <p className="mt-3 text-[0.85em] text-muted-foreground">{settings.invoiceNote}</p>
+        <p className={`mt-3 text-[0.85em] ${muted}`}>{settings.invoiceNote}</p>
       )}
 
       {/*
@@ -181,39 +230,51 @@ export function Invoice({
         <table className="w-full min-w-[30rem] table-fixed border-collapse tabular-nums">
           <thead>
             <tr className="text-center">
-              {d.showLineNumbers && <th className={`${headCell} w-10`}>#</th>}
-              <th className={`${headCell} w-16`}>Qty</th>
-              <th className={headCell}>Particulars</th>
-              {d.showUnitRate && <th className={`${headCell} w-24`}>Rate</th>}
+              {d.showLineNumbers && (
+                <th className={`${headCell} w-10`} style={headStyle}>
+                  #
+                </th>
+              )}
+              <th className={`${headCell} w-16`} style={headStyle}>
+                Qty
+              </th>
+              <th className={headCell} style={headStyle}>
+                Particulars
+              </th>
+              {d.showUnitRate && (
+                <th className={`${headCell} w-24`} style={headStyle}>
+                  Rate
+                </th>
+              )}
               {/* The one place the currency is named, so a bill is never a page of
                 bare numbers — and never says Rs when Settings says otherwise. */}
-              <th className={`${headCell} w-28`}>Amount ({settings.currency})</th>
+              <th className={`${headCell} w-28`} style={headStyle}>
+                Amount ({settings.currency})
+              </th>
             </tr>
           </thead>
           <tbody>
             {data.lines.map((l, i) => (
               <tr key={i}>
                 {d.showLineNumbers && (
-                  <td className={`${cellBorder} px-2 py-1.5 text-center text-muted-foreground`}>
-                    {i + 1}
-                  </td>
+                  <td className={`${cellBorder} ${pad} text-center ${muted}`}>{i + 1}</td>
                 )}
-                <td className={`${cellBorder} px-2 py-1.5 text-center`}>
+                <td className={`${cellBorder} ${pad} text-center`}>
                   {String(l.qty).padStart(2, "0")}
                 </td>
-                <td className={`${cellBorder} px-2 py-1.5 break-words`}>{l.name}</td>
+                <td className={`${cellBorder} ${pad} break-words`}>{l.name}</td>
                 {d.showUnitRate && (
-                  <td className={`${cellBorder} px-2 py-1.5 text-right`}>{billNumber(l.rate)}</td>
+                  <td className={`${cellBorder} ${pad} text-right`}>{billNumber(l.rate)}</td>
                 )}
-                <td className={`${cellBorder} px-2 py-1.5 text-right font-medium`}>
+                <td className={`${cellBorder} ${pad} text-right font-medium`}>
                   {billNumber(l.qty * l.rate)}
                 </td>
               </tr>
             ))}
             {Array.from({ length: blanks }).map((_, i) => (
               <tr key={`blank-${i}`}>
-                {d.showLineNumbers && <td className={`${cellBorder} px-2 py-1.5`}>&nbsp;</td>}
-                <td className={`${cellBorder} px-2 py-1.5`}>&nbsp;</td>
+                {d.showLineNumbers && <td className={`${cellBorder} ${pad}`}>&nbsp;</td>}
+                <td className={`${cellBorder} ${pad}`}>&nbsp;</td>
                 <td className={cellBorder}>&nbsp;</td>
                 {d.showUnitRate && <td className={cellBorder}>&nbsp;</td>}
                 <td className={cellBorder}>&nbsp;</td>
@@ -260,21 +321,23 @@ export function Invoice({
 
       {/* The one figure read aloud on the phone, spelled out in words as well —
           "one lakh twenty" and "120,000" disagreeing is how bills get disputed. */}
-      <div className="mt-2 text-[0.85em] text-muted-foreground">
-        Amount in words:{" "}
-        <span className="text-foreground">
-          {amountInWords(Math.abs(data.account?.closingBalance ?? data.total), settings.currency)}
-        </span>
-      </div>
+      {d.showAmountInWords && (
+        <div className={`mt-2 text-[0.85em] ${muted}`}>
+          Amount in words:{" "}
+          <span className="text-neutral-900">
+            {amountInWords(Math.abs(data.account?.closingBalance ?? data.total), settings.currency)}
+          </span>
+        </div>
+      )}
 
       <div className="mt-5 flex items-end justify-between gap-6">
-        <div className="text-[0.85em] text-muted-foreground max-w-[60%]">
+        <div className={`text-[0.85em] ${muted} max-w-[60%]`}>
           {d.showTerms && settings.invoiceTerms}
         </div>
         {d.showSignature && (
           <div className="text-center shrink-0">
-            <div className="w-40 border-b border-foreground/40 h-8" />
-            <div className="text-[0.8em] text-muted-foreground mt-1">Authorised signature</div>
+            <div className="w-40 border-b border-neutral-400 h-8" />
+            <div className={`text-[0.8em] ${muted} mt-1`}>{settings.invoiceSignatory}</div>
           </div>
         )}
       </div>
@@ -296,12 +359,12 @@ function Written({
 }) {
   return (
     <div className="flex items-end gap-2 min-w-0">
-      <span className="text-muted-foreground shrink-0">{label}</span>
+      <span className="text-neutral-500 shrink-0">{label}</span>
       {/* One width class, not two: `min-w-0` alongside `min-w-[14rem]` left the
           winner up to stylesheet order, and a trade name that overflowed its
           rule ran straight into the date on the other side of the row. */}
       <span
-        className={`border-b border-dotted border-foreground/40 truncate ${wide ? "basis-56" : "basis-24"} ${className}`}
+        className={`border-b border-dotted border-neutral-400 truncate ${wide ? "basis-56" : "basis-24"} ${className}`}
       >
         {value}
       </span>
@@ -321,18 +384,19 @@ function SummaryRow({
   value: string;
   strong?: boolean;
 }) {
-  const border = "border border-foreground/25";
+  const border = "border border-neutral-300";
+  const pad = ROW_PAD[design.density];
   const span = (design.showLineNumbers ? 1 : 0) + (design.showUnitRate ? 1 : 0) + 2; // qty + particulars
   return (
     <tr>
       <td
         colSpan={span}
-        className={`${border} px-2 py-1.5 text-right ${strong ? "font-bold" : "font-medium"}`}
+        className={`${border} ${pad} text-right ${strong ? "font-bold" : "font-medium"}`}
       >
         {label}
       </td>
       <td
-        className={`${border} px-2 py-1.5 text-right tabular-nums ${strong ? "font-bold text-[1.05em]" : ""}`}
+        className={`${border} ${pad} text-right tabular-nums ${strong ? "font-bold text-[1.05em]" : ""}`}
       >
         {value}
       </td>

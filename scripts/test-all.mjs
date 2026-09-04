@@ -1813,6 +1813,30 @@ it("figures are grouped the same way wherever they are rendered", () => {
   eq(BillView.billDate(new Date(2026, 7, 28)), "28/08/2026", "day-first dates");
 });
 
+it("every bill ink has a colour for both renderers", () => {
+  // The screen uses the hex, the PDF the rgb triple. A choice that exists in
+  // the settings list but not here would render as a silent fallback to navy.
+  for (const key of Object.keys(T.INVOICE_ACCENTS)) {
+    const ink = T.INVOICE_ACCENTS[key];
+    ok(/^#[0-9a-f]{6}$/i.test(ink.hex), `${key} has a hex for the screen`);
+    eq(ink.rgb.length, 3, `${key} has an rgb triple for the PDF`);
+    ok(ink.label.length > 0, `${key} has a name for the picker`);
+  }
+  ok(T.INVOICE_ACCENTS[seed.DEFAULT_SETTINGS.invoice.accentColor], "the default ink exists");
+});
+
+it("a fresh install has every bill option set", () => {
+  // A missing key reads as `undefined`, which is falsy — a new toggle would
+  // silently default to OFF for every existing shop.
+  for (const [key, value] of Object.entries(T.DEFAULT_INVOICE)) {
+    ok(value !== undefined, `${key} has a default`);
+  }
+  eq(typeof seed.DEFAULT_SETTINGS.invoiceTitle, "string", "the tab title");
+  eq(typeof seed.DEFAULT_SETTINGS.invoiceSignatory, "string", "the signature line");
+  eq(typeof seed.DEFAULT_SETTINGS.invoiceCopyLabel, "string", "the copy stamp");
+  ok(T.DEFAULT_INVOICE.ruledRowCount > 0, "a short bill is padded out by default");
+});
+
 it("every demo credit sale produces a bill that reconciles", () => {
   const data = { sales: S.sales, customerPayments: S.customerPayments, setOffs: S.setOffs, adjustments: [] };
   let checked = 0;
