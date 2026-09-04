@@ -173,12 +173,14 @@ function AdminSignIn() {
           ) : (
             <>
               <div className="space-y-2">
+                {/* The length is a project setting (Authentication -> Email ->
+                    Email OTP length), so the field does not claim a number. */}
                 <Label htmlFor="reset-code">Code from the email</Label>
                 <Input
                   id="reset-code"
                   inputMode="numeric"
                   autoComplete="one-time-code"
-                  placeholder="6 digits"
+                  placeholder="Code"
                   className="tracking-[0.3em] text-center font-medium"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
