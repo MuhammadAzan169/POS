@@ -49,10 +49,24 @@ function AccountPage() {
         <Card className="p-6">
           <h3 className="font-semibold mb-4">Profile</h3>
           <div className="grid sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5"><Label>Name</Label><Input value={user.name} readOnly /></div>
-            <div className="space-y-1.5"><Label>Email</Label><Input value={user.email} readOnly /></div>
-            <div className="space-y-1.5"><Label>Role</Label><Input value={user.role} readOnly /></div>
-            {shop && <div className="space-y-1.5"><Label>Shop</Label><Input value={shop.name} readOnly /></div>}
+            <div className="space-y-1.5">
+              <Label>Name</Label>
+              <Input value={user.name} readOnly />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email</Label>
+              <Input value={user.email} readOnly />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Role</Label>
+              <Input value={user.role} readOnly />
+            </div>
+            {shop && (
+              <div className="space-y-1.5">
+                <Label>Shop</Label>
+                <Input value={shop.name} readOnly />
+              </div>
+            )}
           </div>
         </Card>
         {/*
@@ -75,11 +89,20 @@ function AccountPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Current password</Label>
-              <PasswordInput value={current} onChange={setCurrent} autoComplete="current-password" />
+              <PasswordInput
+                value={current}
+                onChange={setCurrent}
+                autoComplete="current-password"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>New password</Label>
-              <PasswordInput value={pw} onChange={setPw} autoComplete="new-password" minLength={8} />
+              <PasswordInput
+                value={pw}
+                onChange={setPw}
+                autoComplete="new-password"
+                minLength={8}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Confirm</Label>
