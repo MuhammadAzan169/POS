@@ -80,9 +80,6 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
     splitText(ascii(value), size, options)) as typeof doc.splitTextToSize;
 
   const accent = INVOICE_ACCENTS[d.accentColor] ?? INVOICE_ACCENTS.navy;
-  // Only the centred arrangement centres. `!== "left"` was true for `split`
-  // too, which quietly centred the letterhead it was supposed to move left.
-  const centred = d.headerAlign === "center";
 
   const base = BASE_SIZE[d.fontSize];
   const left = MARGIN;
@@ -111,23 +108,6 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
 
   /* ------------------------------------------------------------- the header */
 
-  /**
-   * Draws the title tab and hands back how wide it is, so a caller that wants
-   * it beside the letterhead can lay the two out against each other.
-   */
-  const drawTitleTab = (atY: number, anchor: "left" | "center" | "right") => {
-    const label = settings.invoiceTitle;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(base - 1);
-    const w = doc.getTextWidth(label) + 10;
-    const x = anchor === "center" ? (page.w - w) / 2 : anchor === "right" ? right - w : left;
-    doc.setFillColor(...accent.rgb);
-    doc.roundedRect(x, atY - 1, w, 7, 3.5, 3.5, "F");
-    doc.setTextColor(255);
-    doc.text(label, x + w / 2, atY + 3.6, { align: "center" });
-    return w;
-  };
-
   if (d.showCopyLabel && settings.invoiceCopyLabel) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(base - 2);
@@ -151,76 +131,64 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
   }
 
   /*
-   * The letterhead.
-   *
-   * `split` is how a printed invoice is actually laid out: who is sending it
-   * down the left in labelled lines, a rule under it, and the document's name
-   * centred beneath that. Centring the whole block stacked the name, the branch
-   * and the address down the middle of the sheet with the title floating above
-   * them, which reads as a flyer rather than as a business document.
-   *
-   * The right of the split band is deliberately left empty — that is where a
-   * logo goes.
+   * The letterhead: who is sending it down the left, the shop's mark in the
+   * right corner, a rule under both, the document's name centred beneath.
    */
-  const split = d.headerAlign === "split";
-  const headX = centred ? page.w / 2 : left;
-  const headAlign = centred ? ("center" as const) : ("left" as const);
-
-  // Above the letterhead in both stacked arrangements; under the rule in split.
-  if (d.showBillTag && settings.invoiceTitle && !split) {
-    drawTitleTab(y, "center");
-    y += 12;
-  }
+  const headTop = y;
 
   if (d.showBusinessName) {
     // Advance by the type's own height rather than a guessed constant: at 21pt
     // the old figure left a visible hole between the name and the branch.
-    const size = split ? base + 6 : base + 11;
-    text(settings.businessName, headX, { size, bold: true, align: headAlign });
+    const size = base + 6;
+    text(settings.businessName, left, { size, bold: true });
     y += size * 0.36 + 1.8;
   }
   if (d.showShopName && data.shopName) {
-    // Which outlet the goods left from. On a multi-shop business this is the
-    // difference between a bill you can trace and one you can't.
-    text(data.shopName, headX, { size: base + 1, bold: true, align: headAlign });
+    text(data.shopName, left, { size: base + 1, bold: true });
     y += 4.8;
   }
+  for (const line of [
+    d.showAddress && settings.address ? settings.address : "",
+    d.showPhone && settings.phone ? `Phone no.: ${settings.phone}` : "",
+    d.showTaxNumber && settings.taxNumber ? `NTN No.: ${settings.taxNumber}` : "",
+  ].filter(Boolean)) {
+    text(line, left, { size: base - 1 });
+    y += 4.4;
+  }
 
-  if (split) {
-    // One labelled line each, as a letterhead is written — not a run-on line
-    // with separators, which is a caption, not an address block.
-    const lines = [
-      d.showAddress && settings.address ? settings.address : "",
-      d.showPhone && settings.phone ? `Phone no.: ${settings.phone}` : "",
-      d.showTaxNumber && settings.taxNumber ? `NTN No.: ${settings.taxNumber}` : "",
-    ].filter(Boolean);
-    for (const line of lines) {
-      text(line, left, { size: base - 1, align: "left" });
-      y += 4.4;
-    }
-  } else {
-    const contact = [d.showAddress && settings.address, d.showPhone && settings.phone]
-      .filter(Boolean)
-      .join("   ·   ");
-    if (contact) {
-      text(contact, headX, { size: base - 1, align: headAlign, grey: true });
-      y += 4.2;
-    }
-    if (d.showTaxNumber && settings.taxNumber) {
-      text(`NTN: ${settings.taxNumber}`, headX, { size: base - 1, align: headAlign, grey: true });
-      y += 4.2;
+  if (d.showLogo && settings.invoiceLogo) {
+    /*
+     * Fitted inside a fixed box rather than placed at its own size: a logo is
+     * whatever pixels someone uploaded, and one 2,000px wide would otherwise be
+     * drawn two metres across. The aspect ratio is read from the image so a
+     * wide mark and a square one are both contained rather than squashed.
+     *
+     * Wrapped because a corrupt or unsupported data URL throws inside jsPDF,
+     * and a bill that cannot be produced at all is far worse than one printed
+     * without its logo.
+     */
+    try {
+      const boxW = 34;
+      const boxH = 18;
+      const props = doc.getImageProperties(settings.invoiceLogo);
+      const scale = Math.min(boxW / props.width, boxH / props.height);
+      const w = props.width * scale;
+      const h = props.height * scale;
+      doc.addImage(settings.invoiceLogo, right - w, headTop, w, h, undefined, "FAST");
+      y = Math.max(y, headTop + h + 1);
+    } catch {
+      // Printed without it.
     }
   }
 
   y += 3;
-  doc.setDrawColor(...(split ? accent.rgb : ([180, 180, 180] as [number, number, number])));
-  doc.setLineWidth(split ? 0.4 : 0.2);
+  doc.setDrawColor(...accent.rgb);
+  doc.setLineWidth(0.4);
   doc.line(left, y, right, y);
   doc.setLineWidth(0.2);
-  y += split ? 7 : 6;
+  y += 7;
 
-  if (split && d.showBillTag && settings.invoiceTitle) {
-    // The document's name, centred under the rule and set in the shop's ink.
+  if (d.showBillTag && settings.invoiceTitle) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(base + 4);
     doc.setTextColor(...accent.rgb);

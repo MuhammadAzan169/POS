@@ -666,5 +666,6 @@ export const DEFAULT_SETTINGS: Settings = {
   invoiceTitle: "INVOICE / BILL",
   invoiceSignatory: "Authorised signature",
   invoiceCopyLabel: "ORIGINAL",
+  invoiceLogo: "",
   invoice: DEFAULT_INVOICE,
 };

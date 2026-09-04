@@ -947,15 +947,8 @@ export interface InvoiceDesign {
   showCopyLabel: boolean;
   paperSize: "A4" | "A5";
   fontSize: "sm" | "md" | "lg";
-  /**
-   * How the top of the bill is arranged.
-   *
-   * `split` puts who is sending it down the left and what the document is on
-   * the right, which is what a printed invoice does. `center` is the bill-book
-   * look. `left` stacks everything against the left margin with the title tab
-   * still centred above it.
-   */
-  headerAlign: "center" | "left" | "split";
+  /** The shop's mark, in the top right. */
+  showLogo: boolean;
   /** How tall the ruled rows are. Compact fits about a third more on a sheet. */
   density: "compact" | "normal";
   accent: "ink" | "plain";
@@ -970,7 +963,10 @@ export interface InvoiceDesign {
 }
 
 /** The accent choices, as ink. Shared by the screen and the PDF. */
-export const INVOICE_ACCENTS: Record<InvoiceDesign["accentColor"], { hex: string; rgb: [number, number, number]; label: string }> = {
+export const INVOICE_ACCENTS: Record<
+  InvoiceDesign["accentColor"],
+  { hex: string; rgb: [number, number, number]; label: string }
+> = {
   navy: { hex: "#172554", rgb: [23, 37, 84], label: "Navy" },
   black: { hex: "#111827", rgb: [17, 24, 39], label: "Black" },
   green: { hex: "#14532d", rgb: [20, 83, 45], label: "Green" },
@@ -1000,7 +996,7 @@ export const DEFAULT_INVOICE: InvoiceDesign = {
   showCopyLabel: false,
   paperSize: "A4",
   fontSize: "md",
-  headerAlign: "split",
+  showLogo: true,
   density: "normal",
   accent: "ink",
   accentColor: "navy",
@@ -1075,5 +1071,14 @@ export interface Settings {
   invoiceSignatory: string;
   /** The corner stamp, when it is switched on. */
   invoiceCopyLabel: string;
+  /**
+   * The shop's logo, as a data URL, printed in the top right of a bill.
+   *
+   * Held inline rather than as a link to a file somewhere: a bill has to render
+   * identically in the browser, in the print dialog and inside a PDF that gets
+   * emailed on, and a URL would need all three to be able to reach the host.
+   * Uploads are downscaled before they land here — see the Settings page.
+   */
+  invoiceLogo: string;
   invoice: InvoiceDesign;
 }

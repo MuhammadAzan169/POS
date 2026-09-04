@@ -1825,6 +1825,13 @@ it("every bill ink has a colour for both renderers", () => {
   ok(T.INVOICE_ACCENTS[seed.DEFAULT_SETTINGS.invoice.accentColor], "the default ink exists");
 });
 
+it("a bill with no logo set prints without one", () => {
+  const sale = billSale();
+  const inv = Bill.buildInvoice(sale, ledgerWith([sale]), { customer: TRADER });
+  eq(seed.DEFAULT_SETTINGS.invoiceLogo, "", "a fresh install has no logo");
+  ok(inv.lines.length > 0, "and the bill is still a bill without one");
+});
+
 it("a fresh install has every bill option set", () => {
   // A missing key reads as `undefined`, which is falsy — a new toggle would
   // silently default to OFF for every existing shop.

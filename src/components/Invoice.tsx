@@ -103,17 +103,6 @@ export function Invoice({
   const headCell = `${cellBorder} ${pad} font-semibold ${ink ? "text-white" : "bg-neutral-100"}`;
   const headStyle = ink ? { backgroundColor: accent } : undefined;
   const muted = "text-neutral-500";
-  const split = d.headerAlign === "split";
-
-  const titleTab =
-    d.showBillTag && settings.invoiceTitle ? (
-      <span
-        className={`inline-block text-[0.75em] tracking-[0.2em] font-semibold px-4 py-1 rounded-full ${ink ? "text-white" : "border border-neutral-400"}`}
-        style={ink ? { backgroundColor: accent } : undefined}
-      >
-        {settings.invoiceTitle}
-      </span>
-    ) : null;
 
   return (
     /*
@@ -144,73 +133,52 @@ export function Invoice({
       {/*
         ------------------------------------------------------------ header
 
-        `split` is how a printed invoice is actually laid out: who is sending it
-        down the left in labelled lines, a rule under it, and the document's
-        name centred beneath that. Centring the whole block stacked the name,
-        the branch and the address down the middle with the title floating above
-        them — which reads as a flyer, not a business document.
-
-        The right of the split band is deliberately empty: that is where a logo
-        goes.
+        One arrangement, the one a printed invoice actually uses: who is sending
+        it down the left in labelled lines, the shop's mark in the right corner,
+        a rule under both, and the document's name centred beneath that. It was
+        briefly a choice of three, which only ever produced two worse bills.
       */}
-      {split ? (
-        <>
-          <div className="flex items-start justify-between gap-6">
-            <div className="min-w-0">
-              {d.showBusinessName && (
-                <div className="font-display text-[1.6em] font-bold leading-none tracking-tight">
-                  {settings.businessName}
-                </div>
-              )}
-              {d.showShopName && data.shopName && (
-                <div className="text-[0.95em] font-semibold mt-1">{data.shopName}</div>
-              )}
-              {/* One labelled line each, as a letterhead is written — not a
-                  run-on line with separators, which is a caption. */}
-              <div className="mt-1 space-y-0.5 text-[0.82em] text-neutral-600">
-                {d.showAddress && settings.address && <div>{settings.address}</div>}
-                {d.showPhone && settings.phone && <div>Phone no.: {settings.phone}</div>}
-                {d.showTaxNumber && settings.taxNumber && <div>NTN No.: {settings.taxNumber}</div>}
-              </div>
-            </div>
-            {/* Reserved for the logo. */}
-            <div className="shrink-0" />
-          </div>
-
-          <div className="mt-3 border-t-2" style={{ borderColor: accent }} />
-
-          {d.showBillTag && settings.invoiceTitle && (
-            <div
-              className="text-center font-bold text-[1.3em] mt-2 tracking-wide"
-              style={{ color: accent }}
-            >
-              {settings.invoiceTitle}
-            </div>
-          )}
-        </>
-      ) : (
-        <div className={d.headerAlign === "left" ? "text-left" : "text-center"}>
-          {titleTab && <div className="flex justify-center mb-2">{titleTab}</div>}
-
+      <div className="flex items-start justify-between gap-6">
+        <div className="min-w-0">
           {d.showBusinessName && (
-            <div className="font-display text-[2.1em] font-bold leading-none tracking-tight">
+            <div className="font-display text-[1.6em] font-bold leading-none tracking-tight">
               {settings.businessName}
             </div>
           )}
           {/* Which outlet the goods actually left from. On a multi-shop business
               this is the difference between a bill you can trace and one you
-              can't, so it is set in the same ink as the business name. */}
+              can't. */}
           {d.showShopName && data.shopName && (
-            <div className="text-[1em] font-semibold mt-1">{data.shopName}</div>
+            <div className="text-[0.95em] font-semibold mt-1">{data.shopName}</div>
           )}
-          <div className={`text-[0.85em] ${muted} mt-0.5`}>
-            {[d.showAddress && settings.address, d.showPhone && settings.phone]
-              .filter(Boolean)
-              .join("  ·  ")}
+          {/* One labelled line each, as a letterhead is written — not a run-on
+              line with separators, which is a caption. */}
+          <div className="mt-1 space-y-0.5 text-[0.82em] text-neutral-600">
+            {d.showAddress && settings.address && <div>{settings.address}</div>}
+            {d.showPhone && settings.phone && <div>Phone no.: {settings.phone}</div>}
+            {d.showTaxNumber && settings.taxNumber && <div>NTN No.: {settings.taxNumber}</div>}
           </div>
-          {d.showTaxNumber && settings.taxNumber && (
-            <div className={`text-[0.85em] ${muted}`}>NTN: {settings.taxNumber}</div>
-          )}
+        </div>
+
+        {d.showLogo && settings.invoiceLogo && (
+          // Bounded, never stretched: a wide mark and a square one both have to
+          // sit in this corner without pushing the address block around.
+          <img
+            src={settings.invoiceLogo}
+            alt=""
+            className="shrink-0 h-16 w-auto max-w-[9rem] object-contain"
+          />
+        )}
+      </div>
+
+      <div className="mt-3 border-t-2" style={{ borderColor: accent }} />
+
+      {d.showBillTag && settings.invoiceTitle && (
+        <div
+          className="text-center font-bold text-[1.3em] mt-2 tracking-wide"
+          style={{ color: accent }}
+        >
+          {settings.invoiceTitle}
         </div>
       )}
 
