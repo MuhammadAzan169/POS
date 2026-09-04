@@ -1860,6 +1860,186 @@ it("every demo credit sale produces a bill that reconciles", () => {
   ok(checked > 0, `bills were checked (${checked})`);
 });
 
+/* ====================================================== SETTINGS PIPELINE */
+
+describe("A bill setting reaches every place a bill is produced");
+
+/*
+ * The bill exists twice over: as React on screen (the Settings preview, the
+ * bill dialog, and what the Print button puts on paper) and as jsPDF drawing
+ * commands (the Download button). A setting that only reaches one of them is
+ * the bug this whole section exists to catch — the preview would promise
+ * something the file the customer receives does not do.
+ *
+ * So each option below is set to a value nothing else would produce, and then
+ * looked for in BOTH outputs.
+ */
+const React = (await import("react")).default;
+const { renderToStaticMarkup } = await import("react-dom/server");
+const InvoiceView = await import("../src/components/Invoice.tsx");
+const InvoicePdf = await import("../src/lib/invoice-pdf.ts");
+const { jsPDF } = await import("jspdf");
+
+const CUSTOM = {
+  ...seed.DEFAULT_SETTINGS,
+  businessName: "Zeeshan Trading Co",
+  currency: "AED",
+  address: "Blue Area, Islamabad",
+  phone: "0333-9998887",
+  taxNumber: "9988776-1",
+  invoiceTitle: "DELIVERY CHALLAN",
+  invoiceSignatory: "For Zeeshan Trading",
+  invoiceCopyLabel: "OFFICE COPY",
+  invoiceTerms: "Payment due within 30 days",
+  invoiceNote: "Against order dated 12/08",
+  invoice: {
+    ...seed.DEFAULT_SETTINGS.invoice,
+    accentColor: "maroon",
+    density: "compact",
+    ruledRowCount: 2,
+    showCopyLabel: true,
+    showLineNumbers: true,
+    showAmountInWords: false,
+  },
+};
+
+const PIPELINE_BILL = {
+  invoice: "INV-7788",
+  at: new Date(2026, 7, 28),
+  shopName: "Blue Area Branch",
+  cashier: "Owner",
+  customer: "Rehmat Stores",
+  customerPhone: "0301-1112223",
+  payment: "Credit",
+  status: "Completed",
+  lines: [{ name: "Chand Maxi", qty: 7, rate: 2300 }],
+  subtotal: 16100,
+  discount: 0,
+  total: 16100,
+  account: { previousBalance: 5000, onAccount: 16100, received: 1000, closingBalance: 20100 },
+};
+
+const screen = renderToStaticMarkup(
+  React.createElement(InvoiceView.Invoice, { data: PIPELINE_BILL, settings: CUSTOM }),
+);
+
+/** The same bill as PDF, reduced to the strings it actually draws. */
+async function pdfStrings(settings) {
+  let text = [];
+  const realSave = jsPDF.API.save;
+  jsPDF.API.save = function () {
+    const raw = Buffer.from(this.output("arraybuffer")).toString("latin1");
+    const streams = [...raw.matchAll(/stream\r?\n([\s\S]*?)endstream/g)].map((m) => m[1]).join("");
+    // PDF string literals escape their own parentheses and backslashes, so
+    // "Amount (AED)" is stored as "Amount \(AED\)". Undone here, or every
+    // assertion about a bracketed label would fail for the wrong reason.
+    text = [...streams.matchAll(/\((.*?)\) Tj/g)].map((m) =>
+      m[1].replace(/\\([()\\])/g, "$1"),
+    );
+    return this;
+  };
+  await InvoicePdf.downloadInvoicePdf(PIPELINE_BILL, settings);
+  jsPDF.API.save = realSave;
+  return text.join(" | ");
+}
+const paper = await pdfStrings(CUSTOM);
+
+const inBoth = (needle, what) => {
+  ok(screen.includes(needle), `${what} reaches the screen`);
+  ok(paper.includes(needle), `${what} reaches the PDF`);
+};
+
+it("the business details follow Settings", () => {
+  inBoth("Zeeshan Trading Co", "the business name");
+  inBoth("Blue Area, Islamabad", "the address");
+  inBoth("0333-9998887", "the phone");
+  inBoth("9988776-1", "the NTN");
+  inBoth("Blue Area Branch", "the shop the goods left from");
+});
+
+it("the wording is whatever the owner typed", () => {
+  inBoth("DELIVERY CHALLAN", "the title");
+  inBoth("For Zeeshan Trading", "the signatory");
+  inBoth("OFFICE COPY", "the copy stamp");
+  inBoth("Payment due within 30 days", "the terms");
+  inBoth("Against order dated 12/08", "the note above the items");
+});
+
+it("the currency is named on both", () => {
+  inBoth("Amount (AED)", "the currency in the Amount column");
+});
+
+it("switching a block off removes it from both", () => {
+  ok(!screen.includes("Amount in words"), "the words line is off on screen");
+  ok(!paper.includes("Amount in words"), "the words line is off on paper");
+});
+
+it("switching a block on adds it to both", () => {
+  // Line numbers are off by default; the custom settings turn them on.
+  ok(screen.includes(">#<"), "the # column is on screen");
+  ok(paper.includes("#"), "the # column is on paper");
+});
+
+it("the account block carries the same figures on both", () => {
+  for (const figure of ["5,000", "21,100", "1,000", "20,100"]) {
+    inBoth(figure, `the figure ${figure}`);
+  }
+});
+
+it("the chosen ink is used by both", async () => {
+  // Screen: the hex on the rule. PDF: the same colour as a fill operator.
+  const maroon = T.INVOICE_ACCENTS.maroon;
+  ok(screen.includes(maroon.hex), `the screen draws in ${maroon.hex}`);
+
+  let raw = "";
+  const realSave = jsPDF.API.save;
+  jsPDF.API.save = function () {
+    raw = Buffer.from(this.output("arraybuffer")).toString("latin1");
+    return this;
+  };
+  await InvoicePdf.downloadInvoicePdf(PIPELINE_BILL, CUSTOM);
+  jsPDF.API.save = realSave;
+
+  const asPdf = maroon.rgb.map((n) => (n / 255).toFixed(2).replace(/0$/, "")).join(" ");
+  ok(raw.includes(asPdf) || raw.includes(maroon.rgb.map((n) => n / 255).join(" ")), "the PDF fills in the same ink");
+});
+
+it("a logo set in Settings is embedded in the PDF and shown on screen", async () => {
+  // A 1x1 PNG is enough: what is being tested is that the setting is read at
+  // all, not what the pixels are.
+  const dot =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const withLogo = { ...CUSTOM, invoiceLogo: dot };
+
+  const html = renderToStaticMarkup(
+    React.createElement(InvoiceView.Invoice, { data: PIPELINE_BILL, settings: withLogo }),
+  );
+  ok(html.includes(dot), "the logo is on the screen bill");
+
+  let raw = "";
+  const realSave = jsPDF.API.save;
+  jsPDF.API.save = function () {
+    raw = Buffer.from(this.output("arraybuffer")).toString("latin1");
+    return this;
+  };
+  await InvoicePdf.downloadInvoicePdf(PIPELINE_BILL, withLogo);
+  jsPDF.API.save = realSave;
+  ok(/\/Subtype\s*\/Image/.test(raw), "and embedded as an image in the PDF");
+});
+
+it("no logo set leaves both bills without one", async () => {
+  ok(!screen.includes("<img"), "nothing is drawn on screen");
+  let raw = "";
+  const realSave = jsPDF.API.save;
+  jsPDF.API.save = function () {
+    raw = Buffer.from(this.output("arraybuffer")).toString("latin1");
+    return this;
+  };
+  await InvoicePdf.downloadInvoicePdf(PIPELINE_BILL, CUSTOM);
+  jsPDF.API.save = realSave;
+  ok(!/\/Subtype\s*\/Image/.test(raw), "and no image is embedded");
+});
+
 /* ================================================================ REPORT */
 
 console.log(`\n${"=".repeat(60)}`);
