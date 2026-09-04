@@ -160,7 +160,9 @@ export function Invoice({
         a rule under both, and the document's name centred beneath that. It was
         briefly a choice of three, which only ever produced two worse bills.
       */}
-      <div className="flex items-start justify-between gap-6">
+      {/* items-center, not items-start: whichever half is taller, the two sit
+          level with each other rather than one hanging past the other. */}
+      <div className="flex items-center justify-between gap-6">
         <div className="min-w-0">
           {d.showBusinessName && (
             <div className="font-display text-[1.6em] font-bold leading-none tracking-tight">

@@ -149,51 +149,97 @@ export async function buildInvoicePdf(data: InvoiceData, settings: Settings) {
    */
   const headTop = y;
 
+  /*
+   * The two halves of the letterhead are measured before either is drawn, so
+   * they can be centred against each other.
+   *
+   * Drawing the text from the top and then dropping the logo at the same line
+   * left whichever was taller hanging past the other — with a square mark and
+   * four lines of address, the logo sat a centimetre below the last line and
+   * read as though it had slipped.
+   */
+  const headLines: { text: string; size: number; bold?: boolean; gap: number }[] = [];
   if (d.showBusinessName) {
+    const size = base + 6;
     // Advance by the type's own height rather than a guessed constant: at 21pt
     // the old figure left a visible hole between the name and the branch.
-    const size = base + 6;
-    text(settings.businessName, left, { size, bold: true });
-    y += size * 0.36 + 1.8;
+    headLines.push({ text: settings.businessName, size, bold: true, gap: size * 0.36 + 1.8 });
   }
   if (d.showShopName && data.shopName) {
-    text(data.shopName, left, { size: base + 1, bold: true });
-    y += 4.8;
+    headLines.push({ text: data.shopName, size: base + 1, bold: true, gap: 4.8 });
   }
   for (const line of [
     d.showAddress && settings.address ? settings.address : "",
     d.showPhone && settings.phone ? `Phone no.: ${settings.phone}` : "",
     d.showTaxNumber && settings.taxNumber ? `NTN No.: ${settings.taxNumber}` : "",
   ].filter(Boolean)) {
-    text(line, left, { size: base - 1 });
-    y += 4.4;
+    headLines.push({ text: line, size: base - 1, gap: 4.4 });
   }
+  /*
+   * The height the text actually OCCUPIES, which is not the sum of its gaps.
+   *
+   * Text is placed by its baseline, so the block starts a cap-height above the
+   * first one; and the last line's gap is trailing space below it, not ink.
+   * Counting both put the block 2.2mm high of the logo — close enough to look
+   * like a mistake rather than a measurement.
+   */
+  const PT_TO_MM = 0.3528;
+  const capHeight = (size: number) => size * 0.7 * PT_TO_MM;
+  const firstAscent = headLines.length > 0 ? capHeight(headLines[0].size) : 0;
+  const textH = firstAscent + headLines.slice(0, -1).reduce((a, l) => a + l.gap, 0);
 
+  /*
+   * Fitted inside a fixed box rather than placed at its own size: a logo is
+   * whatever pixels someone uploaded, and one 2,000px wide would otherwise be
+   * drawn two metres across. The aspect ratio is read from the image so a wide
+   * mark and a square one are both contained rather than squashed.
+   *
+   * Measured inside a try because a corrupt or unsupported data URL throws
+   * inside jsPDF, and a bill that cannot be produced at all is far worse than
+   * one printed without its logo.
+   */
   const logo = data.logo || settings.invoiceLogo;
+  let logoBox: { w: number; h: number } | null = null;
   if (d.showLogo && logo) {
-    /*
-     * Fitted inside a fixed box rather than placed at its own size: a logo is
-     * whatever pixels someone uploaded, and one 2,000px wide would otherwise be
-     * drawn two metres across. The aspect ratio is read from the image so a
-     * wide mark and a square one are both contained rather than squashed.
-     *
-     * Wrapped because a corrupt or unsupported data URL throws inside jsPDF,
-     * and a bill that cannot be produced at all is far worse than one printed
-     * without its logo.
-     */
     try {
       // mm, matched to the on-screen boxes so the preview predicts the print.
       const [boxW, boxH] = { sm: [42, 22], md: [56, 32], lg: [70, 42] }[d.logoSize] ?? [56, 32];
       const props = doc.getImageProperties(logo);
       const scale = Math.min(boxW / props.width, boxH / props.height);
-      const w = props.width * scale;
-      const h = props.height * scale;
-      doc.addImage(logo, right - w, headTop, w, h, undefined, "FAST");
-      y = Math.max(y, headTop + h + 1);
+      logoBox = { w: props.width * scale, h: props.height * scale };
+    } catch {
+      logoBox = null;
+    }
+  }
+
+  // The band is as tall as its tallest half; each half is then centred in it.
+  const bandH = Math.max(textH, logoBox?.h ?? 0);
+
+  // + firstAscent, because `y` here is a baseline and the block's top edge is a
+  // cap-height above it.
+  y = headTop + (bandH - textH) / 2 + firstAscent;
+  for (const line of headLines) {
+    text(line.text, left, { size: line.size, bold: line.bold });
+    y += line.gap;
+  }
+
+  if (logoBox) {
+    try {
+      doc.addImage(
+        logo,
+        right - logoBox.w,
+        headTop + (bandH - logoBox.h) / 2,
+        logoBox.w,
+        logoBox.h,
+        undefined,
+        "FAST",
+      );
     } catch {
       // Printed without it.
     }
   }
+
+  y = headTop + bandH;
 
   y += 3;
   doc.setDrawColor(...accent.rgb);
