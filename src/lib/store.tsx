@@ -107,7 +107,7 @@ interface StoreState {
   /** True until the first owner has been claimed. Drives the first-run screen. */
   needsOwner: boolean;
   /** Claims the one owner account. Refused by the database once one exists. */
-  createOwner: (email: string, password: string, name: string) => Promise<AuthOutcome>;
+  createOwner: (details: auth.OwnerDetails) => Promise<AuthOutcome>;
   logout: () => void;
   addSale: (s: Omit<Sale, "id" | "invoice" | "synced">) => Sale;
   updateSale: (s: Sale) => void;
@@ -566,12 +566,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (result.user) setUser(result.user);
         return result;
       },
-      createOwner: async (email, password, name) => {
+      createOwner: async (details) => {
         if (!usingSupabase) return { user: null, error: "Connect a database first" };
-        const result = await auth.createOwner(email, password, name);
-        if (result.user) {
-          setUser(result.user);
-          setNeedsOwner(false);
+        const result = await auth.createOwner(details);
+        if (!result.user) return result;
+
+        setUser(result.user);
+        setNeedsOwner(false);
+
+        /*
+         * The business name is asked for during setup so the very first bill
+         * already carries it, rather than saying "A-POS Retail" until somebody
+         * finds Settings. Saved after the claim, because writing app_state
+         * needs the session the claim just granted.
+         */
+        const businessName = details.businessName.trim();
+        if (businessName) {
+          setSettings((prev) => {
+            const next = { ...prev, businessName, phone: details.phone.trim() || prev.phone };
+            persist("your business details", () => db.saveAppState(next, discounts));
+            return next;
+          });
         }
         return result;
       },

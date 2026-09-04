@@ -97,6 +97,24 @@ export async function signOut() {
   await supabase?.auth.signOut();
 }
 
+/**
+ * Claims the owner account for whoever is already signed in.
+ *
+ * The path back from a half-finished setup: an account can exist while its
+ * profile does not — a sign-up that succeeded followed by a claim that did not
+ * — and without this the only way out is deleting the login and starting again.
+ */
+export async function claimAsOwner(name: string, phone: string): Promise<AuthResult> {
+  if (!supabase) return { user: null, error: "Sign-in is not configured" };
+
+  const { error } = await supabase.rpc("claim_owner", {
+    owner_name: name.trim(),
+    owner_phone: phone.trim(),
+  });
+  if (error) return { user: null, error: error.message };
+  return { user: await currentUser() };
+}
+
 /** Whether an owner has been claimed yet. Safe to call before signing in. */
 export async function hasOwner(): Promise<boolean> {
   if (!supabase) return true;
@@ -113,11 +131,17 @@ export async function hasOwner(): Promise<boolean> {
  * an owner exists — so this cannot be used twice, and a second person running
  * it gets an account with no access rather than a share of the business.
  */
-export async function createOwner(
-  email: string,
-  password: string,
-  name: string,
-): Promise<AuthResult> {
+export interface OwnerDetails {
+  name: string;
+  phone: string;
+  email: string;
+  password: string;
+  /** Seeded into Settings so the first bill already carries the right name. */
+  businessName: string;
+}
+
+export async function createOwner(details: OwnerDetails): Promise<AuthResult> {
+  const { email, password, name, phone } = details;
   if (!supabase) return { user: null, error: "Sign-in is not configured" };
 
   const address = email.trim().toLowerCase();
@@ -142,7 +166,10 @@ export async function createOwner(
     };
   }
 
-  const { error: claimError } = await supabase.rpc("claim_owner", { owner_name: name.trim() });
+  const { error: claimError } = await supabase.rpc("claim_owner", {
+    owner_name: name.trim(),
+    owner_phone: phone.trim(),
+  });
   if (claimError) {
     await signOut();
     return { user: null, error: claimError.message };
