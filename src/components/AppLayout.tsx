@@ -391,7 +391,7 @@ function NavLinks({
 }
 
 export function AppLayout({ children }: { children: ReactNode }) {
-  const { user, ready, logout, online, setOnline, shops } = useStore();
+  const { user, ready, logout, online, shops } = useStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [drawer, setDrawer] = useState(false);
@@ -545,32 +545,36 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <DayStatusPill />
             </div>
 
-            <button
-              onClick={() => setOnline(!online)}
+            {/*
+              A readout, not a control. It was a button that flipped the state by
+              hand — so it could be clicked into saying Offline while the shop was
+              connected, and it drew a focus ring around a thing nothing happens
+              when you press. It now reports what the browser reports.
+            */}
+            <span
+              role="status"
+              aria-live="polite"
               className={cn(
-                "flex items-center gap-1.5 text-xs font-medium px-2 sm:px-2.5 py-1.5 rounded-full border transition-colors shrink-0",
+                "flex items-center gap-1.5 text-xs font-medium px-2 sm:px-2.5 py-1.5 rounded-full border shrink-0",
                 online
                   ? "bg-success/10 text-success-strong border-success/30"
                   : "bg-warning/15 text-warning-strong border-warning/40",
               )}
-              title="Toggle online/offline (demo)"
+              title={online ? "Connected" : "No internet connection — changes are kept on this device"}
             >
               {online ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
               {/* The label costs more than it's worth on a 360px header. */}
               <span className="hidden xs:inline">{online ? "Online" : "Offline"}</span>
-            </button>
+            </span>
 
-            <button
-              onClick={() =>
-                online
-                  ? toast.success("All data is up to date")
-                  : toast.warning("Offline — changes will sync when reconnected")
-              }
-              className="hidden lg:flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            <span
+              role="status"
+              className="hidden lg:flex items-center gap-1.5 text-xs text-muted-foreground shrink-0"
+              title={online ? "All data is up to date" : "Changes will sync when the connection comes back"}
             >
               <RefreshCw className="h-3.5 w-3.5" />
               <span>{online ? "Synced" : "Pending"}</span>
-            </button>
+            </span>
 
             <NotificationBell />
 

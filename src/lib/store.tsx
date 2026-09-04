@@ -91,7 +91,6 @@ interface StoreState {
   discounts: DiscountRules;
   login: (email: string, password: string) => User | null;
   logout: () => void;
-  setOnline: (v: boolean) => void;
   addSale: (s: Omit<Sale, "id" | "invoice" | "synced">) => Sale;
   updateSale: (s: Sale) => void;
   deleteSale: (id: string) => void;
@@ -291,6 +290,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [usingSupabase, setUsingSupabase] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
   const [pendingMigration, setPendingMigration] = useState<string[] | null>(null);
+  /*
+   * The real connection, not a switch.
+   *
+   * This used to be `useState(true)` with a toggle in the header, which meant a
+   * shop could be genuinely offline while the badge said Online — and worse,
+   * could be told it was offline because someone clicked the pill. The browser
+   * already knows; SSR has no navigator, so it renders optimistically and the
+   * effect below corrects it on hydration.
+   */
   const [online, setOnline] = useState(true);
   const [shops, setShops] = useState<Shop[]>(SHOPS);
   const [users, setUsers] = useState<User[]>(USERS);
@@ -312,6 +320,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [messages, setMessages] = useState<Message[]>(() => genMessages());
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [discounts, setDiscounts] = useState<DiscountRules>(DEFAULT_DISCOUNTS);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sync = () => setOnline(navigator.onLine);
+    sync();
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -498,7 +518,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setUser(null);
         try { window.localStorage.removeItem(LS_USER); } catch {}
       },
-      setOnline,
       addSale: (s) => {
         const counter = sales.length + 200;
         const shopIdx = shops.findIndex((x) => x.id === s.shopId) + 1;
