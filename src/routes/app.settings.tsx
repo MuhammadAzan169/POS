@@ -5,6 +5,7 @@ import { useStore, INVOICE_ACCENTS, type InvoiceDesign, type ReceiptDesign } fro
 import { PageHeader } from "@/components/AppLayout";
 import { Receipt as ReceiptView } from "@/components/Receipt";
 import { Invoice as InvoiceView, type InvoiceData } from "@/components/Invoice";
+import { LogoPicker } from "@/components/LogoPicker";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -122,104 +123,6 @@ const SAMPLE_BILL: InvoiceData = {
   status: "Completed",
   account: { previousBalance: 36550, onAccount: 69400, received: 32000, closingBalance: 73950 },
 };
-
-/**
- * The logo, picked from a file and kept inline on the settings row.
- *
- * Downscaled here rather than stored as uploaded. Three reasons, in order of
- * how badly they bite: the settings row is a single JSONB column that is read
- * on every page load, a phone photo is several megabytes of base64, and a mark
- * printed 34mm wide has no use for 3,000 pixels. 320px on the long edge is
- * about twice what a 600dpi printer can show at that size.
- */
-function LogoField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [busy, setBusy] = useState(false);
-
-  const pick = async (file: File | undefined) => {
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("Pick an image file — PNG or JPG");
-      return;
-    }
-    setBusy(true);
-    try {
-      onChange(await downscale(file, 320));
-      toast.success("Logo updated");
-    } catch {
-      toast.error("That image could not be read");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-4 flex-wrap">
-      <div className="h-20 w-32 shrink-0 rounded-lg border bg-white grid place-items-center overflow-hidden">
-        {value ? (
-          <img src={value} alt="Bill logo" className="max-h-full max-w-full object-contain" />
-        ) : (
-          <ImageIcon className="h-6 w-6 text-muted-foreground" />
-        )}
-      </div>
-
-      <div className="space-y-2 min-w-0">
-        <div className="flex gap-2 flex-wrap">
-          <label>
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="sr-only"
-              onChange={(e) => {
-                void pick(e.target.files?.[0]);
-                // Cleared so picking the same file twice still fires a change.
-                e.target.value = "";
-              }}
-            />
-            <span
-              className={`inline-flex items-center h-9 px-3 rounded-md border text-sm font-medium cursor-pointer hover:bg-muted transition-colors ${busy ? "opacity-60 pointer-events-none" : ""}`}
-            >
-              <Upload className="h-4 w-4 mr-1.5" />
-              {value ? "Replace" : "Upload logo"}
-            </span>
-          </label>
-          {value && (
-            <Button variant="outline" className="h-9" onClick={() => onChange("")}>
-              Remove
-            </Button>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          PNG with a transparent background works best. Large images are resized automatically.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/** Reads a file, fits it inside `max` on its long edge, returns a PNG data URL. */
-function downscale(file: File, max: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("unreadable"));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error("not an image"));
-      img.onload = () => {
-        const scale = Math.min(1, max / Math.max(img.width, img.height));
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.max(1, Math.round(img.width * scale));
-        canvas.height = Math.max(1, Math.round(img.height * scale));
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return reject(new Error("no canvas"));
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        // PNG, so a mark with a transparent background stays transparent.
-        resolve(canvas.toDataURL("image/png"));
-      };
-      img.src = String(reader.result);
-    };
-    reader.readAsDataURL(file);
-  });
-}
 
 function SettingsPage() {
   const store = useStore();
@@ -491,10 +394,15 @@ function SettingsPage() {
           </Section>
 
           <Section title="Logo" description="Printed in the top right of every bill, on screen and in the PDF.">
-            <LogoField
+            <LogoPicker
               value={settings.invoiceLogo}
               onChange={(invoiceLogo) => updateSettings({ invoiceLogo })}
+              label="Business logo"
             />
+            <p className="text-xs text-muted-foreground mt-3">
+              Used on every shop&apos;s bills. A branch that needs its own mark can override this on
+              the Shops page.
+            </p>
           </Section>
 
           <Section title="Bill design" description="What appears on a printed or downloaded bill. The preview updates as you change these.">
@@ -518,6 +426,17 @@ function SettingsPage() {
                   value={b.accent}
                   onChange={(v) => updateInvoiceDesign({ accent: v })}
                   options={[{ value: "ink", label: "Solid" }, { value: "plain", label: "Plain" }]}
+                />
+              </Field>
+              <Field label="Logo size" hint="How large the mark prints in the top right.">
+                <Segmented
+                  value={b.logoSize}
+                  onChange={(v) => updateInvoiceDesign({ logoSize: v })}
+                  options={[
+                    { value: "sm", label: "Small" },
+                    { value: "md", label: "Medium" },
+                    { value: "lg", label: "Large" },
+                  ]}
                 />
               </Field>
               <Field label="Row height" hint="Compact fits about a third more items on a sheet.">

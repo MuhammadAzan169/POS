@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { LogoPicker } from "@/components/LogoPicker";
 import { StatusPill } from "@/components/Stat";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Store, Warehouse } from "lucide-react";
@@ -15,7 +16,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/shops")({ component: ShopsPage });
 
-const EMPTY = { name: "", kind: "retail" as ShopKind, address: "", phone: "" };
+const EMPTY = { name: "", kind: "retail" as ShopKind, address: "", phone: "", logo: "" };
 
 /** What each shop type actually does differently, shown while you pick one. */
 const KIND_BLURB: Record<ShopKind, string> = {
@@ -41,17 +42,17 @@ function ShopsPage() {
   const openAdd = () => { setEditing(null); setForm(EMPTY); setOpen(true); };
   const openEdit = (s: Shop) => {
     setEditing(s);
-    setForm({ name: s.name, kind: shopKind(s), address: s.address, phone: s.phone });
+    setForm({ name: s.name, kind: shopKind(s), address: s.address, phone: s.phone, logo: s.logo ?? "" });
     setOpen(true);
   };
 
   const save = () => {
     if (!form.name.trim()) { toast.error("Shop name required"); return; }
     if (editing) {
-      updateShop({ ...editing, ...form });
+      updateShop({ ...editing, ...form, logo: form.logo || undefined });
       toast.success("Shop updated");
     } else {
-      addShop({ ...form, active: true });
+      addShop({ ...form, logo: form.logo || undefined, active: true });
       toast.success("Shop added");
     }
     setOpen(false);
@@ -151,6 +152,18 @@ function ShopsPage() {
             </div>
             <div className="space-y-1.5"><Label>Address</Label><Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
             <div className="space-y-1.5"><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+            {/*
+              Optional, and worth saying so: most branches trade under one name
+              and should simply inherit the business logo set in Settings. This
+              is for the outlet that has its own.
+            */}
+            <div className="space-y-1.5">
+              <Label>Logo for this shop&apos;s bills</Label>
+              <LogoPicker value={form.logo} onChange={(logo) => setForm({ ...form, logo })} label="Shop logo" />
+              <p className="text-xs text-muted-foreground">
+                Optional. Left empty, this shop&apos;s bills use the business logo from Settings.
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>

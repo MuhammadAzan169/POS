@@ -57,6 +57,19 @@ function ascii(value: string) {
 }
 
 export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) {
+  const doc = await buildInvoicePdf(data, settings);
+  doc.save(`${invoiceFileName(data)}.pdf`);
+}
+
+/**
+ * Draws the bill and hands back the document, without saving it.
+ *
+ * Split out from `downloadInvoicePdf` so the bill can be produced somewhere
+ * that is not a browser download — a test that needs to read what was actually
+ * drawn, and later anything that wants to attach a bill to a message rather
+ * than hand it to the person at the till.
+ */
+export async function buildInvoicePdf(data: InvoiceData, settings: Settings) {
   // Loaded on demand: the till and every other screen should not carry a PDF
   // engine in their bundle for a button most sales never press.
   const { jsPDF } = await import("jspdf");
@@ -156,7 +169,8 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
     y += 4.4;
   }
 
-  if (d.showLogo && settings.invoiceLogo) {
+  const logo = data.logo || settings.invoiceLogo;
+  if (d.showLogo && logo) {
     /*
      * Fitted inside a fixed box rather than placed at its own size: a logo is
      * whatever pixels someone uploaded, and one 2,000px wide would otherwise be
@@ -168,13 +182,13 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
      * without its logo.
      */
     try {
-      const boxW = 34;
-      const boxH = 18;
-      const props = doc.getImageProperties(settings.invoiceLogo);
+      // mm, matched to the on-screen boxes so the preview predicts the print.
+      const [boxW, boxH] = { sm: [34, 18], md: [46, 26], lg: [58, 34] }[d.logoSize] ?? [46, 26];
+      const props = doc.getImageProperties(logo);
       const scale = Math.min(boxW / props.width, boxH / props.height);
       const w = props.width * scale;
       const h = props.height * scale;
-      doc.addImage(settings.invoiceLogo, right - w, headTop, w, h, undefined, "FAST");
+      doc.addImage(logo, right - w, headTop, w, h, undefined, "FAST");
       y = Math.max(y, headTop + h + 1);
     } catch {
       // Printed without it.
@@ -417,7 +431,7 @@ export async function downloadInvoicePdf(data: InvoiceData, settings: Settings) 
     y = Math.max(y, sigY + 6);
   }
 
-  doc.save(`${invoiceFileName(data)}.pdf`);
+  return doc;
 }
 
 type Col = {

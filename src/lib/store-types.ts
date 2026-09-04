@@ -29,6 +29,16 @@ export interface Shop {
   kind?: ShopKind;
   address: string;
   phone: string;
+  /**
+   * This outlet's own mark, as a data URL, printed on its bills.
+   *
+   * Optional, and falls back to the business-wide logo in Settings. A group
+   * that trades under one name everywhere sets it once centrally; a branch that
+   * has its own identity — a wholesale counter with a different trading name,
+   * say — overrides it here, and its bills carry its own mark without touching
+   * anybody else's.
+   */
+  logo?: string;
   active: boolean;
 }
 
@@ -949,6 +959,15 @@ export interface InvoiceDesign {
   fontSize: "sm" | "md" | "lg";
   /** The shop's mark, in the top right. */
   showLogo: boolean;
+  /**
+   * How large it prints.
+   *
+   * A choice rather than a fixed size because logos are not one shape: a wide
+   * wordmark and a square emblem set to the same height look nothing like the
+   * same size on the page, so the owner is the one who can see when it looks
+   * right against their own letterhead.
+   */
+  logoSize: "sm" | "md" | "lg";
   /** How tall the ruled rows are. Compact fits about a third more on a sheet. */
   density: "compact" | "normal";
   accent: "ink" | "plain";
@@ -997,6 +1016,7 @@ export const DEFAULT_INVOICE: InvoiceDesign = {
   paperSize: "A4",
   fontSize: "md",
   showLogo: true,
+  logoSize: "md",
   density: "normal",
   accent: "ink",
   accentColor: "navy",

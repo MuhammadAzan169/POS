@@ -37,14 +37,42 @@ let group = "";
 
 const describe = (name) => { group = name; console.log(`\n${name}`); };
 
+/**
+ * Checks that have not finished yet.
+ *
+ * A test body that returns a promise used to be called and then dropped: the
+ * runner counted it as passed the instant it was STARTED, so an async check
+ * could fail — or throw — and still print `ok`. Anything thenable is now
+ * collected here and awaited before the report is written.
+ */
+const pending = [];
+
 function it(name, fn) {
-  try {
-    fn();
+  const pass = () => {
     passed++;
     console.log(`  ok    ${name}`);
-  } catch (e) {
+  };
+  const fail = (e) => {
     failures.push({ group, name, message: e.message });
     console.log(`  FAIL  ${name}\n          ${e.message}`);
+  };
+
+  try {
+    const result = fn();
+    if (result && typeof result.then === "function") {
+      // Captured now, because `group` will have moved on by the time it settles.
+      const at = group;
+      pending.push(
+        result.then(pass, (e) => {
+          failures.push({ group: at, name, message: e.message });
+          console.log(`  FAIL  ${name}\n          ${e.message}`);
+        }),
+      );
+      return;
+    }
+    pass();
+  } catch (e) {
+    fail(e);
   }
 }
 
@@ -1860,6 +1888,81 @@ it("every demo credit sale produces a bill that reconciles", () => {
   ok(checked > 0, `bills were checked (${checked})`);
 });
 
+/* ================================================================ LOADING */
+
+describe("Reading a table that has outgrown one request");
+
+const DB = await import("../src/lib/db.ts");
+
+/**
+ * A stand-in for Supabase that behaves the way PostgREST does: it never returns
+ * more than `cap` rows, and it does not warn you when it truncates. That
+ * silence is the whole problem — a shop past its first thousand sales would
+ * have had its balances computed from part of its history, with nothing on
+ * screen to say so.
+ */
+function fakeTable(total, cap = 1000) {
+  const rows = Array.from({ length: total }, (_, i) => ({ id: i }));
+  const calls = [];
+  return {
+    calls,
+    fetchPage: (from, to) => {
+      calls.push([from, to]);
+      const size = Math.min(to - from + 1, cap);
+      return Promise.resolve({ data: rows.slice(from, from + size), error: null });
+    },
+  };
+}
+
+it("reads every row, not just the first page", async () => {
+  const table = fakeTable(2500);
+  const { data, error } = await DB.paginate(table.fetchPage);
+  eq(error, null, "no error");
+  eq(data.length, 2500, "every row came back");
+  eq(table.calls.length, 3, "in three requests");
+});
+
+it("stops as soon as a page comes back short", async () => {
+  const table = fakeTable(1200);
+  const { data } = await DB.paginate(table.fetchPage);
+  eq(data.length, 1200, "every row");
+  eq(table.calls.length, 2, "and no wasted request for a third page");
+});
+
+it("an exactly-full last page costs one more request, and no rows are invented", async () => {
+  const table = fakeTable(2000);
+  const { data } = await DB.paginate(table.fetchPage);
+  eq(data.length, 2000, "exactly the rows that exist");
+  eq(table.calls.length, 3, "the third confirms there are no more");
+});
+
+it("a small table is still one request", async () => {
+  const table = fakeTable(12);
+  const { data } = await DB.paginate(table.fetchPage);
+  eq(data.length, 12, "every row");
+  eq(table.calls.length, 1, "one request");
+});
+
+it("an empty table is one request and no rows", async () => {
+  const table = fakeTable(0);
+  const { data } = await DB.paginate(table.fetchPage);
+  eq(data.length, 0, "no rows");
+  eq(table.calls.length, 1, "one request");
+});
+
+it("an error on a later page is reported, not half a dataset", async () => {
+  // Half a ledger silently returned as if it were whole is the failure this
+  // whole section exists to prevent.
+  let call = 0;
+  const { data, error } = await DB.paginate((from, to) => {
+    call++;
+    if (call === 2) return Promise.resolve({ data: null, error: { message: "connection lost" } });
+    return Promise.resolve({ data: Array.from({ length: to - from + 1 }, (_, i) => ({ id: i })), error: null });
+  });
+  eq(data, null, "no partial data is handed back");
+  ok(error && error.message === "connection lost", "the failure is reported");
+});
+
 /* ====================================================== SETTINGS PIPELINE */
 
 describe("A bill setting reaches every place a bill is produced");
@@ -1878,7 +1981,6 @@ const React = (await import("react")).default;
 const { renderToStaticMarkup } = await import("react-dom/server");
 const InvoiceView = await import("../src/components/Invoice.tsx");
 const InvoicePdf = await import("../src/lib/invoice-pdf.ts");
-const { jsPDF } = await import("jspdf");
 
 const CUSTOM = {
   ...seed.DEFAULT_SETTINGS,
@@ -1923,24 +2025,30 @@ const screen = renderToStaticMarkup(
   React.createElement(InvoiceView.Invoice, { data: PIPELINE_BILL, settings: CUSTOM }),
 );
 
-/** The same bill as PDF, reduced to the strings it actually draws. */
+/**
+ * The raw bytes of a bill as PDF.
+ *
+ * `buildInvoicePdf` hands back the document instead of saving it, which is what
+ * makes this possible. These helpers used to swap out `jsPDF.API.save` to
+ * intercept the file — and because every async check starts at once, they
+ * overwrote each other's patch and read back whatever the last one left. Two
+ * checks passed on empty strings for it.
+ */
+async function pdfBytes(settings, data = PIPELINE_BILL) {
+  const doc = await InvoicePdf.buildInvoicePdf(data, settings);
+  return Buffer.from(doc.output("arraybuffer")).toString("latin1");
+}
+
+/** The same bill reduced to the strings it actually draws. */
 async function pdfStrings(settings) {
-  let text = [];
-  const realSave = jsPDF.API.save;
-  jsPDF.API.save = function () {
-    const raw = Buffer.from(this.output("arraybuffer")).toString("latin1");
-    const streams = [...raw.matchAll(/stream\r?\n([\s\S]*?)endstream/g)].map((m) => m[1]).join("");
-    // PDF string literals escape their own parentheses and backslashes, so
-    // "Amount (AED)" is stored as "Amount \(AED\)". Undone here, or every
-    // assertion about a bracketed label would fail for the wrong reason.
-    text = [...streams.matchAll(/\((.*?)\) Tj/g)].map((m) =>
-      m[1].replace(/\\([()\\])/g, "$1"),
-    );
-    return this;
-  };
-  await InvoicePdf.downloadInvoicePdf(PIPELINE_BILL, settings);
-  jsPDF.API.save = realSave;
-  return text.join(" | ");
+  const raw = await pdfBytes(settings);
+  const streams = [...raw.matchAll(/stream\r?\n([\s\S]*?)endstream/g)].map((m) => m[1]).join("");
+  // PDF string literals escape their own parentheses and backslashes, so
+  // "Amount (AED)" is stored as "Amount \\(AED\\)". Undone here, or every
+  // assertion about a bracketed label would fail for the wrong reason.
+  return [...streams.matchAll(/\((.*?)\) Tj/g)]
+    .map((m) => m[1].replace(/\\([()\\])/g, "$1"))
+    .join(" | ");
 }
 const paper = await pdfStrings(CUSTOM);
 
@@ -1986,22 +2094,77 @@ it("the account block carries the same figures on both", () => {
   }
 });
 
+it("a shop with its own logo uses it, on screen and in the PDF", async () => {
+  const shopMark =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const sale = billSale();
+  const built = Bill.buildInvoice(sale, ledgerWith([sale]), {
+    customer: TRADER,
+    shop: { id: "shop-1", name: "Wholesale Counter", logo: shopMark },
+  });
+  eq(built.logo, shopMark, "the bill carries the outlet's own mark");
+
+  // A different business-wide logo must not win over the shop's.
+  const withBusinessLogo = { ...CUSTOM, invoiceLogo: "data:image/png;base64,OTHER" };
+  const html = renderToStaticMarkup(
+    React.createElement(InvoiceView.Invoice, { data: built, settings: withBusinessLogo }),
+  );
+  ok(html.includes(shopMark), "the screen bill shows the shop's logo");
+  ok(!html.includes("OTHER"), "and not the business-wide one");
+  ok(/\/Subtype\s*\/Image/.test(await pdfBytes(withBusinessLogo, built)), "the PDF embeds a logo");
+});
+
+it("a shop with no logo of its own falls back to the business logo", () => {
+  const sale = billSale();
+  const built = Bill.buildInvoice(sale, ledgerWith([sale]), {
+    customer: TRADER,
+    shop: { id: "shop-1", name: "Main Branch" },
+  });
+  eq(built.logo, undefined, "nothing is pinned to the bill");
+
+  const dot = "data:image/png;base64,BUSINESS";
+  const html = renderToStaticMarkup(
+    React.createElement(InvoiceView.Invoice, {
+      data: built,
+      settings: { ...CUSTOM, invoiceLogo: dot },
+    }),
+  );
+  ok(html.includes(dot), "so the business logo is used");
+});
+
+it("a shop saved with a blank logo still falls back", () => {
+  // An empty string is falsy but not nullish: `??` would have kept it and
+  // printed no logo at all rather than the business one.
+  const sale = billSale();
+  const built = Bill.buildInvoice(sale, ledgerWith([sale]), {
+    customer: TRADER,
+    shop: { id: "shop-1", name: "Main Branch", logo: "" },
+  });
+  eq(built.logo, undefined, "an empty logo is not carried onto the bill");
+
+  const dot = "data:image/png;base64,BUSINESS";
+  const html = renderToStaticMarkup(
+    React.createElement(InvoiceView.Invoice, {
+      data: built,
+      settings: { ...CUSTOM, invoiceLogo: dot },
+    }),
+  );
+  ok(html.includes(dot), "and the business logo is printed");
+});
+
 it("the chosen ink is used by both", async () => {
-  // Screen: the hex on the rule. PDF: the same colour as a fill operator.
   const maroon = T.INVOICE_ACCENTS.maroon;
   ok(screen.includes(maroon.hex), `the screen draws in ${maroon.hex}`);
 
-  let raw = "";
-  const realSave = jsPDF.API.save;
-  jsPDF.API.save = function () {
-    raw = Buffer.from(this.output("arraybuffer")).toString("latin1");
-    return this;
-  };
-  await InvoicePdf.downloadInvoicePdf(PIPELINE_BILL, CUSTOM);
-  jsPDF.API.save = realSave;
-
-  const asPdf = maroon.rgb.map((n) => (n / 255).toFixed(2).replace(/0$/, "")).join(" ");
-  ok(raw.includes(asPdf) || raw.includes(maroon.rgb.map((n) => n / 255).join(" ")), "the PDF fills in the same ink");
+  // jsPDF writes colours as fractions of 255, and rounds them, so the check is
+  // that each channel is within a rounding step of the chosen ink.
+  const raw = await pdfBytes(CUSTOM);
+  const fills = [...raw.matchAll(/([\d.]+) ([\d.]+) ([\d.]+) rg/g)].map((m) =>
+    [Number(m[1]), Number(m[2]), Number(m[3])],
+  );
+  const wanted = maroon.rgb.map((n) => n / 255);
+  const match = fills.some((f) => f.every((c, i) => Math.abs(c - wanted[i]) < 0.01));
+  ok(match, `the PDF fills in the same ink (found ${JSON.stringify(fills.slice(0, 4))})`);
 });
 
 it("a logo set in Settings is embedded in the PDF and shown on screen", async () => {
@@ -2015,32 +2178,18 @@ it("a logo set in Settings is embedded in the PDF and shown on screen", async ()
     React.createElement(InvoiceView.Invoice, { data: PIPELINE_BILL, settings: withLogo }),
   );
   ok(html.includes(dot), "the logo is on the screen bill");
-
-  let raw = "";
-  const realSave = jsPDF.API.save;
-  jsPDF.API.save = function () {
-    raw = Buffer.from(this.output("arraybuffer")).toString("latin1");
-    return this;
-  };
-  await InvoicePdf.downloadInvoicePdf(PIPELINE_BILL, withLogo);
-  jsPDF.API.save = realSave;
-  ok(/\/Subtype\s*\/Image/.test(raw), "and embedded as an image in the PDF");
+  ok(/\/Subtype\s*\/Image/.test(await pdfBytes(withLogo)), "and embedded as an image in the PDF");
 });
 
 it("no logo set leaves both bills without one", async () => {
   ok(!screen.includes("<img"), "nothing is drawn on screen");
-  let raw = "";
-  const realSave = jsPDF.API.save;
-  jsPDF.API.save = function () {
-    raw = Buffer.from(this.output("arraybuffer")).toString("latin1");
-    return this;
-  };
-  await InvoicePdf.downloadInvoicePdf(PIPELINE_BILL, CUSTOM);
-  jsPDF.API.save = realSave;
-  ok(!/\/Subtype\s*\/Image/.test(raw), "and no image is embedded");
+  ok(!/\/Subtype\s*\/Image/.test(await pdfBytes(CUSTOM)), "and no image is embedded");
 });
 
 /* ================================================================ REPORT */
+
+// Nothing is reported until every async check has settled.
+await Promise.all(pending);
 
 console.log(`\n${"=".repeat(60)}`);
 if (failures.length === 0) {

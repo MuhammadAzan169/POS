@@ -79,10 +79,11 @@ export interface Snapshot {
 
 const rowToShop = (r: any): Shop => ({
   id: r.id, name: r.name, kind: r.kind === "wholesale" ? "wholesale" : "retail",
-  address: r.address ?? "", phone: r.phone ?? "", active: r.active,
+  address: r.address ?? "", phone: r.phone ?? "", logo: r.logo ?? undefined, active: r.active,
 });
 const shopToRow = (s: Shop) => ({
-  id: s.id, name: s.name, kind: s.kind ?? "retail", address: s.address, phone: s.phone, active: s.active,
+  id: s.id, name: s.name, kind: s.kind ?? "retail", address: s.address, phone: s.phone,
+  logo: s.logo ?? null, active: s.active,
 });
 
 const rowToUser = (r: any): User => ({
@@ -334,6 +335,65 @@ async function selectOptional<T>(
 }
 
 /**
+ * How many rows one request may return.
+ *
+ * PostgREST — and so Supabase — caps every response, 1,000 rows by default.
+ * Past that it does not error, it simply returns the first thousand, which is
+ * how a shop that has been trading for a few months ends up with reports and
+ * customer balances quietly computed from part of its history.
+ */
+const PAGE_SIZE = 1000;
+
+/** A guard against an endless loop if the server ever stops honouring `range`. */
+const MAX_PAGES = 500;
+
+type Shaper = (q: PostgrestQuery) => PostgrestQuery;
+type PostgrestQuery = {
+  range: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: QueryError }>;
+  order: (column: string, opts?: { ascending?: boolean }) => PostgrestQuery;
+  eq: (column: string, value: unknown) => PostgrestQuery;
+};
+type QueryError = { code?: string; message?: string } | null;
+
+/**
+ * Reads every page of a query and hands back one list.
+ *
+ * The ledger is why this pages rather than taking the most recent N rows: a
+ * customer's balance is derived from every sale and payment they have ever
+ * made, so a truncated history does not produce a shorter report, it produces a
+ * wrong balance — on screen and on the bill the customer is handed.
+ *
+ * Returns the same `{ data, error }` shape a single query does, so callers do
+ * not have to care that more than one request happened.
+ */
+export async function paginate(
+  fetchPage: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: QueryError }>,
+): Promise<{ data: unknown[] | null; error: QueryError }> {
+  const rows: unknown[] = [];
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const from = page * PAGE_SIZE;
+    const { data, error } = await fetchPage(from, from + PAGE_SIZE - 1);
+    if (error) return { data: null, error };
+
+    const batch = data ?? [];
+    rows.push(...batch);
+    // A short page is the last page. Asking again would cost a round trip to
+    // be told the same thing.
+    if (batch.length < PAGE_SIZE) return { data: rows, error: null };
+  }
+
+  return { data: rows, error: null };
+}
+
+/** `paginate` bound to one table, which is how every caller here uses it. */
+function selectAll(table: string, shape: Shaper = (q) => q) {
+  return paginate((from, to) =>
+    shape(supabase!.from(table).select("*") as unknown as PostgrestQuery).range(from, to),
+  );
+}
+
+/**
  * Loads the whole dataset.
  *
  * Throws only when something the app genuinely cannot run without fails. Tables
@@ -351,56 +411,56 @@ export async function loadSnapshot(): Promise<Snapshot> {
     supplierPayments, setOffs, adjustments, activity, messages,
   ] = await Promise.all([
     Promise.all([
-      supabase.from("shops").select("*").order("name"),
-      supabase.from("users").select("*").order("name"),
-      supabase.from("products").select("*").order("name"),
-      supabase.from("inventory").select("*"),
-      supabase.from("sales").select("*").order("date", { ascending: false }),
-      supabase.from("purchases").select("*").order("date", { ascending: false }),
-      supabase.from("suppliers").select("*").order("name"),
-      supabase.from("expenses").select("*").order("date", { ascending: false }),
-      supabase.from("returns").select("*").order("date", { ascending: false }),
+      selectAll("shops", (q) => q.order("name")),
+      selectAll("users", (q) => q.order("name")),
+      selectAll("products", (q) => q.order("name")),
+      selectAll("inventory"),
+      selectAll("sales", (q) => q.order("date", { ascending: false })),
+      selectAll("purchases", (q) => q.order("date", { ascending: false })),
+      selectAll("suppliers", (q) => q.order("name")),
+      selectAll("expenses", (q) => q.order("date", { ascending: false })),
+      selectAll("returns", (q) => q.order("date", { ascending: false })),
       supabase.from("app_state").select("*").eq("id", "singleton").maybeSingle(),
     ]),
     selectOptional(
       "day_sessions",
-      () => supabase!.from("day_sessions").select("*").order("business_date", { ascending: false }),
+      () => selectAll("day_sessions", (q) => q.order("business_date", { ascending: false })),
       rowToDaySession,
       missing,
     ),
     selectOptional(
       "transfers",
-      () => supabase!.from("transfers").select("*").order("date", { ascending: false }),
+      () => selectAll("transfers", (q) => q.order("date", { ascending: false })),
       rowToTransfer,
       missing,
     ),
     selectOptional(
       "customers",
-      () => supabase!.from("customers").select("*").order("name"),
+      () => selectAll("customers", (q) => q.order("name")),
       rowToCustomer,
       missing,
     ),
     selectOptional(
       "customer_payments",
-      () => supabase!.from("customer_payments").select("*").order("date", { ascending: false }),
+      () => selectAll("customer_payments", (q) => q.order("date", { ascending: false })),
       rowToCustomerPayment,
       missing,
     ),
     selectOptional(
       "supplier_payments",
-      () => supabase!.from("supplier_payments").select("*").order("date", { ascending: false }),
+      () => selectAll("supplier_payments", (q) => q.order("date", { ascending: false })),
       rowToSupplierPayment,
       missing,
     ),
     selectOptional(
       "set_offs",
-      () => supabase!.from("set_offs").select("*").order("date", { ascending: false }),
+      () => selectAll("set_offs", (q) => q.order("date", { ascending: false })),
       rowToSetOff,
       missing,
     ),
     selectOptional(
       "balance_adjustments",
-      () => supabase!.from("balance_adjustments").select("*").order("date", { ascending: false }),
+      () => selectAll("balance_adjustments", (q) => q.order("date", { ascending: false })),
       rowToAdjustment,
       missing,
     ),
@@ -432,6 +492,7 @@ export async function loadSnapshot(): Promise<Snapshot> {
   // the upgrade notice is still accurate.
   const shopRows = (shops.data ?? []) as any[];
   if (shopRows.length > 0 && !("kind" in shopRows[0])) missing.push("shops.kind");
+  if (shopRows.length > 0 && !("logo" in shopRows[0])) missing.push("shops.logo");
   const saleRows = (sales.data ?? []) as any[];
   if (saleRows.length > 0 && !("business_date" in saleRows[0])) missing.push("sales.business_date");
   if (saleRows.length > 0 && !("customer_id" in saleRows[0])) missing.push("sales.customer_id");

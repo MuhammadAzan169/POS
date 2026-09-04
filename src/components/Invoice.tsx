@@ -40,6 +40,13 @@ export interface InvoiceData {
   payment?: PaymentMethod;
   /** A returned sale still has a bill; it must not look like a live one. */
   status?: Sale["status"];
+  /**
+   * The mark to print, already resolved: this shop's own logo when it has one,
+   * otherwise the business-wide one. Resolved by `buildInvoice` rather than
+   * here, so the screen and the PDF cannot disagree about which logo a
+   * particular outlet's bill carries.
+   */
+  logo?: string;
   lines: InvoiceLine[];
   subtotal: number;
   discount: number;
@@ -75,6 +82,16 @@ const SIZES: Record<InvoiceDesign["fontSize"], string> = {
   lg: "text-[15px]",
 };
 
+/**
+ * The box a logo is fitted into, per size. Height leads, because that is what a
+ * square emblem fills; the width cap only bites on a wide wordmark.
+ */
+const LOGO_BOX: Record<InvoiceDesign["logoSize"], string> = {
+  sm: "h-16 max-w-[9rem]",
+  md: "h-24 max-w-[12rem]",
+  lg: "h-32 max-w-[16rem]",
+};
+
 /** Row padding, per density. Compact fits about a third more on a sheet. */
 const ROW_PAD: Record<InvoiceDesign["density"], string> = {
   compact: "px-2 py-1",
@@ -103,6 +120,11 @@ export function Invoice({
   const headCell = `${cellBorder} ${pad} font-semibold ${ink ? "text-white" : "bg-neutral-100"}`;
   const headStyle = ink ? { backgroundColor: accent } : undefined;
   const muted = "text-neutral-500";
+  // A bill built by `buildInvoice` arrives with its logo already chosen; the
+  // Settings preview passes none and gets the business-wide one.
+  // `||`, not `??`: an empty string is not nullish, and a shop saved with a
+  // blank logo would otherwise print no mark instead of the business one.
+  const logo = data.logo || settings.invoiceLogo;
 
   return (
     /*
@@ -160,13 +182,13 @@ export function Invoice({
           </div>
         </div>
 
-        {d.showLogo && settings.invoiceLogo && (
+        {d.showLogo && logo && (
           // Bounded, never stretched: a wide mark and a square one both have to
           // sit in this corner without pushing the address block around.
           <img
-            src={settings.invoiceLogo}
+            src={logo}
             alt=""
-            className="shrink-0 h-16 w-auto max-w-[9rem] object-contain"
+            className={`shrink-0 w-auto object-contain ${LOGO_BOX[d.logoSize] ?? LOGO_BOX.md}`}
           />
         )}
       </div>

@@ -16,8 +16,12 @@ create table if not exists shops (
   kind     text not null default 'retail' check (kind in ('retail', 'wholesale')),
   address  text default '',
   phone    text default '',
+  -- This outlet's own logo for its bills, as a data URL. Null falls back to the
+  -- business-wide logo held in app_state.
+  logo     text,
   active   boolean not null default true
 );
+alter table shops add column if not exists logo text;
 
 create table if not exists users (
   id         text primary key,

@@ -57,6 +57,10 @@ export function buildInvoice(
     customerPhone: customer?.phone,
     payment: sale.payment,
     status: sale.status,
+    // The outlet's own mark when it has one; the business-wide logo otherwise.
+    // Resolved here so every bill for a shop carries the same mark however it
+    // was reached — the till, the sales list, print or download.
+    logo: opts.shop?.logo || undefined,
     lines,
     subtotal: sale.subtotal,
     discount: sale.discount,
