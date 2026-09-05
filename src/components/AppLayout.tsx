@@ -124,7 +124,9 @@ function GlobalSearch({ autoFocus, onDone }: { autoFocus?: boolean; onDone?: () 
         .filter((p) => p.name.toLowerCase().includes(term) || p.barcode.includes(term))
         .slice(0, 4),
       sales: visibleSales
-        .filter((s) => s.invoice.toLowerCase().includes(term) || s.customer.toLowerCase().includes(term))
+        .filter(
+          (s) => s.invoice.toLowerCase().includes(term) || s.customer.toLowerCase().includes(term),
+        )
         .slice(0, 4),
     };
   }, [q, products, sales, isAdmin, user?.shopId]);
@@ -153,10 +155,17 @@ function GlobalSearch({ autoFocus, onDone }: { autoFocus?: boolean; onDone?: () 
         type="text"
         autoFocus={autoFocus}
         value={q}
-        onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setOpen(true);
+        }}
         onFocus={() => setOpen(true)}
         onKeyDown={(e) => {
-          if (e.key === "Escape") { setOpen(false); onDone?.(); return; }
+          if (e.key === "Escape") {
+            setOpen(false);
+            onDone?.();
+            return;
+          }
           if (e.key !== "Enter" || !q.trim()) return;
           if (results.products.length) go("/app/products", q.trim());
           else if (results.sales.length) go("/app/sales", q.trim());
@@ -168,10 +177,14 @@ function GlobalSearch({ autoFocus, onDone }: { autoFocus?: boolean; onDone?: () 
       />
       {open && q.trim() && (
         <div className="absolute left-0 right-0 top-full mt-1.5 rounded-md border bg-popover text-popover-foreground shadow-lg overflow-hidden z-50">
-          {!hasResults && <div className="px-3 py-4 text-sm text-muted-foreground">No matches.</div>}
+          {!hasResults && (
+            <div className="px-3 py-4 text-sm text-muted-foreground">No matches.</div>
+          )}
           {results.products.length > 0 && (
             <div className="py-1">
-              <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Products</div>
+              <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                Products
+              </div>
               {results.products.map((p) => (
                 <button
                   key={p.id}
@@ -179,14 +192,18 @@ function GlobalSearch({ autoFocus, onDone }: { autoFocus?: boolean; onDone?: () 
                   className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted flex items-center justify-between gap-3"
                 >
                   <span className="truncate">{p.name}</span>
-                  <span className="text-xs text-muted-foreground shrink-0">{formatRs(p.price)}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {formatRs(p.price)}
+                  </span>
                 </button>
               ))}
             </div>
           )}
           {results.sales.length > 0 && (
             <div className="py-1 border-t">
-              <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Invoices</div>
+              <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                Invoices
+              </div>
               {results.sales.map((s) => (
                 <button
                   key={s.id}
@@ -194,7 +211,9 @@ function GlobalSearch({ autoFocus, onDone }: { autoFocus?: boolean; onDone?: () 
                   className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted flex items-center justify-between gap-3"
                 >
                   <span className="font-mono text-xs truncate">{s.invoice}</span>
-                  <span className="text-xs text-muted-foreground shrink-0 truncate">{s.customer}</span>
+                  <span className="text-xs text-muted-foreground shrink-0 truncate">
+                    {s.customer}
+                  </span>
                 </button>
               ))}
             </div>
@@ -301,10 +320,10 @@ function MigrationNotice() {
         <p className="text-muted-foreground mt-1">
           Everything else is working on your real data, but{" "}
           <span className="text-foreground">{pendingMigration.join(", ")}</span>{" "}
-          {pendingMigration.length === 1 ? "is" : "are"} missing, so {features} can't save yet. In the
-          Supabase dashboard open{" "}
-          <span className="font-medium text-foreground">SQL Editor → New query</span>, then paste and
-          run {files.length === 1 ? "this file" : "these files, in order"}:
+          {pendingMigration.length === 1 ? "is" : "are"} missing, so {features} can't save yet. In
+          the Supabase dashboard open{" "}
+          <span className="font-medium text-foreground">SQL Editor → New query</span>, then paste
+          and run {files.length === 1 ? "this file" : "these files, in order"}:
         </p>
         {/* Named individually rather than as one sentence: these get copied into
             a SQL editor, and a filename buried in prose is a filename mistyped. */}
@@ -341,7 +360,8 @@ function useUnreadMessages() {
   const { user, messages } = useStore();
   return useMemo(() => {
     if (!user) return 0;
-    const mine = user.role === "admin" ? messages : messages.filter((m) => m.shopId === user.shopId);
+    const mine =
+      user.role === "admin" ? messages : messages.filter((m) => m.shopId === user.shopId);
     return mine.filter((m) => isUnreadFor(m, user.role)).length;
   }, [user, messages]);
 }
@@ -418,7 +438,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
   // the drawer is actually closed instead.
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
-    const sync = () => { if (mq.matches) setDrawer(false); };
+    const sync = () => {
+      if (mq.matches) setDrawer(false);
+    };
     sync();
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
@@ -450,7 +472,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
       title="Sign out?"
       description="You'll be returned to the sign-in screen. Any sale still in the cart will be lost."
       confirmLabel="Sign out"
-      onConfirm={() => { logout(); navigate({ to: "/" }); }}
+      onConfirm={() => {
+        logout();
+        navigate({ to: "/" });
+      }}
       trigger={
         <button className="w-full flex min-h-11 items-center gap-3 px-3 py-2 rounded-md text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground transition-colors">
           <LogOut className="h-4 w-4" />
@@ -478,7 +503,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
         Sidebar. Shown from lg (1024px) rather than md: at 768px a fixed 256px
         rail left barely 500px for a data screen, so tablets get the drawer too.
       */}
-      <aside data-print="hide" className="hidden lg:flex w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
+      <aside
+        data-print="hide"
+        className="hidden lg:flex w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border"
+      >
         <div className="px-5 py-5 border-b border-sidebar-border">{brand}</div>
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
           <NavLinks nav={nav} isActive={isActive} />
@@ -494,10 +522,19 @@ export function AppLayout({ children }: { children: ReactNode }) {
           className="w-[min(19rem,85vw)] max-w-none p-0 bg-sidebar text-sidebar-foreground border-sidebar-border flex flex-col [&>button]:text-sidebar-foreground [&>button]:bg-transparent [&>button]:hover:bg-sidebar-accent"
         >
           <div className="px-5 py-5 border-b border-sidebar-border">{brand}</div>
-          <div className="px-5 py-3 border-b border-sidebar-border">
-            <div className="text-sm font-medium">{user.name}</div>
-            <div className="text-xs text-sidebar-foreground/60">
-              {user.role === "admin" ? "Administrator" : shop?.name ?? "Shop"}
+          <div className="px-5 py-3 border-b border-sidebar-border flex items-center gap-3">
+            {shop?.logo && (
+              <img
+                src={shop.logo}
+                alt=""
+                className="h-9 w-9 shrink-0 rounded-full object-contain bg-white border"
+              />
+            )}
+            <div className="min-w-0">
+              <div className="text-sm font-medium">{user.name}</div>
+              <div className="text-xs text-sidebar-foreground/60">
+                {user.role === "admin" ? "Administrator" : (shop?.name ?? "Shop")}
+              </div>
             </div>
           </div>
           <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto overscroll-contain">
@@ -560,7 +597,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   ? "bg-success/10 text-success-strong border-success/30"
                   : "bg-warning/15 text-warning-strong border-warning/40",
               )}
-              title={online ? "Connected" : "No internet connection — changes are kept on this device"}
+              title={
+                online ? "Connected" : "No internet connection — changes are kept on this device"
+              }
             >
               {online ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
               {/* The label costs more than it's worth on a 360px header. */}
@@ -570,7 +609,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <span
               role="status"
               className="hidden lg:flex items-center gap-1.5 text-xs text-muted-foreground shrink-0"
-              title={online ? "All data is up to date" : "Changes will sync when the connection comes back"}
+              title={
+                online
+                  ? "All data is up to date"
+                  : "Changes will sync when the connection comes back"
+              }
             >
               <RefreshCw className="h-3.5 w-3.5" />
               <span>{online ? "Synced" : "Pending"}</span>
@@ -582,13 +625,25 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
             {/* The drawer carries the name, shop and sign-out on small screens. */}
             <div className="hidden lg:flex items-center gap-2 pl-3 border-l shrink-0">
-              <div className="h-8 w-8 shrink-0 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
-                {user.name.charAt(0)}
-              </div>
+              {/* A shop's own logo IS its picture: the person at that counter
+                  recognises their branch by its mark long before they read a
+                  name, and the owner keeps an initial because a business-wide
+                  logo would say nothing about which account is signed in. */}
+              {shop?.logo ? (
+                <img
+                  src={shop.logo}
+                  alt=""
+                  className="h-8 w-8 shrink-0 rounded-full object-contain bg-white border"
+                />
+              ) : (
+                <div className="h-8 w-8 shrink-0 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
+                  {user.name.charAt(0)}
+                </div>
+              )}
               <div className="leading-tight">
                 <div className="text-sm font-medium">{user.name}</div>
                 <div className="text-xs text-muted-foreground">
-                  {user.role === "admin" ? "Administrator" : shop?.name ?? "Shop"}
+                  {user.role === "admin" ? "Administrator" : (shop?.name ?? "Shop")}
                 </div>
               </div>
             </div>
@@ -657,7 +712,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
   );
 }
 
-export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
+export function PageHeader({
+  title,
+  subtitle,
+  actions,
+}: {
+  title: string;
+  subtitle?: string;
+  actions?: ReactNode;
+}) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4 sm:mb-6">
       <div className="min-w-0">
@@ -670,7 +733,10 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
         and "Add supplier" share the width evenly.
       */}
       {actions && (
-        <div data-print="hide" className="flex flex-wrap gap-2 shrink-0 [&>*]:flex-1 sm:[&>*]:flex-none">
+        <div
+          data-print="hide"
+          className="flex flex-wrap gap-2 shrink-0 [&>*]:flex-1 sm:[&>*]:flex-none"
+        >
           {actions}
         </div>
       )}

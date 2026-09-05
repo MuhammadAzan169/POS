@@ -6,29 +6,60 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { LogoPicker } from "@/components/LogoPicker";
+import { PasswordInput } from "@/components/PasswordInput";
+import { Separator } from "@/components/ui/separator";
+import { accessToken } from "@/lib/auth";
+import { createStaffAccount, resetStaffPassword } from "@/lib/staff-admin";
 import { StatusPill } from "@/components/Stat";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Plus, Store, Warehouse } from "lucide-react";
 import { Confirm } from "@/components/Confirm";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/shops")({ component: ShopsPage });
 
-const EMPTY = { name: "", kind: "retail" as ShopKind, address: "", phone: "", logo: "" };
+const EMPTY = {
+  name: "",
+  kind: "retail" as ShopKind,
+  address: "",
+  phone: "",
+  logo: "",
+  /* The counter's own login, created with the shop rather than afterwards on a
+     different screen — a shop nobody can sign in to is not a working shop. */
+  username: "",
+  password: "",
+  email: "",
+};
 
 /** What each shop type actually does differently, shown while you pick one. */
 const KIND_BLURB: Record<ShopKind, string> = {
-  retail: "Sells to walk-in customers at the shelf price. Runs a day book: the shopkeeper starts and ends each trading day and hands over the cash.",
-  wholesale: "Sells in bulk to outside buyers — other shopkeepers, or anyone buying in quantity — at the wholesale rate instead of the shelf price. Runs a day book like any other outlet.",
+  retail:
+    "Sells to walk-in customers at the shelf price. Runs a day book: the shopkeeper starts and ends each trading day and hands over the cash.",
+  wholesale:
+    "Sells in bulk to outside buyers — other shopkeepers, or anyone buying in quantity — at the wholesale rate instead of the shelf price. Runs a day book like any other outlet.",
 };
 
 function ShopsPage() {
-  const { user, shops, users, sales, inventory, products, addShop, updateShop, settings } = useStore();
+  const { user, shops, users, sales, inventory, products, addShop, updateShop, settings } =
+    useStore();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Shop | null>(null);
   const [form, setForm] = useState(EMPTY);
+  const [saving, setSaving] = useState(false);
 
   if (user?.role !== "admin") {
     return (
@@ -39,22 +70,81 @@ function ShopsPage() {
     );
   }
 
-  const openAdd = () => { setEditing(null); setForm(EMPTY); setOpen(true); };
+  const openAdd = () => {
+    setEditing(null);
+    setForm(EMPTY);
+    setOpen(true);
+  };
   const openEdit = (s: Shop) => {
     setEditing(s);
-    setForm({ name: s.name, kind: shopKind(s), address: s.address, phone: s.phone, logo: s.logo ?? "" });
+    setForm({
+      ...EMPTY,
+      name: s.name,
+      kind: shopKind(s),
+      address: s.address,
+      phone: s.phone,
+      logo: s.logo ?? "",
+    });
     setOpen(true);
   };
 
-  const save = () => {
-    if (!form.name.trim()) { toast.error("Shop name required"); return; }
+  const save = async () => {
+    if (!form.name.trim()) {
+      toast.error("Shop name required");
+      return;
+    }
+
+    /*
+     * A new shop needs a way in. The credentials are asked for here rather than
+     * left to a separate Users screen, because a shop created without a login
+     * is a shop the staff cannot open, and nothing on this page would say so.
+     */
+    if (!editing && (form.username.trim() || form.password)) {
+      if (form.username.trim().length < 3) {
+        toast.error("The username needs at least 3 characters");
+        return;
+      }
+      if (form.password.length < 8) {
+        toast.error("The password needs at least 8 characters");
+        return;
+      }
+    }
+
+    setSaving(true);
     if (editing) {
       updateShop({ ...editing, ...form, logo: form.logo || undefined });
       toast.success("Shop updated");
     } else {
-      addShop({ ...form, logo: form.logo || undefined, active: true });
-      toast.success("Shop added");
+      const shop = addShop({ ...form, logo: form.logo || undefined, active: true });
+
+      if (form.username.trim() && form.password) {
+        const token = await accessToken();
+        if (!token) {
+          toast.error("Sign in again before creating a login");
+        } else {
+          const result = await createStaffAccount({
+            data: {
+              token,
+              username: form.username,
+              password: form.password,
+              name: `${form.name.trim()} counter`,
+              shopId: shop?.id ?? "",
+              email: form.email,
+            },
+          });
+          if (result.ok) {
+            toast.success(`${form.name} added, and ${form.username.trim()} can sign in`);
+          } else {
+            // The shop is already saved, so this says what is missing rather
+            // than pretending the whole thing failed.
+            toast.error(`Shop saved, but the login was not created: ${result.error}`);
+          }
+        }
+      } else {
+        toast.success(`${form.name} added`);
+      }
     }
+    setSaving(false);
     setOpen(false);
   };
 
@@ -68,31 +158,45 @@ function ShopsPage() {
       <PageHeader
         title="Shops"
         subtitle="Retail branches and wholesale counters. The type decides how a shop prices and sells."
-        actions={<Button onClick={openAdd}><Plus className="h-4 w-4 mr-1.5" />Add shop</Button>}
+        actions={
+          <Button onClick={openAdd}>
+            <Plus className="h-4 w-4 mr-1.5" />
+            Add shop
+          </Button>
+        }
       />
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {shops.map((s) => {
           const linked = users.find((u) => u.shopId === s.id);
           const kind = shopKind(s);
           const wholesale = kind === "wholesale";
-          const takings = sales.filter((x) => x.shopId === s.id && x.status !== "Returned").reduce((a, x) => a + x.total, 0);
+          const takings = sales
+            .filter((x) => x.shopId === s.id && x.status !== "Returned")
+            .reduce((a, x) => a + x.total, 0);
           const stockValue = inventory
             .filter((r) => r.shopId === s.id)
-            .reduce((a, r) => a + (products.find((p) => p.id === r.productId)?.cost ?? 0) * r.qty, 0);
+            .reduce(
+              (a, r) => a + (products.find((p) => p.id === r.productId)?.cost ?? 0) * r.qty,
+              0,
+            );
           return (
             <Card key={s.id} className="p-5">
               <div className="flex items-start justify-between gap-2">
-                <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                  wholesale ? "bg-accent/20 text-accent-strong" : "bg-primary/10 text-primary"
-                }`}>
+                <div
+                  className={`h-10 w-10 rounded-lg flex items-center justify-center ${
+                    wholesale ? "bg-accent/20 text-accent-strong" : "bg-primary/10 text-primary"
+                  }`}
+                >
                   {wholesale ? <Warehouse className="h-5 w-5" /> : <Store className="h-5 w-5" />}
                 </div>
                 <div className="flex flex-wrap justify-end gap-1.5">
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
-                    wholesale
-                      ? "bg-accent/15 text-accent-strong border-accent/30"
-                      : "bg-muted text-muted-foreground border-border"
-                  }`}>
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
+                      wholesale
+                        ? "bg-accent/15 text-accent-strong border-accent/30"
+                        : "bg-muted text-muted-foreground border-border"
+                    }`}
+                  >
                     {wholesale ? "Wholesale" : "Retail"}
                   </span>
                   <StatusPill status={s.active ? "Active" : "Disabled"} />
@@ -103,19 +207,28 @@ function ShopsPage() {
               <div className="text-sm text-muted-foreground">{s.phone}</div>
               <dl className="mt-4 pt-4 border-t grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">Takings</dt>
+                  <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                    Takings
+                  </dt>
                   <dd className="font-medium mt-0.5">{formatRs(takings, settings.currency)}</dd>
                 </div>
                 <div>
-                  <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">Stock at cost</dt>
+                  <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                    Stock at cost
+                  </dt>
                   <dd className="font-medium mt-0.5">{formatRs(stockValue, settings.currency)}</dd>
                 </div>
               </dl>
               <div className="mt-3 pt-3 border-t text-xs text-muted-foreground">
-                Linked login: <span className="text-foreground font-medium">{linked?.email ?? "No login yet"}</span>
+                Linked login:{" "}
+                <span className="text-foreground font-medium">
+                  {linked?.email ?? "No login yet"}
+                </span>
               </div>
               <div className="flex gap-2 mt-4">
-                <Button variant="outline" size="sm" className="flex-1" onClick={() => openEdit(s)}>Edit</Button>
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => openEdit(s)}>
+                  Edit
+                </Button>
                 {s.active ? (
                   <Confirm
                     title={`Deactivate ${s.name}?`}
@@ -123,10 +236,21 @@ function ShopsPage() {
                     confirmLabel="Deactivate"
                     destructive
                     onConfirm={() => toggleActive(s)}
-                    trigger={<Button variant="outline" size="sm" className="flex-1">Deactivate</Button>}
+                    trigger={
+                      <Button variant="outline" size="sm" className="flex-1">
+                        Deactivate
+                      </Button>
+                    }
                   />
                 ) : (
-                  <Button variant="outline" size="sm" className="flex-1" onClick={() => toggleActive(s)}>Activate</Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => toggleActive(s)}
+                  >
+                    Activate
+                  </Button>
                 )}
               </div>
             </Card>
@@ -136,13 +260,27 @@ function ShopsPage() {
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{editing ? "Edit shop" : "Add shop"}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit shop" : "Add shop"}</DialogTitle>
+          </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-1.5"><Label>Shop name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Gulberg Outlet" /></div>
+            <div className="space-y-1.5">
+              <Label>Shop name</Label>
+              <Input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="e.g. Gulberg Outlet"
+              />
+            </div>
             <div className="space-y-1.5">
               <Label>Shop type</Label>
-              <Select value={form.kind} onValueChange={(v) => setForm({ ...form, kind: v as ShopKind })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select
+                value={form.kind}
+                onValueChange={(v) => setForm({ ...form, kind: v as ShopKind })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="retail">Retail branch</SelectItem>
                   <SelectItem value="wholesale">Wholesale counter</SelectItem>
@@ -150,24 +288,112 @@ function ShopsPage() {
               </Select>
               <p className="text-xs text-muted-foreground">{KIND_BLURB[form.kind]}</p>
             </div>
-            <div className="space-y-1.5"><Label>Address</Label><Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
-            <div className="space-y-1.5"><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+            <div className="space-y-1.5">
+              <Label>Address</Label>
+              <Input
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Phone</Label>
+              <Input
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              />
+            </div>
             {/*
               Optional, and worth saying so: most branches trade under one name
               and should simply inherit the business logo set in Settings. This
               is for the outlet that has its own.
             */}
             <div className="space-y-1.5">
-              <Label>Logo for this shop&apos;s bills</Label>
-              <LogoPicker value={form.logo} onChange={(logo) => setForm({ ...form, logo })} label="Shop logo" />
+              <Label>Shop logo</Label>
+              <LogoPicker
+                value={form.logo}
+                onChange={(logo) => setForm({ ...form, logo })}
+                label="Shop logo"
+              />
               <p className="text-xs text-muted-foreground">
-                Optional. Left empty, this shop&apos;s bills use the business logo from Settings.
+                Used as this shop&apos;s picture across the app, and printed on its bills. Left
+                empty, its bills fall back to the business logo in Settings.
               </p>
             </div>
+
+            <Separator />
+
+            {/*
+              A shop and the login that opens it are made together. Splitting
+              them across two screens is how a shop ends up existing with nobody
+              able to sign into it — and nothing on this page would have said so.
+            */}
+            {editing ? (
+              <div className="space-y-1.5">
+                <Label>Counter login</Label>
+                <p className="text-xs text-muted-foreground">
+                  Manage this shop&apos;s username and password on the Users page.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Counter login</Label>
+                  <p className="text-xs text-muted-foreground">
+                    What the staff at this shop type to sign in. Optional — you can add it later on
+                    the Users page.
+                  </p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="shop-username">Username</Label>
+                    <Input
+                      id="shop-username"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      placeholder="e.g. gulberg"
+                      value={form.username}
+                      onChange={(e) => setForm({ ...form, username: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="shop-password">Password</Label>
+                    <PasswordInput
+                      id="shop-password"
+                      autoComplete="new-password"
+                      value={form.password}
+                      onChange={(password) => setForm({ ...form, password })}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="shop-email">Email (optional)</Label>
+                  <Input
+                    id="shop-email"
+                    type="email"
+                    inputMode="email"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    placeholder="Kept for contact only"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Not used to sign in — staff sign in with the username above. Stored for when you
+                    need to reach this shop.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={save}>{editing ? "Save changes" : "Add shop"}</Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={save} disabled={saving}>
+              {saving ? "Saving…" : editing ? "Save changes" : "Add shop"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

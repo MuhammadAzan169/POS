@@ -334,3 +334,10 @@ export function onAuthChange(handler: (user: User | null) => void) {
 }
 
 export { usernameFromEmail };
+
+/** The caller's access token, for server functions that must verify who is asking. */
+export async function accessToken(): Promise<string | null> {
+  if (!supabase) return null;
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+}

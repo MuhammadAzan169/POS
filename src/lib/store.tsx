@@ -136,7 +136,7 @@ interface StoreState {
   updateProductAlert: (productId: string, lowAlert: number) => void;
   addProduct: (p: Omit<Product, "id">) => void;
   updateProduct: (p: Product) => void;
-  addShop: (s: Omit<Shop, "id">) => void;
+  addShop: (s: Omit<Shop, "id">) => Shop;
   updateShop: (s: Shop) => void;
   addUser: (u: Omit<User, "id">) => void;
   updateUser: (u: User) => void;
@@ -1030,6 +1030,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const shop: Shop = { ...s, id: `s-${Date.now()}` };
         setShops((prev) => [...prev, shop]);
         persist("the shop", () => db.upsertShop(shop));
+        // Returned so the caller can attach things to it — the counter's login
+        // is created in the same breath as the shop, and needs its id.
+        return shop;
       },
       updateShop: (s) => {
         setShops((prev) => prev.map((x) => (x.id === s.id ? s : x)));
