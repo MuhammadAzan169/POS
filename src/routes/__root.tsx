@@ -52,6 +52,19 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
         <p className="mt-2 text-sm text-muted-foreground">
           Something went wrong on our end. You can try refreshing or head back home.
         </p>
+        {/*
+          The message, on screen.
+          
+          It used to go to the console only, which is no help at all when the
+          person looking at the failure is not the person who can open dev
+          tools — and no help remotely either, because "it says the page didn't
+          load" is the same sentence for every possible cause.
+        */}
+        {error?.message && (
+          <p className="mt-3 rounded-md border bg-muted/40 px-3 py-2 text-left text-xs font-mono text-muted-foreground break-words">
+            {error.message}
+          </p>
+        )}
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
@@ -84,10 +97,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
       { title: "A-POS — Retail Point of Sale" },
-      { name: "description", content: "Multi-shop retail POS: inventory, sales, purchases and profit reporting." },
+      {
+        name: "description",
+        content: "Multi-shop retail POS: inventory, sales, purchases and profit reporting.",
+      },
       { name: "theme-color", content: "#1a1a2e" },
       { property: "og:title", content: "A-POS — Retail Point of Sale" },
-      { property: "og:description", content: "Multi-shop retail POS: inventory, sales, purchases and profit reporting." },
+      {
+        property: "og:description",
+        content: "Multi-shop retail POS: inventory, sales, purchases and profit reporting.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
