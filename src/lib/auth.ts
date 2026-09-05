@@ -115,13 +115,22 @@ export async function claimAsOwner(name: string, phone: string): Promise<AuthRes
   return { user: await currentUser() };
 }
 
-/** Whether an owner has been claimed yet. Safe to call before signing in. */
-export async function hasOwner(): Promise<boolean> {
+/**
+ * Whether an owner has been claimed yet.
+ *
+ * Three answers, not two. Guessing on failure was worse than admitting it: a
+ * fresh install whose check failed was shown a SIGN-IN form for an account that
+ * did not exist, and the only way to discover the truth was to try signing in
+ * to nothing. The page can now say "could not check" and offer to try again.
+ *
+ * Safe to call before signing in — `has_owner()` is granted to anonymous
+ * callers and returns a single boolean, no names or addresses.
+ */
+export async function hasOwner(): Promise<boolean | "unknown"> {
+  // No database behind the app: demo mode has its seeded owner.
   if (!supabase) return true;
   const { data, error } = await supabase.rpc("has_owner");
-  // On error, assume there IS an owner: the failure mode of guessing wrong that
-  // way is a sign-in form nobody can use, rather than an open door.
-  return error ? true : Boolean(data);
+  return error ? "unknown" : Boolean(data);
 }
 
 /**

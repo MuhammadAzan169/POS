@@ -15,7 +15,7 @@
  * bundle, so anything that actually matters is enforced by row-level security.
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import {
   claimAsOwner,
@@ -56,8 +56,16 @@ function AdminSignIn() {
   const [phone, setPhone] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [loading, setLoading] = useState(false);
-  /** null while we are still asking the database. */
-  const [firstRun, setFirstRun] = useState<boolean | null>(null);
+  /*
+   * What this page is for, decided by the database and nothing else.
+   *
+   *   null       still asking
+   *   true       no owner exists -> the ONLY thing on offer is signing up
+   *   false      an owner exists -> the only thing on offer is signing in
+   *   "unknown"  the check failed -> say so, rather than guess and show the
+   *              wrong form to someone who cannot tell it is the wrong one
+   */
+  const [firstRun, setFirstRun] = useState<boolean | null | "unknown">(null);
 
   /*
    * The reset runs in the same page rather than a separate route.
@@ -75,17 +83,23 @@ function AdminSignIn() {
     if (ready && user?.role === "admin") navigate({ to: "/app/dashboard" });
   }, [ready, user, navigate]);
 
-  useEffect(() => {
+  const checkForOwner = useCallback(() => {
     // Demo mode has its seeded owner, so it never offers to create one.
     if (!usingSupabase) return setFirstRun(false);
-    void hasOwner().then((exists) => setFirstRun(!exists));
+    setFirstRun(null);
+    void hasOwner().then((exists) => setFirstRun(exists === "unknown" ? "unknown" : !exists));
   }, [usingSupabase]);
+
+  useEffect(checkForOwner, [checkForOwner]);
 
   /*
    * Arriving from the link in a reset email. The session is already valid by
    * the time this runs, so the only thing left to collect is the new password.
    */
   useEffect(() => onPasswordRecovery(() => setMode("recovering")), []);
+
+  /** Setting up is the only meaning of "no owner yet"; nothing else counts. */
+  const isSetup = firstRun === true;
 
   const sendCode = async () => {
     if (!email.trim()) return toast.error("Enter your email address first");
@@ -123,7 +137,7 @@ function AdminSignIn() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    if (firstRun) {
+    if (isSetup) {
       // Checked here rather than left to the database, so the message names the
       // field rather than reporting a constraint.
       if (password.length < 8) {
@@ -136,7 +150,7 @@ function AdminSignIn() {
       }
     }
 
-    const result = firstRun
+    const result = isSetup
       ? await createOwner({ name, phone, email, password, businessName })
       : await signIn(email, password, "owner");
     setLoading(false);
@@ -147,7 +161,7 @@ function AdminSignIn() {
      * with what was typed — the alternative is telling someone their own brand
      * new account has no access.
      */
-    if (!result.user && !firstRun && /no access/i.test(result.error ?? "")) {
+    if (!result.user && !isSetup && /no access/i.test(result.error ?? "")) {
       const claimed = await claimAsOwner(name || email.split("@")[0], phone);
       if (claimed.user) {
         toast.success("Setup finished");
@@ -169,9 +183,36 @@ function AdminSignIn() {
       toast.error("That is a shop account — sign in on the main page");
       return;
     }
-    toast.success(firstRun ? "Owner account created" : `Welcome back, ${result.user.name}`);
+    toast.success(isSetup ? "Owner account created" : `Welcome back, ${result.user.name}`);
     navigate({ to: "/app/dashboard" });
   };
+
+  if (firstRun === "unknown") {
+    return (
+      <SignInLayout
+        title="Could not reach the system"
+        subtitle="Nothing is wrong with your details — the app could not ask the database whether an owner account exists yet."
+        eyebrow={
+          <div className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border bg-destructive/10 text-destructive border-destructive/30 mb-4">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Not checked
+          </div>
+        }
+        footer={
+          <div className="text-xs text-muted-foreground border rounded-md p-3 bg-muted/40">
+            If this keeps happening, the database connection settings are wrong or the project is
+            paused. Signing in is deliberately not offered until this can be answered — showing the
+            wrong form here is how someone ends up trying to sign in to an account that was never
+            created.
+          </div>
+        }
+      >
+        <Button className="w-full h-11 mt-6" onClick={checkForOwner}>
+          Try again
+        </Button>
+      </SignInLayout>
+    );
+  }
 
   if (mode === "recovering") {
     return (
@@ -312,25 +353,21 @@ function AdminSignIn() {
 
   return (
     <SignInLayout
-      wide={Boolean(firstRun)}
-      title={firstRun ? "Set up your business" : "Owner sign in"}
+      wide={isSetup}
+      title={isSetup ? "Set up your business" : "Owner sign in"}
       subtitle={
-        firstRun
+        isSetup
           ? "One account runs the whole system. It can only be created once, and it is yours."
           : "For the business owner. Shop staff sign in on the main page."
       }
       eyebrow={
         <div className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border bg-primary/10 text-primary border-primary/30 mb-4">
-          {firstRun ? (
-            <Sparkles className="h-3.5 w-3.5" />
-          ) : (
-            <ShieldCheck className="h-3.5 w-3.5" />
-          )}
-          {firstRun ? "First run" : "Administrator"}
+          {isSetup ? <Sparkles className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+          {isSetup ? "First run" : "Administrator"}
         </div>
       }
       footer={
-        firstRun ? (
+        isSetup ? (
           <div className="text-xs text-muted-foreground border rounded-md p-3 bg-warning/10 border-warning/40">
             <strong className="text-warning-strong">
               Do this now, before anyone else opens the app.
@@ -347,7 +384,7 @@ function AdminSignIn() {
       }
     >
       <form onSubmit={submit} className="mt-6 sm:mt-8 space-y-4">
-        {firstRun && (
+        {isSetup && (
           <>
             {/* Grouped: who you are, then how the business is known. Two
                 columns from `sm` up, because six stacked fields on a laptop
@@ -410,7 +447,7 @@ function AdminSignIn() {
             onChange={(e) => setEmail(e.target.value)}
             required
           />
-          {firstRun && (
+          {isSetup && (
             <p className="text-xs text-muted-foreground">
               Used to sign in, and to reset your password if you ever forget it. Use one you can
               actually read.
@@ -420,7 +457,7 @@ function AdminSignIn() {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="admin-password">Password</Label>
-            {!firstRun && (
+            {!isSetup && (
               <button
                 type="button"
                 onClick={() => setMode("forgot")}
@@ -432,20 +469,20 @@ function AdminSignIn() {
           </div>
           <PasswordInput
             id="admin-password"
-            autoComplete={firstRun ? "new-password" : "current-password"}
+            autoComplete={isSetup ? "new-password" : "current-password"}
             value={password}
             onChange={setPassword}
             required
-            minLength={firstRun ? 8 : undefined}
+            minLength={isSetup ? 8 : undefined}
           />
-          {firstRun && (
+          {isSetup && (
             <p className="text-xs text-muted-foreground">
               At least 8 characters. Nothing is emailed — this is only used to sign in.
             </p>
           )}
         </div>
 
-        {firstRun && (
+        {isSetup && (
           <div className="space-y-2">
             <Label htmlFor="admin-confirm">Confirm password</Label>
             <PasswordInput
@@ -462,11 +499,11 @@ function AdminSignIn() {
         )}
         <Button type="submit" className="w-full h-11" disabled={loading || firstRun === null}>
           {loading
-            ? firstRun
-              ? "Creating…"
+            ? isSetup
+              ? "Creating your account…"
               : "Signing in…"
-            : firstRun
-              ? "Create owner account"
+            : isSetup
+              ? "Create account and continue"
               : "Sign in"}
         </Button>
       </form>
