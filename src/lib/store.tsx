@@ -547,9 +547,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const result = await auth.signIn(identifier, password, kind);
         if (result.user) {
           setUser(result.user);
-          // The shop's records are only readable once there is a session, so
-          // they are fetched now rather than at page load.
-          await refreshData();
+          /*
+           * Started, not awaited.
+           *
+           * The records are only readable once there is a session, so they are
+           * fetched here rather than at page load — but signing in must not
+           * WAIT for them. Awaiting meant a slow or failing load left the
+           * button saying "Signing in…" for an account that was already signed
+           * in, with no way to tell the difference from a wrong password.
+           */
+          void refreshData();
         }
         return result;
       },
@@ -559,7 +566,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
         setUser(result.user);
         setNeedsOwner(false);
-        await refreshData();
+        void refreshData();
 
         /*
          * The business name is asked for during setup so the very first bill

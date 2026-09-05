@@ -135,6 +135,14 @@ function AdminSignIn() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    /*
+     * Whatever happens below, the button comes back.
+     *
+     * A form that sits on "Signing in…" tells you nothing: a wrong password, a
+     * slow network and a bug all look identical. This guarantees it either
+     * succeeds, or says why, or gives you the button back to try again.
+     */
+    const release = setTimeout(() => setLoading(false), 15000);
     if (isSetup) {
       // Checked here rather than left to the database, so the message names the
       // field rather than reporting a constraint.
@@ -151,6 +159,7 @@ function AdminSignIn() {
     const result = isSetup
       ? await createOwner({ name, phone, email, password, businessName })
       : await signIn(email, password, "owner");
+    clearTimeout(release);
     setLoading(false);
 
     /*
