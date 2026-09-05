@@ -330,16 +330,29 @@
  * inset, so these are safe to apply unconditionally.
  */
 @utility pb-safe {
-  padding-bottom: env(safe-area-inset-bottom);
+  /* Same reasoning as px-safe: never less than a sensible gap. */
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
 }
 
 @utility pt-safe {
   padding-top: env(safe-area-inset-top);
 }
 
+/*
+ * Keeps content clear of a notch WITHOUT removing ordinary padding.
+ *
+ * This used to be `padding-left: env(safe-area-inset-left)` alone. On any
+ * device with no notch — every desktop browser, most Android phones — that
+ * resolves to 0px, and because it is a padding declaration it OVERRODE the
+ * padding the element already had. The sign-in form, the app header and the
+ * bottom nav all ran hard against the edges of the screen.
+ *
+ * `max()` keeps whichever is larger: the inset on a notched phone, or a normal
+ * margin everywhere else.
+ */
 @utility px-safe {
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
 }
 
 /*
