@@ -23,10 +23,12 @@ function routesFromTree() {
   const found = new Set(["/"]);
   // The FileRoutesByFullPath block lists every reachable path exactly once.
   for (const m of src.matchAll(/^\s*'(\/[^']*)':\s*typeof/gm)) found.add(m[1]);
-  return [...found]
-    // Layout routes are not pages; they have no markup of their own.
-    .filter((r) => r !== "/app")
-    .sort();
+  return (
+    [...found]
+      // Layout routes are not pages; they have no markup of their own.
+      .filter((r) => r !== "/app")
+      .sort()
+  );
 }
 
 const routes = routesFromTree();
@@ -35,7 +37,11 @@ console.log(`checking ${routes.length} routes against ${BASE}\n`);
 let failures = 0;
 
 /** The error boundary's own copy — if this shows up, the page threw. */
-const ERROR_MARKERS = ["This page didn't load", "Something went wrong on our end", "Page not found"];
+const ERROR_MARKERS = [
+  "This page didn't load",
+  "Something went wrong on our end",
+  "Page not found",
+];
 
 for (const route of routes) {
   let status = 0;
@@ -68,7 +74,13 @@ for (const route of routes) {
 /* A route that exists as a file but never made it into the tree is invisible to
    the router, which is a silent failure — the link just does nothing. */
 const files = readFileSync("src/routeTree.gen.ts", "utf8");
-const expected = ["/app/ledger", "/app/customers", "/app/suppliers", "/app/purchases", "/app/daybook"];
+const expected = [
+  "/app/ledger",
+  "/app/customers",
+  "/app/suppliers",
+  "/app/purchases",
+  "/app/daybook",
+];
 expected.forEach((r) => {
   if (!files.includes(`'${r}'`)) {
     console.log(`  FAIL  ${r} is missing from the generated route tree`);
@@ -76,5 +88,7 @@ expected.forEach((r) => {
   }
 });
 
-console.log(`\n${failures === 0 ? `All ${routes.length} routes render.` : `${failures} route check(s) failed.`}`);
+console.log(
+  `\n${failures === 0 ? `All ${routes.length} routes render.` : `${failures} route check(s) failed.`}`,
+);
 process.exit(failures === 0 ? 0 : 1);

@@ -1,13 +1,25 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
-  useStore, formatRs, todayISO, customerBalance, supplierBalance,
-  type Customer, type Supplier,
+  useStore,
+  formatRs,
+  todayISO,
+  customerBalance,
+  supplierBalance,
+  type Customer,
+  type Supplier,
 } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { ArrowLeftRight } from "lucide-react";
 
 /**
@@ -33,12 +45,28 @@ export function SetOffDialog({
   onClose: () => void;
 }) {
   const {
-    user, sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments,
-    settings, addSetOff,
+    user,
+    sales,
+    customerPayments,
+    purchases,
+    supplierPayments,
+    returns,
+    setOffs,
+    adjustments,
+    settings,
+    addSetOff,
   } = useStore();
 
   const money = (n: number) => formatRs(n, settings.currency);
-  const data = { sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments };
+  const data = {
+    sales,
+    customerPayments,
+    purchases,
+    supplierPayments,
+    returns,
+    setOffs,
+    adjustments,
+  };
 
   const receivable = customer ? customerBalance(customer, data).outstanding : 0;
   const payable = supplier ? supplierBalance(supplier, data).outstanding : 0;
@@ -52,7 +80,6 @@ export function SetOffDialog({
     setAmount(available);
     setDate(todayISO());
     setNote("");
-
   }, [customer?.id, supplier?.id]);
 
   if (!customer || !supplier) return null;
@@ -151,8 +178,12 @@ export function SetOffDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={save} disabled={available <= 0}>Record set-off</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={save} disabled={available <= 0}>
+            Record set-off
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

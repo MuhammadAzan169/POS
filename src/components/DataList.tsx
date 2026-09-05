@@ -36,7 +36,9 @@ export function MobileCards<T>({
   return (
     <div className={cn("md:hidden", className)}>
       {items.length === 0 ? (
-        <div className="px-4 py-12 text-center text-sm text-muted-foreground">{empty ?? "Nothing to show."}</div>
+        <div className="px-4 py-12 text-center text-sm text-muted-foreground">
+          {empty ?? "Nothing to show."}
+        </div>
       ) : (
         <ul className="divide-y">
           {items.map((item, i) => (
@@ -88,13 +90,27 @@ export function ListCard({
       onClick={onClick}
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
-      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
-      className={cn("p-4 space-y-3", onClick && "cursor-pointer active:bg-muted/50 transition-colors")}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      className={cn(
+        "p-4 space-y-3",
+        onClick && "cursor-pointer active:bg-muted/50 transition-colors",
+      )}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="font-medium text-sm break-words">{title}</div>
-          {subtitle && <div className="text-xs text-muted-foreground mt-0.5 break-words">{subtitle}</div>}
+          {subtitle && (
+            <div className="text-xs text-muted-foreground mt-0.5 break-words">{subtitle}</div>
+          )}
         </div>
         {(right || rightSub) && (
           <div className="text-right shrink-0">
@@ -110,7 +126,9 @@ export function ListCard({
         <dl className="grid grid-cols-2 xs:grid-cols-3 gap-x-3 gap-y-2 text-sm">
           {shown.map((f) => (
             <div key={f.label} className="min-w-0">
-              <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">{f.label}</dt>
+              <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                {f.label}
+              </dt>
               <dd className={cn("mt-0.5 break-words", f.className)}>{f.value}</dd>
             </div>
           ))}

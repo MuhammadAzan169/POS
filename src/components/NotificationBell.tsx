@@ -42,8 +42,22 @@ const TONE_CLASS = {
  */
 export function NotificationBell({ className }: { className?: string }) {
   const {
-    user, shops, products, inventory, sales, expenses, returns,
-    daySessions, customers, customerPayments, supplierPayments, purchases, setOffs, activity, messages, pendingMigration,
+    user,
+    shops,
+    products,
+    inventory,
+    sales,
+    expenses,
+    returns,
+    daySessions,
+    customers,
+    customerPayments,
+    supplierPayments,
+    purchases,
+    setOffs,
+    activity,
+    messages,
+    pendingMigration,
   } = useStore();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -53,10 +67,41 @@ export function NotificationBell({ className }: { className?: string }) {
   // unrelated render of the shell.
   const source = useMemo(
     () => ({
-      user, shops, products, inventory, sales, expenses, returns,
-      daySessions, customers, customerPayments, supplierPayments, purchases, setOffs, activity, messages, pendingMigration,
+      user,
+      shops,
+      products,
+      inventory,
+      sales,
+      expenses,
+      returns,
+      daySessions,
+      customers,
+      customerPayments,
+      supplierPayments,
+      purchases,
+      setOffs,
+      activity,
+      messages,
+      pendingMigration,
     }),
-    [user, shops, products, inventory, sales, expenses, returns, daySessions, customers, customerPayments, supplierPayments, purchases, setOffs, activity, messages, pendingMigration],
+    [
+      user,
+      shops,
+      products,
+      inventory,
+      sales,
+      expenses,
+      returns,
+      daySessions,
+      customers,
+      customerPayments,
+      supplierPayments,
+      purchases,
+      setOffs,
+      activity,
+      messages,
+      pendingMigration,
+    ],
   );
 
   const { items, unreadCount, isRead, markRead, markAllRead } = useNotifications(source);
@@ -66,7 +111,9 @@ export function NotificationBell({ className }: { className?: string }) {
     const onClick = (e: MouseEvent) => {
       if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
     document.addEventListener("mousedown", onClick);
     document.addEventListener("keydown", onKey);
     return () => {
@@ -85,9 +132,10 @@ export function NotificationBell({ className }: { className?: string }) {
     navigate({ to: n.to, search: n.search } as never);
   };
 
-  const grouped = NOTIFICATION_GROUPS
-    .map((group) => ({ group, rows: items.filter((n) => n.group === group) }))
-    .filter((g) => g.rows.length > 0);
+  const grouped = NOTIFICATION_GROUPS.map((group) => ({
+    group,
+    rows: items.filter((n) => n.group === group),
+  })).filter((g) => g.rows.length > 0);
 
   return (
     <div ref={boxRef} className={cn("relative shrink-0", className)}>
@@ -175,20 +223,38 @@ export function NotificationBell({ className }: { className?: string }) {
                           unread && "bg-primary/[0.04]",
                         )}
                       >
-                        <span className={cn("mt-0.5 h-6 w-6 shrink-0 rounded-full flex items-center justify-center", TONE_CLASS[n.tone])}>
+                        <span
+                          className={cn(
+                            "mt-0.5 h-6 w-6 shrink-0 rounded-full flex items-center justify-center",
+                            TONE_CLASS[n.tone],
+                          )}
+                        >
                           <Icon className="h-3.5 w-3.5" />
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="flex items-start justify-between gap-2">
-                            <span className={cn("text-sm leading-snug", unread ? "font-medium" : "text-foreground/80")}>
+                            <span
+                              className={cn(
+                                "text-sm leading-snug",
+                                unread ? "font-medium" : "text-foreground/80",
+                              )}
+                            >
                               {n.title}
                             </span>
                             {/* An unread dot as well as the tint: the tint alone
                                 disappears against some wallpapers on a phone. */}
-                            {unread && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
+                            {unread && (
+                              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                            )}
                           </span>
-                          <span className="block text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.detail}</span>
-                          {n.at && <span className="block text-[11px] text-muted-foreground/80 mt-1">{ago(n.at)}</span>}
+                          <span className="block text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                            {n.detail}
+                          </span>
+                          {n.at && (
+                            <span className="block text-[11px] text-muted-foreground/80 mt-1">
+                              {ago(n.at)}
+                            </span>
+                          )}
                         </span>
                       </button>
                     );

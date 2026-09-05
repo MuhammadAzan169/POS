@@ -164,7 +164,9 @@ async function callOpenRouter(model: string, apiKey: string, input: AskInput): P
       try {
         const parsed = JSON.parse(text);
         detail = parsed?.error?.message ?? detail;
-      } catch { /* not JSON — keep the raw snippet */ }
+      } catch {
+        /* not JSON — keep the raw snippet */
+      }
       throw new Error(`HTTP ${res.status}: ${detail}`);
     }
 
@@ -200,14 +202,16 @@ export const askAssistant = createServerFn({ method: "POST" })
     if (!apiKey) {
       return {
         ok: false,
-        answer: "No OpenRouter API key configured. Add OPENROUTER_API_KEY to .env and restart the dev server.",
+        answer:
+          "No OpenRouter API key configured. Add OPENROUTER_API_KEY to .env and restart the dev server.",
         attempts,
       };
     }
     if (models.length === 0) {
       return {
         ok: false,
-        answer: "No model configured. Add OPENROUTER_MODEL1 (and optionally MODEL2/MODEL3) to .env.",
+        answer:
+          "No model configured. Add OPENROUTER_MODEL1 (and optionally MODEL2/MODEL3) to .env.",
         attempts,
       };
     }
@@ -217,7 +221,12 @@ export const askAssistant = createServerFn({ method: "POST" })
         const answer = await callOpenRouter(model, apiKey, data);
         return { ok: true, answer, model, attempts };
       } catch (e) {
-        const error = e instanceof Error ? (e.name === "AbortError" ? "timed out after 45s" : e.message) : String(e);
+        const error =
+          e instanceof Error
+            ? e.name === "AbortError"
+              ? "timed out after 45s"
+              : e.message
+            : String(e);
         attempts.push({ model, error });
         // Keep going — the next model in the chain may be available.
       }

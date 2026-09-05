@@ -22,5 +22,8 @@ export function downloadCsv(filename: string, headers: string[], rows: (string |
 }
 
 export function downloadJson(filename: string, data: unknown) {
-  triggerDownload(filename, new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+  triggerDownload(
+    filename,
+    new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+  );
 }

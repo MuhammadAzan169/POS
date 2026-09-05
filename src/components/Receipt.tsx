@@ -48,14 +48,30 @@ export function Receipt({
     <div
       className={`font-mono ${SIZES[d.fontSize]} ${WIDTHS[d.paperWidth]} ${d.align === "center" ? "text-center" : "text-left"} mx-auto bg-muted/40 border rounded-lg p-4 ${className}`}
     >
-      {(d.showBusinessName || d.showShopName || d.showAddress || d.showPhone || d.showHeaderText) && (
+      {(d.showBusinessName ||
+        d.showShopName ||
+        d.showAddress ||
+        d.showPhone ||
+        d.showHeaderText) && (
         <div className="text-center space-y-0.5">
-          {d.showBusinessName && <div className="font-bold text-[1.2em]">{settings.businessName}</div>}
-          {d.showShopName && data.shopName && <div className="text-muted-foreground">{data.shopName}</div>}
-          {d.showAddress && settings.address && <div className="text-muted-foreground">{settings.address}</div>}
-          {d.showPhone && settings.phone && <div className="text-muted-foreground">{settings.phone}</div>}
-          {settings.taxNumber && <div className="text-muted-foreground">NTN: {settings.taxNumber}</div>}
-          {d.showHeaderText && settings.receiptHeader && <div className="mt-1.5">{settings.receiptHeader}</div>}
+          {d.showBusinessName && (
+            <div className="font-bold text-[1.2em]">{settings.businessName}</div>
+          )}
+          {d.showShopName && data.shopName && (
+            <div className="text-muted-foreground">{data.shopName}</div>
+          )}
+          {d.showAddress && settings.address && (
+            <div className="text-muted-foreground">{settings.address}</div>
+          )}
+          {d.showPhone && settings.phone && (
+            <div className="text-muted-foreground">{settings.phone}</div>
+          )}
+          {settings.taxNumber && (
+            <div className="text-muted-foreground">NTN: {settings.taxNumber}</div>
+          )}
+          {d.showHeaderText && settings.receiptHeader && (
+            <div className="mt-1.5">{settings.receiptHeader}</div>
+          )}
         </div>
       )}
 
@@ -76,7 +92,9 @@ export function Receipt({
         {data.lines.map((l, i) => (
           <div key={i}>
             <div className="flex justify-between gap-2">
-              <span className="min-w-0 truncate">{l.qty} × {l.name}</span>
+              <span className="min-w-0 truncate">
+                {l.qty} × {l.name}
+              </span>
               <span className="shrink-0">{money(l.qty * l.price)}</span>
             </div>
             {(d.showUnitPrice || (d.showItemBarcodes && l.barcode)) && (

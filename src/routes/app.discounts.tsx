@@ -39,9 +39,15 @@ function DiscountsPage() {
           finalPrice: Math.round(p.price - (p.price * pct) / 100),
         };
       })
-      .filter((r) => (term ? r.product.name.toLowerCase().includes(term) || r.product.barcode.includes(term) : true))
+      .filter((r) =>
+        term
+          ? r.product.name.toLowerCase().includes(term) || r.product.barcode.includes(term)
+          : true,
+      )
       .filter((r) => (onlyDiscounted ? r.effectivePct > 0 : true))
-      .sort((a, b) => b.effectivePct - a.effectivePct || a.product.name.localeCompare(b.product.name));
+      .sort(
+        (a, b) => b.effectivePct - a.effectivePct || a.product.name.localeCompare(b.product.name),
+      );
   }, [products, discounts, q, onlyDiscounted]);
 
   /**
@@ -50,7 +56,11 @@ function DiscountsPage() {
    * created, so typing and immediately clicking away discarded the edit.
    */
   const commit = (productId: string, raw: string) => {
-    setDrafts((d) => { const n = { ...d }; delete n[productId]; return n; });
+    setDrafts((d) => {
+      const n = { ...d };
+      delete n[productId];
+      return n;
+    });
     const current = discounts.perProduct[productId];
     if (raw.trim() === "") {
       if (current === undefined) return; // nothing to clear
@@ -59,7 +69,10 @@ function DiscountsPage() {
       return;
     }
     const v = Number(raw);
-    if (Number.isNaN(v) || v < 0 || v > 100) { toast.error("Enter a percentage between 0 and 100"); return; }
+    if (Number.isNaN(v) || v < 0 || v > 100) {
+      toast.error("Enter a percentage between 0 and 100");
+      return;
+    }
     if (v === current) return;
     if (v > discounts.maxPct) toast.warning(`Capped at the ${discounts.maxPct}% maximum`);
     setProductDiscount(productId, v);
@@ -67,13 +80,30 @@ function DiscountsPage() {
   };
 
   const exportCsv = () => {
-    if (rows.length === 0) { toast.error("Nothing to export"); return; }
+    if (rows.length === 0) {
+      toast.error("Nothing to export");
+      return;
+    }
     downloadCsv(
       `discounts-${new Date().toISOString().slice(0, 10)}.csv`,
-      ["Product", "Barcode", "Category", "Price", "Item discount %", "Effective discount %", "Price after discount", "Source"],
+      [
+        "Product",
+        "Barcode",
+        "Category",
+        "Price",
+        "Item discount %",
+        "Effective discount %",
+        "Price after discount",
+        "Source",
+      ],
       rows.map((r) => [
-        r.product.name, r.product.barcode, r.product.category, r.product.price,
-        r.hasOwn ? r.ownPct! : "", r.effectivePct, r.finalPrice,
+        r.product.name,
+        r.product.barcode,
+        r.product.category,
+        r.product.price,
+        r.hasOwn ? r.ownPct! : "",
+        r.effectivePct,
+        r.finalPrice,
         r.hasOwn ? "Item" : r.effectivePct > 0 ? "Overall" : "None",
       ]),
     );
@@ -83,7 +113,10 @@ function DiscountsPage() {
   if (!isAdmin) {
     return (
       <div>
-        <PageHeader title="Discounts" subtitle="Set discounts per item or across the whole business." />
+        <PageHeader
+          title="Discounts"
+          subtitle="Set discounts per item or across the whole business."
+        />
         <Card className="p-10 text-center text-sm text-muted-foreground">Admins only.</Card>
       </div>
     );
@@ -96,34 +129,56 @@ function DiscountsPage() {
       <PageHeader
         title="Discounts"
         subtitle="An item's own rate wins; everything else uses the overall rate. Applied automatically at checkout."
-        actions={<Button variant="outline" onClick={exportCsv}><Download className="h-4 w-4 mr-1.5" />Export CSV</Button>}
+        actions={
+          <Button variant="outline" onClick={exportCsv}>
+            <Download className="h-4 w-4 mr-1.5" />
+            Export CSV
+          </Button>
+        }
       />
 
       <Card className="p-5 mb-4">
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="font-medium text-sm">Discounts enabled</div>
-            <div className="text-xs text-muted-foreground">Turn off to sell everything at full price without losing your rates.</div>
+            <div className="text-xs text-muted-foreground">
+              Turn off to sell everything at full price without losing your rates.
+            </div>
           </div>
-          <Switch checked={discounts.enabled} onCheckedChange={(v) => updateDiscounts({ enabled: v })} />
+          <Switch
+            checked={discounts.enabled}
+            onCheckedChange={(v) => updateDiscounts({ enabled: v })}
+          />
         </div>
         <Separator className="my-4" />
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-1.5">
             <Label>Overall discount %</Label>
             <Input
-              type="number" min={0} max={100}
+              type="number"
+              min={0}
+              max={100}
               value={discounts.overallPct}
-              onChange={(e) => updateDiscounts({ overallPct: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })}
+              onChange={(e) =>
+                updateDiscounts({
+                  overallPct: Math.min(100, Math.max(0, Number(e.target.value) || 0)),
+                })
+              }
             />
-            <p className="text-xs text-muted-foreground">Applies to every product without its own rate.</p>
+            <p className="text-xs text-muted-foreground">
+              Applies to every product without its own rate.
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label>Maximum discount %</Label>
             <Input
-              type="number" min={0} max={100}
+              type="number"
+              min={0}
+              max={100}
               value={discounts.maxPct}
-              onChange={(e) => updateDiscounts({ maxPct: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })}
+              onChange={(e) =>
+                updateDiscounts({ maxPct: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })
+              }
             />
             <p className="text-xs text-muted-foreground">Hard cap — no item can exceed this.</p>
           </div>
@@ -144,7 +199,12 @@ function DiscountsPage() {
           <Label className="text-xs">Search</Label>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input placeholder="Product name or barcode…" className="pl-9 w-full sm:w-64" value={q} onChange={(e) => setQ(e.target.value)} />
+            <Input
+              placeholder="Product name or barcode…"
+              className="pl-9 w-full sm:w-64"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
           </div>
         </div>
         <button
@@ -166,8 +226,13 @@ function DiscountsPage() {
             toast.success("Item discounts cleared");
           }}
           trigger={
-            <Button variant="outline" className="w-full sm:w-auto sm:ml-auto" disabled={withOwn === 0}>
-              <RotateCcw className="h-4 w-4 mr-1.5" />Clear item rates
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto sm:ml-auto"
+              disabled={withOwn === 0}
+            >
+              <RotateCcw className="h-4 w-4 mr-1.5" />
+              Clear item rates
             </Button>
           }
         />
@@ -183,15 +248,23 @@ function DiscountsPage() {
               title={r.product.name}
               subtitle={<span className="font-mono">{r.product.barcode || "No barcode"}</span>}
               right={formatRs(r.finalPrice, settings.currency)}
-              rightSub={r.effectivePct > 0 ? `was ${formatRs(r.product.price, settings.currency)}` : undefined}
+              rightSub={
+                r.effectivePct > 0
+                  ? `was ${formatRs(r.product.price, settings.currency)}`
+                  : undefined
+              }
               fields={[
                 { label: "Category", value: r.product.category },
                 {
                   label: "Effective",
                   value: `${r.effectivePct}%`,
-                  className: r.effectivePct > 0 ? "text-accent-strong font-medium" : "text-muted-foreground",
+                  className:
+                    r.effectivePct > 0 ? "text-accent-strong font-medium" : "text-muted-foreground",
                 },
-                { label: "Source", value: r.hasOwn ? "Item rate" : r.effectivePct > 0 ? "Overall rate" : "None" },
+                {
+                  label: "Source",
+                  value: r.hasOwn ? "Item rate" : r.effectivePct > 0 ? "Overall rate" : "None",
+                },
               ]}
               actions={
                 <>
@@ -207,12 +280,15 @@ function DiscountsPage() {
                       value={drafts[r.product.id] ?? (r.hasOwn ? String(r.ownPct) : "")}
                       onChange={(e) => setDrafts((d) => ({ ...d, [r.product.id]: e.target.value }))}
                       onBlur={(e) => commit(r.product.id, e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      }}
                       className="w-20 text-right"
                     />
                   </div>
                   <Button size="sm" variant="outline" onClick={() => setEditing(r.product)}>
-                    <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
+                    <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                    Edit
                   </Button>
                 </>
               }
@@ -237,36 +313,53 @@ function DiscountsPage() {
               {rows.map((r) => (
                 <tr key={r.product.id} className="border-t hover:bg-muted/40">
                   <td className="px-4 py-3 font-medium">{r.product.name}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.product.barcode || "No barcode"}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                    {r.product.barcode || "No barcode"}
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">{r.product.category}</td>
-                  <td className="px-4 py-3 text-right">{formatRs(r.product.price, settings.currency)}</td>
+                  <td className="px-4 py-3 text-right">
+                    {formatRs(r.product.price, settings.currency)}
+                  </td>
                   <td className="px-4 py-3">
                     <Input
-                      type="number" min={0} max={100}
+                      type="number"
+                      min={0}
+                      max={100}
                       aria-label={`Discount for ${r.product.name}`}
                       placeholder={`${discounts.overallPct}`}
                       value={drafts[r.product.id] ?? (r.hasOwn ? String(r.ownPct) : "")}
                       onChange={(e) => setDrafts((d) => ({ ...d, [r.product.id]: e.target.value }))}
                       onBlur={(e) => commit(r.product.id, e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      }}
                       className="h-8 text-right"
                     />
                   </td>
-                  <td className={`px-4 py-3 text-right font-medium ${r.effectivePct > 0 ? "text-accent-strong" : "text-muted-foreground"}`}>
+                  <td
+                    className={`px-4 py-3 text-right font-medium ${r.effectivePct > 0 ? "text-accent-strong" : "text-muted-foreground"}`}
+                  >
                     {r.effectivePct}%{r.hasOwn && r.effectivePct > 0 ? "" : ""}
                   </td>
-                  <td className="px-4 py-3 text-right font-medium">{formatRs(r.finalPrice, settings.currency)}</td>
+                  <td className="px-4 py-3 text-right font-medium">
+                    {formatRs(r.finalPrice, settings.currency)}
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <Button size="sm" variant="ghost" onClick={() => setEditing(r.product)}>
-                      <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
+                      <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                      Edit
                     </Button>
                   </td>
                 </tr>
               ))}
               {rows.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                  {onlyDiscounted ? "No item currently has a discount." : `No products match “${q}”.`}
-                </td></tr>
+                <tr>
+                  <td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                    {onlyDiscounted
+                      ? "No item currently has a discount."
+                      : `No products match “${q}”.`}
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>

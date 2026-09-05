@@ -1,9 +1,22 @@
 import { useEffect, useState } from "react";
 import {
-  useStore, formatRs, discountAmountFor, discountSplitOf, closedSessionFor, shortDay, WALK_IN,
+  useStore,
+  formatRs,
+  discountAmountFor,
+  discountSplitOf,
+  closedSessionFor,
+  shortDay,
+  WALK_IN,
   type Sale,
 } from "@/lib/store";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,7 +76,11 @@ export function SaleEditDialog({ sale, onClose }: { sale: Sale | null; onClose: 
                 ? // The discount is an amount in rupees, not a rate, so cutting
                   // the quantity must not leave more off the line than the line
                   // is now worth.
-                  { ...l, qty: Math.max(0, qty), discount: Math.min(l.discount, Math.max(0, qty) * l.price) }
+                  {
+                    ...l,
+                    qty: Math.max(0, qty),
+                    discount: Math.min(l.discount, Math.max(0, qty) * l.price),
+                  }
                 : l,
             ),
           }
@@ -119,10 +136,19 @@ export function SaleEditDialog({ sale, onClose }: { sale: Sale | null; onClose: 
   const discountPct = subtotal > 0 ? Math.round((discount / subtotal) * 100) : 0;
 
   const save = () => {
-    if (draft.lines.length === 0) { toast.error("A sale needs at least one item — delete it instead"); return; }
-    if (draft.lines.some((l) => l.qty <= 0)) { toast.error("Every line needs a quantity of at least 1"); return; }
+    if (draft.lines.length === 0) {
+      toast.error("A sale needs at least one item — delete it instead");
+      return;
+    }
+    if (draft.lines.some((l) => l.qty <= 0)) {
+      toast.error("Every line needs a quantity of at least 1");
+      return;
+    }
     const over = draft.lines.find((l) => l.qty > maxQtyFor(l.productId));
-    if (over) { toast.error(`Only ${maxQtyFor(over.productId)} of ${over.name} available`); return; }
+    if (over) {
+      toast.error(`Only ${maxQtyFor(over.productId)} of ${over.name} available`);
+      return;
+    }
 
     updateSale({ ...draft, subtotal, discount, total, profit });
     toast.success(`${draft.invoice} updated`);
@@ -162,8 +188,8 @@ export function SaleEditDialog({ sale, onClose }: { sale: Sale | null; onClose: 
                 This sale belongs to {shortDay(settledDay.businessDate)}, which is already closed
               </div>
               <p className="mt-1 text-muted-foreground">
-                That day&apos;s cash was counted and handed over. Changing the figures now will make its
-                takings disagree with the money that actually changed hands.
+                That day&apos;s cash was counted and handed over. Changing the figures now will make
+                its takings disagree with the money that actually changed hands.
               </p>
             </div>
           </div>
@@ -183,7 +209,10 @@ export function SaleEditDialog({ sale, onClose }: { sale: Sale | null; onClose: 
           </div>
           <div className="space-y-1.5">
             <Label>Payment</Label>
-            <PaymentPicker value={draft.payment} onChange={(p) => setDraft({ ...draft, payment: p })} />
+            <PaymentPicker
+              value={draft.payment}
+              onChange={(p) => setDraft({ ...draft, payment: p })}
+            />
           </div>
         </div>
 
@@ -205,7 +234,9 @@ export function SaleEditDialog({ sale, onClose }: { sale: Sale | null; onClose: 
                 <button
                   onClick={() => removeLine(l.productId)}
                   disabled={draft.lines.length === 1}
-                  title={draft.lines.length === 1 ? "A sale needs at least one item" : "Remove item"}
+                  title={
+                    draft.lines.length === 1 ? "A sale needs at least one item" : "Remove item"
+                  }
                   aria-label={`Remove ${l.name}`}
                   className="h-9 w-9 -mr-1 -mt-1 shrink-0 flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive disabled:opacity-40 disabled:cursor-not-allowed"
                 >
@@ -270,8 +301,12 @@ export function SaleEditDialog({ sale, onClose }: { sale: Sale | null; onClose: 
               {draft.lines.map((l) => (
                 <tr key={l.productId} className="border-t">
                   <td className="px-3 py-2">{l.name}</td>
-                  <td className="px-3 py-2 text-right text-muted-foreground tabular-nums">{money(l.price)}</td>
-                  <td className="px-3 py-2 text-right text-muted-foreground tabular-nums">{maxQtyFor(l.productId)}</td>
+                  <td className="px-3 py-2 text-right text-muted-foreground tabular-nums">
+                    {money(l.price)}
+                  </td>
+                  <td className="px-3 py-2 text-right text-muted-foreground tabular-nums">
+                    {maxQtyFor(l.productId)}
+                  </td>
                   <td className="px-3 py-2">
                     <Input
                       type="number"
@@ -308,7 +343,9 @@ export function SaleEditDialog({ sale, onClose }: { sale: Sale | null; onClose: 
                     <button
                       onClick={() => removeLine(l.productId)}
                       disabled={draft.lines.length === 1}
-                      title={draft.lines.length === 1 ? "A sale needs at least one item" : "Remove item"}
+                      title={
+                        draft.lines.length === 1 ? "A sale needs at least one item" : "Remove item"
+                      }
                       className="text-muted-foreground hover:text-destructive disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -346,7 +383,8 @@ export function SaleEditDialog({ sale, onClose }: { sale: Sale | null; onClose: 
               className="h-10 text-right tabular-nums"
             />
             <p className="text-xs text-muted-foreground">
-              On top of the item discounts above. At most {money(billRoom)} — a slip can't go below zero.
+              On top of the item discounts above. At most {money(billRoom)} — a slip can't go below
+              zero.
               {billDiscount > billRoom && " Capped to that."}
             </p>
           </div>
@@ -389,7 +427,9 @@ export function SaleEditDialog({ sale, onClose }: { sale: Sale | null; onClose: 
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
           <Confirm
             title="Save these changes?"
             description="Totals are recalculated and stock is adjusted by the difference in quantities. This can't be undone."

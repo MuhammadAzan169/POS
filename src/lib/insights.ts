@@ -91,7 +91,10 @@ export function computeInsights(d: InsightInput) {
   const last30 = window("last 30 days", daysAgo(29));
 
   // Per-product performance over the last 30 days.
-  const perProduct = new Map<string, { name: string; qty: number; revenue: number; profit: number }>();
+  const perProduct = new Map<
+    string,
+    { name: string; qty: number; revenue: number; profit: number }
+  >();
   // Net of both discounts, matching the Sales and Reports screens. Feeding the
   // model full-price figures had it recommending products whose margin the
   // discounts had already eaten.
@@ -187,12 +190,18 @@ export function computeInsights(d: InsightInput) {
 
   const supplierSpend = d.suppliers
     .map((s) => {
-      const bills = d.purchases.filter((p) => (p.supplierId ? p.supplierId === s.id : p.supplier === s.name));
+      const bills = d.purchases.filter((p) =>
+        p.supplierId ? p.supplierId === s.id : p.supplier === s.name,
+      );
       return {
         supplier: s.name,
         bills: bills.length,
         spend: Math.round(sum(bills.map((b) => b.total))),
-        lastPurchase: bills.map((b) => b.date).sort().at(-1) ?? "never",
+        lastPurchase:
+          bills
+            .map((b) => b.date)
+            .sort()
+            .at(-1) ?? "never",
       };
     })
     .sort((a, b) => b.spend - a.spend);
@@ -216,7 +225,10 @@ export function computeInsights(d: InsightInput) {
     adjustments: d.adjustments ?? [],
   };
 
-  const customerBalances = customers.map((c) => ({ customer: c, balance: customerBalance(c, ledgerData) }));
+  const customerBalances = customers.map((c) => ({
+    customer: c,
+    balance: customerBalance(c, ledgerData),
+  }));
 
   const receivables = {
     note: "What customers owe the business right now. Not date-scoped — a balance is a standing figure, not a period total.",
@@ -227,7 +239,11 @@ export function computeInsights(d: InsightInput) {
     advancesHeld: Math.round(sum(customerBalances.map((x) => x.balance.advance))),
     atCreditLimit: customerBalances
       .filter((x) => x.balance.overLimit)
-      .map((x) => ({ name: x.customer.name, owes: Math.round(x.balance.outstanding), limit: x.customer.creditLimit })),
+      .map((x) => ({
+        name: x.customer.name,
+        owes: Math.round(x.balance.outstanding),
+        limit: x.customer.creditLimit,
+      })),
     topDebtors: customerBalances
       .filter((x) => x.balance.outstanding > 0)
       .sort((a, b) => b.balance.outstanding - a.balance.outstanding)
@@ -240,13 +256,18 @@ export function computeInsights(d: InsightInput) {
         lastPayment: x.balance.lastPayment ? dayOf(x.balance.lastPayment) : "never",
       })),
     collectedLast30Days: Math.round(
-      sum((d.customerPayments ?? []).filter((p) => dayOf(p.date) >= daysAgo(29)).map((p) => p.amount)),
+      sum(
+        (d.customerPayments ?? []).filter((p) => dayOf(p.date) >= daysAgo(29)).map((p) => p.amount),
+      ),
     ),
   };
 
   /* ------------------------------------------------- credit owed BY us */
 
-  const supplierBalances = d.suppliers.map((sp) => ({ supplier: sp, balance: supplierBalance(sp, ledgerData) }));
+  const supplierBalances = d.suppliers.map((sp) => ({
+    supplier: sp,
+    balance: supplierBalance(sp, ledgerData),
+  }));
   const bills = openBills(ledgerData, today);
   const overdue = bills.filter((b) => b.overdueDays > 0);
   const parties = partyPositions(customers, d.suppliers, ledgerData);
@@ -325,7 +346,9 @@ export function computeInsights(d: InsightInput) {
         expectedCashNow: Math.round(summarizeSession(x, sessionData).expectedCash),
       })),
     shopsNotStartedToday: d.shops
-      .filter((sh) => sh.active && !sessions.some((x) => x.shopId === sh.id && x.businessDate === today))
+      .filter(
+        (sh) => sh.active && !sessions.some((x) => x.shopId === sh.id && x.businessDate === today),
+      )
       .map((sh) => sh.name),
     // A short till is the one figure worth chasing the same week.
     shortfallsLast30Days: closedRecently
@@ -359,8 +382,12 @@ export function computeInsights(d: InsightInput) {
   /* ----------------------------------------------------------- oversight */
 
   const activity = d.activity ?? [];
-  const recentDeletions = activity.filter((a) => a.action === "deleted" && dayOf(a.at) >= daysAgo(29));
-  const writeOffs = (d.adjustments ?? []).filter((a) => a.amount < 0 && dayOf(a.date) >= daysAgo(29));
+  const recentDeletions = activity.filter(
+    (a) => a.action === "deleted" && dayOf(a.at) >= daysAgo(29),
+  );
+  const writeOffs = (d.adjustments ?? []).filter(
+    (a) => a.amount < 0 && dayOf(a.date) >= daysAgo(29),
+  );
 
   const oversight = {
     note: "Records removed or balances changed by hand. Deleted records are recoverable from the Activity page.",
@@ -416,11 +443,19 @@ export function computeInsights(d: InsightInput) {
       byCategory: expensesByCategory,
     },
     inventoryValueAtCost: Math.round(
-      sum(d.inventory.map((r) => r.qty * (d.products.find((p) => p.id === r.productId)?.cost ?? 0))),
+      sum(
+        d.inventory.map((r) => r.qty * (d.products.find((p) => p.id === r.productId)?.cost ?? 0)),
+      ),
     ),
     returnsAllTime: {
-      customer: { count: customerReturns.length, refunded: Math.round(sum(customerReturns.map((r) => r.refund))) },
-      supplier: { count: supplierReturns.length, credited: Math.round(sum(supplierReturns.map((r) => r.refund))) },
+      customer: {
+        count: customerReturns.length,
+        refunded: Math.round(sum(customerReturns.map((r) => r.refund))),
+      },
+      supplier: {
+        count: supplierReturns.length,
+        credited: Math.round(sum(supplierReturns.map((r) => r.refund))),
+      },
     },
     supplierSpendAllTime: supplierSpend,
     discountRules: {
@@ -429,7 +464,11 @@ export function computeInsights(d: InsightInput) {
       maxPct: d.discounts.maxPct,
       itemsWithOwnRate: Object.keys(d.discounts.perProduct).length,
     },
-    catalogue: { products: d.products.length, shops: d.shops.length, suppliers: d.suppliers.length },
+    catalogue: {
+      products: d.products.length,
+      shops: d.shops.length,
+      suppliers: d.suppliers.length,
+    },
 
     /*
       Money owed in both directions, the trading day, and who changed what.

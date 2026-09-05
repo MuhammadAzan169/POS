@@ -1,13 +1,25 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
-  useStore, formatRs, todayISO, customerBalance, supplierBalance,
-  type Customer, type Supplier,
+  useStore,
+  formatRs,
+  todayISO,
+  customerBalance,
+  supplierBalance,
+  type Customer,
+  type Supplier,
 } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Scale, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -39,12 +51,28 @@ export function AdjustBalanceDialog({
   onClose: () => void;
 }) {
   const {
-    user, sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments,
-    settings, addAdjustment,
+    user,
+    sales,
+    customerPayments,
+    purchases,
+    supplierPayments,
+    returns,
+    setOffs,
+    adjustments,
+    settings,
+    addAdjustment,
   } = useStore();
 
   const money = (n: number) => formatRs(n, settings.currency);
-  const data = { sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments };
+  const data = {
+    sales,
+    customerPayments,
+    purchases,
+    supplierPayments,
+    returns,
+    setOffs,
+    adjustments,
+  };
 
   const party = customer ?? supplier ?? null;
   const isCustomer = Boolean(customer);
@@ -68,7 +96,6 @@ export function AdjustBalanceDialog({
     setAmount(0);
     setDate(todayISO());
     setReason("");
-
   }, [customer?.id, supplier?.id]);
 
   if (!party || !balance) return null;
@@ -155,14 +182,18 @@ export function AdjustBalanceDialog({
                         ? "bg-destructive text-white border-destructive"
                         : "bg-primary text-primary-foreground border-primary"
                       : "hover:bg-muted",
-                    m.key === "writeOff" && outstanding <= 0 && "opacity-40 cursor-not-allowed hover:bg-transparent",
+                    m.key === "writeOff" &&
+                      outstanding <= 0 &&
+                      "opacity-40 cursor-not-allowed hover:bg-transparent",
                   )}
                 >
                   {m.label}
                 </button>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">{modes.find((m) => m.key === mode)?.hint}</p>
+            <p className="text-xs text-muted-foreground">
+              {modes.find((m) => m.key === mode)?.hint}
+            </p>
           </div>
 
           {mode !== "writeOff" && (
@@ -225,10 +256,13 @@ export function AdjustBalanceDialog({
             <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-xs">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
               <div>
-                <div className="font-medium text-destructive">This says the money is never coming.</div>
+                <div className="font-medium text-destructive">
+                  This says the money is never coming.
+                </div>
                 <p className="mt-1 text-muted-foreground">
-                  The invoices stay exactly as they are — they are the record of goods that really left
-                  the shop. Only the balance is cleared, and it can be undone from the Ledgers tab.
+                  The invoices stay exactly as they are — they are the record of goods that really
+                  left the shop. Only the balance is cleared, and it can be undone from the Ledgers
+                  tab.
                 </p>
               </div>
             </div>
@@ -240,7 +274,9 @@ export function AdjustBalanceDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
           <Button variant={mode === "writeOff" ? "destructive" : "default"} onClick={save}>
             {mode === "writeOff" ? `Write off ${money(magnitude)}` : "Record adjustment"}
           </Button>

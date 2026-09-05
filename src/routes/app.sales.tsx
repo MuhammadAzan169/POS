@@ -1,8 +1,20 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  useStore, formatRs, customerNameOf, todayISO, daysAgoISO, dayOf, discountSplitOf, allocateSale,
-  closedSessionFor, shortDay, customerBalance, type Customer, type DaySession, type Sale,
+  useStore,
+  formatRs,
+  customerNameOf,
+  todayISO,
+  daysAgoISO,
+  dayOf,
+  discountSplitOf,
+  allocateSale,
+  closedSessionFor,
+  shortDay,
+  customerBalance,
+  type Customer,
+  type DaySession,
+  type Sale,
 } from "@/lib/store";
 import { SaleEditDialog } from "@/components/SaleEditDialog";
 import { BillDialog } from "@/components/BillDialog";
@@ -16,10 +28,32 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Download, FileText, Printer, Undo2, Pencil, Trash2, RotateCcw, ReceiptText, HandCoins } from "lucide-react";
+import {
+  Download,
+  FileText,
+  Printer,
+  Undo2,
+  Pencil,
+  Trash2,
+  RotateCcw,
+  ReceiptText,
+  HandCoins,
+} from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { cn } from "@/lib/utils";
 import { Confirm } from "@/components/Confirm";
@@ -31,7 +65,16 @@ const DATE_PRESETS = [
   { label: "Yesterday", range: () => ({ from: daysAgoISO(1), to: daysAgoISO(1) }) },
   { label: "Last 7 days", range: () => ({ from: daysAgoISO(6), to: todayISO() }) },
   { label: "Last 30 days", range: () => ({ from: daysAgoISO(29), to: todayISO() }) },
-  { label: "This month", range: () => { const d = new Date(); return { from: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`, to: todayISO() }; } },
+  {
+    label: "This month",
+    range: () => {
+      const d = new Date();
+      return {
+        from: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`,
+        to: todayISO(),
+      };
+    },
+  },
 ];
 
 export const Route = createFileRoute("/app/sales")({
@@ -85,8 +128,18 @@ function ClosedDayWarning({ sale, sessions }: { sale: Sale; sessions: DaySession
 
 function SalesPage() {
   const {
-    user, sales, shops, products, addReturn, deleteSale, daySessions, settings,
-    customers, customerPayments, setOffs, adjustments,
+    user,
+    sales,
+    shops,
+    products,
+    addReturn,
+    deleteSale,
+    daySessions,
+    settings,
+    customers,
+    customerPayments,
+    setOffs,
+    adjustments,
   } = useStore();
   const navigate = useNavigate();
   const { q: searchParam } = Route.useSearch();
@@ -105,22 +158,26 @@ function SalesPage() {
   // Arriving from the header search (or a second search while already here)
   // should refill the filter box.
   // The ?? "" keeps the <Input> controlled when the param is absent.
-  useEffect(() => { setQ(searchParam ?? ""); }, [searchParam]);
+  useEffect(() => {
+    setQ(searchParam ?? "");
+  }, [searchParam]);
 
   const rows = useMemo(() => {
-    return sales
-      .filter((s) => (isAdmin ? true : s.shopId === user?.shopId))
-      .filter((s) => (shopFilter === "all" ? true : s.shopId === shopFilter))
-      // Date filters compare on the YYYY-MM-DD part, so a single day works by
-      // setting from and to the same date.
-      .filter((s) => (from ? dayOf(s.date) >= from : true))
-      .filter((s) => (to ? dayOf(s.date) <= to : true))
-      .filter((s) =>
-        q
-          ? s.invoice.toLowerCase().includes(q.toLowerCase()) ||
-            customerNameOf(s).toLowerCase().includes(q.toLowerCase())
-          : true,
-      );
+    return (
+      sales
+        .filter((s) => (isAdmin ? true : s.shopId === user?.shopId))
+        .filter((s) => (shopFilter === "all" ? true : s.shopId === shopFilter))
+        // Date filters compare on the YYYY-MM-DD part, so a single day works by
+        // setting from and to the same date.
+        .filter((s) => (from ? dayOf(s.date) >= from : true))
+        .filter((s) => (to ? dayOf(s.date) <= to : true))
+        .filter((s) =>
+          q
+            ? s.invoice.toLowerCase().includes(q.toLowerCase()) ||
+              customerNameOf(s).toLowerCase().includes(q.toLowerCase())
+            : true,
+        )
+    );
   }, [sales, isAdmin, user?.shopId, shopFilter, q, from, to]);
 
   const selected = open ? sales.find((s) => s.id === open) : null;
@@ -141,7 +198,9 @@ function SalesPage() {
 
   const owesOn = (sale: Sale) => {
     const c = accountFor(sale);
-    return c ? customerBalance(c, { sales, customerPayments, setOffs, adjustments }).outstanding : 0;
+    return c
+      ? customerBalance(c, { sales, customerPayments, setOffs, adjustments }).outstanding
+      : 0;
   };
 
   const stats = useMemo(() => {
@@ -173,7 +232,12 @@ function SalesPage() {
   }, [rows]);
 
   const hasFilters = Boolean(q || from || to || shopFilter !== "all");
-  const clearFilters = () => { setQ(""); setFrom(""); setTo(""); setShopFilter("all"); };
+  const clearFilters = () => {
+    setQ("");
+    setFrom("");
+    setTo("");
+    setShopFilter("all");
+  };
 
   /**
    * The same filtered sales, rolled up per product.
@@ -183,7 +247,17 @@ function SalesPage() {
    * reorder. Both read from `rows`, so they can never disagree about the period.
    */
   const productRows = useMemo(() => {
-    const map = new Map<string, { name: string; barcode: string; qty: number; revenue: number; profit: number; invoices: number }>();
+    const map = new Map<
+      string,
+      {
+        name: string;
+        barcode: string;
+        qty: number;
+        revenue: number;
+        profit: number;
+        invoices: number;
+      }
+    >();
     rows
       .filter((s) => s.status !== "Returned")
       // Both discounts are accounted for by allocateSale, so this tab's totals
@@ -194,7 +268,10 @@ function SalesPage() {
           const cur = map.get(l.productId) ?? {
             name: l.name,
             barcode: products.find((p) => p.id === l.productId)?.barcode ?? "",
-            qty: 0, revenue: 0, profit: 0, invoices: 0,
+            qty: 0,
+            revenue: 0,
+            profit: 0,
+            invoices: 0,
           };
           cur.qty += l.qty;
           cur.revenue += revenue;
@@ -216,26 +293,56 @@ function SalesPage() {
   );
 
   const exportProducts = () => {
-    if (productRows.length === 0) { toast.error("Nothing to export"); return; }
+    if (productRows.length === 0) {
+      toast.error("Nothing to export");
+      return;
+    }
     downloadCsv(
       `products-sold-${todayISO()}.csv`,
       ["Product", "Barcode", "Qty sold", "Revenue", ...(isAdmin ? ["Profit"] : []), "Times sold"],
       [
-        ...productRows.map((r) => [r.name, r.barcode, r.qty, r.revenue, ...(isAdmin ? [r.profit] : []), r.invoices]),
-        ["TOTAL", "", productTotals.qty, productTotals.revenue, ...(isAdmin ? [productTotals.profit] : []), ""],
+        ...productRows.map((r) => [
+          r.name,
+          r.barcode,
+          r.qty,
+          r.revenue,
+          ...(isAdmin ? [r.profit] : []),
+          r.invoices,
+        ]),
+        [
+          "TOTAL",
+          "",
+          productTotals.qty,
+          productTotals.revenue,
+          ...(isAdmin ? [productTotals.profit] : []),
+          "",
+        ],
       ],
     );
     toast.success(`Exported ${productRows.length} products`);
   };
 
   const exportCsv = () => {
-    if (rows.length === 0) { toast.error("Nothing to export"); return; }
+    if (rows.length === 0) {
+      toast.error("Nothing to export");
+      return;
+    }
     downloadCsv(
       `sales-${new Date().toISOString().slice(0, 10)}.csv`,
       [
-        "Invoice", "Date", "Shop", "Customer", "Paid by", "Items", "Subtotal",
-        "Item discount", "Bill discount", "Total discount", "Total",
-        ...(isAdmin ? ["Profit"] : []), "Status",
+        "Invoice",
+        "Date",
+        "Shop",
+        "Customer",
+        "Paid by",
+        "Items",
+        "Subtotal",
+        "Item discount",
+        "Bill discount",
+        "Total discount",
+        "Total",
+        ...(isAdmin ? ["Profit"] : []),
+        "Status",
       ],
       rows.map((s) => {
         const d = discountSplitOf(s);
@@ -280,7 +387,10 @@ function SalesPage() {
         title="Sales"
         subtitle={isAdmin ? "Every invoice across every shop." : "Your shop's invoices."}
         actions={
-          <Button variant="outline" onClick={exportCsv}><Download className="h-4 w-4 mr-1.5" />Export CSV</Button>
+          <Button variant="outline" onClick={exportCsv}>
+            <Download className="h-4 w-4 mr-1.5" />
+            Export CSV
+          </Button>
         }
       />
 
@@ -301,7 +411,9 @@ function SalesPage() {
               buried inside each invoice. */}
           <Metric
             label="Discount given"
-            value={stats.discount === 0 ? "None given" : formatRs(stats.discount, settings.currency)}
+            value={
+              stats.discount === 0 ? "None given" : formatRs(stats.discount, settings.currency)
+            }
             sub={
               stats.discount > 0
                 ? `${formatRs(stats.itemDiscount, settings.currency)} item · ${formatRs(stats.billDiscount, settings.currency)} bill`
@@ -311,12 +423,20 @@ function SalesPage() {
           <Metric
             label="On credit"
             value={stats.credit === 0 ? "None" : formatRs(stats.credit, settings.currency)}
-            sub={stats.creditCount > 0 ? `${stats.creditCount} invoice${stats.creditCount === 1 ? "" : "s"} unpaid` : undefined}
+            sub={
+              stats.creditCount > 0
+                ? `${stats.creditCount} invoice${stats.creditCount === 1 ? "" : "s"} unpaid`
+                : undefined
+            }
             tone={stats.credit > 0 ? "destructive" : undefined}
             to={isAdmin ? "/app/ledger" : "/app/customers"}
           />
           {isAdmin ? (
-            <Metric label="Profit" value={formatRs(stats.profit, settings.currency)} tone="success" />
+            <Metric
+              label="Profit"
+              value={formatRs(stats.profit, settings.currency)}
+              tone="success"
+            />
           ) : (
             <Metric
               label="Returned"
@@ -342,31 +462,58 @@ function SalesPage() {
         <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-end">
           <div className="space-y-1.5 col-span-2 sm:col-auto">
             <Label className="text-xs">Search</Label>
-            <Input placeholder="Invoice or customer…" value={q} onChange={(e) => setQ(e.target.value)} className="w-full sm:w-56" />
+            <Input
+              placeholder="Invoice or customer…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              className="w-full sm:w-56"
+            />
           </div>
           {isAdmin && (
             <div className="space-y-1.5 col-span-2 sm:col-auto">
               <Label className="text-xs">Shop</Label>
               <Select value={shopFilter} onValueChange={setShopFilter}>
-                <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder="All shops" /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-44">
+                  <SelectValue placeholder="All shops" />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All shops</SelectItem>
-                  {shops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  {shops.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
           )}
           <div className="space-y-1.5">
             <Label className="text-xs">From</Label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-full sm:w-40" />
+            <Input
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              className="w-full sm:w-40"
+            />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">To</Label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-full sm:w-40" />
+            <Input
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className="w-full sm:w-40"
+            />
           </div>
           {hasFilters && (
-            <Button variant="ghost" size="sm" className="col-span-2 sm:col-auto" onClick={clearFilters}>
-              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />Clear
+            <Button
+              variant="ghost"
+              size="sm"
+              className="col-span-2 sm:col-auto"
+              onClick={clearFilters}
+            >
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+              Clear
             </Button>
           )}
           <div className="col-span-2 text-xs text-muted-foreground sm:col-auto sm:ml-auto tabular-nums">
@@ -381,7 +528,10 @@ function SalesPage() {
             return (
               <button
                 key={p.label}
-                onClick={() => { setFrom(range.from); setTo(range.to); }}
+                onClick={() => {
+                  setFrom(range.from);
+                  setTo(range.to);
+                }}
                 className={`shrink-0 text-xs px-3 py-1.5 rounded-full border transition-colors ${
                   active ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"
                 }`}
@@ -403,13 +553,20 @@ function SalesPage() {
           <Card className="p-3 sm:p-4 mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm">
               <span className="font-semibold">{productTotals.qty.toLocaleString()} units</span>
-              <span className="text-muted-foreground"> · {formatRs(productTotals.revenue, settings.currency)}</span>
+              <span className="text-muted-foreground">
+                {" "}
+                · {formatRs(productTotals.revenue, settings.currency)}
+              </span>
               {isAdmin && (
-                <span className="text-success-strong"> · {formatRs(productTotals.profit, settings.currency)} profit</span>
+                <span className="text-success-strong">
+                  {" "}
+                  · {formatRs(productTotals.profit, settings.currency)} profit
+                </span>
               )}
             </div>
             <Button variant="outline" size="sm" onClick={exportProducts}>
-              <Download className="h-4 w-4 mr-1.5" />Export
+              <Download className="h-4 w-4 mr-1.5" />
+              Export
             </Button>
           </Card>
 
@@ -427,7 +584,13 @@ function SalesPage() {
                   fields={[
                     { label: "Units", value: r.qty },
                     ...(isAdmin
-                      ? [{ label: "Profit", value: formatRs(r.profit, settings.currency), className: "text-success-strong" }]
+                      ? [
+                          {
+                            label: "Profit",
+                            value: formatRs(r.profit, settings.currency),
+                            className: "text-success-strong",
+                          },
+                        ]
                       : []),
                     { label: "Invoices", value: r.invoices },
                   ]}
@@ -450,16 +613,29 @@ function SalesPage() {
                   {productRows.map((r) => (
                     <tr key={r.name} className="border-t hover:bg-muted/40">
                       <td className="px-4 py-3 font-medium">{r.name}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.barcode || "No barcode"}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                        {r.barcode || "No barcode"}
+                      </td>
                       <td className="px-4 py-3 text-right tabular-nums">{r.qty}</td>
-                      <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatRs(r.revenue, settings.currency)}</td>
-                      {isAdmin && <td className="px-4 py-3 text-right tabular-nums text-success-strong">{formatRs(r.profit, settings.currency)}</td>}
-                      <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{r.invoices}</td>
+                      <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                        {formatRs(r.revenue, settings.currency)}
+                      </td>
+                      {isAdmin && (
+                        <td className="px-4 py-3 text-right tabular-nums text-success-strong">
+                          {formatRs(r.profit, settings.currency)}
+                        </td>
+                      )}
+                      <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                        {r.invoices}
+                      </td>
                     </tr>
                   ))}
                   {productRows.length === 0 && (
                     <tr>
-                      <td colSpan={isAdmin ? 6 : 5} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                      <td
+                        colSpan={isAdmin ? 6 : 5}
+                        className="px-4 py-12 text-center text-sm text-muted-foreground"
+                      >
                         No products sold in this period.
                       </td>
                     </tr>
@@ -468,10 +644,20 @@ function SalesPage() {
                 {productRows.length > 0 && (
                   <tfoot>
                     <tr className="border-t-2 bg-muted/30 font-semibold">
-                      <td className="px-4 py-3" colSpan={2}>Total</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{productTotals.qty.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{formatRs(productTotals.revenue, settings.currency)}</td>
-                      {isAdmin && <td className="px-4 py-3 text-right tabular-nums text-success-strong">{formatRs(productTotals.profit, settings.currency)}</td>}
+                      <td className="px-4 py-3" colSpan={2}>
+                        Total
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {productTotals.qty.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {formatRs(productTotals.revenue, settings.currency)}
+                      </td>
+                      {isAdmin && (
+                        <td className="px-4 py-3 text-right tabular-nums text-success-strong">
+                          {formatRs(productTotals.profit, settings.currency)}
+                        </td>
+                      )}
                       <td className="px-4 py-3" />
                     </tr>
                   </tfoot>
@@ -482,222 +668,291 @@ function SalesPage() {
         </TabsContent>
 
         <TabsContent value="invoices" className="mt-4">
-      <Card className="overflow-hidden">
-        <MobileCards
-          items={rows}
-          keyOf={(s) => s.id}
-          empty={<EmptyState hasFilters={hasFilters} onClear={clearFilters} />}
-          render={(s) => (
-            <ListCard
-              onClick={() => setOpen(s.id)}
-              title={<span className="font-mono">{s.invoice}</span>}
-              subtitle={`${new Date(s.date).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}${isAdmin ? ` · ${shops.find((sh) => sh.id === s.shopId)?.name ?? ""}` : ""}`}
-              right={<span className="tabular-nums">{formatRs(s.total, settings.currency)}</span>}
-              rightSub={
-                isAdmin && s.status !== "Returned" ? (
-                  <span className="text-success-strong tabular-nums">{formatRs(s.profit, settings.currency)} profit</span>
-                ) : undefined
-              }
-              badges={
-                <>
-                  <StatusPill status={s.status} />
-                  <StatusPill status={s.payment} />
-                </>
-              }
-              fields={[
-                { label: "Customer", value: <CustomerName sale={s} /> },
-                { label: "Items", value: s.lines.reduce((a, l) => a + l.qty, 0) },
-                ...(s.discount > 0
-                  ? [{
-                      label: "Discount",
-                      value: `− ${formatRs(s.discount, settings.currency)}`,
-                      className: "text-success-strong",
-                    }]
-                  : []),
-              ]}
-              actions={
-                <>
-                  {/* The money on a "pay later" invoice is collected from here
-                      rather than three screens away on the Customers page. */}
-                  {owesOn(s) > 0 && (
-                    <Button size="sm" onClick={() => setCollectFrom(accountFor(s))}>
-                      <HandCoins className="h-3.5 w-3.5 mr-1.5" />Receive
-                    </Button>
-                  )}
-                  <Button size="sm" variant="outline" onClick={() => setBillFor(s)}>
-                    <FileText className="h-3.5 w-3.5 mr-1.5" />Bill
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setEditing(s)} disabled={s.status === "Returned"}>
-                    <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
-                  </Button>
-                  <Confirm
-                    title={`Delete ${s.invoice}?`}
-                    description={
-                      <>
-                        The invoice is removed from all sales figures{s.status === "Returned" ? "" : " and its items go back into stock"}.
-                        <ClosedDayWarning sale={s} sessions={daySessions} />
-                        {" "}It is recorded on the Activity page, where the owner can put it back.
-                      </>
-                    }
-                    confirmLabel="Delete sale"
-                    destructive
-                    onConfirm={() => { deleteSale(s.id); toast.success(`${s.invoice} deleted`); }}
-                    trigger={
-                      <Button size="sm" variant="outline" className="text-muted-foreground hover:text-destructive">
-                        <Trash2 className="h-3.5 w-3.5 mr-1.5" />Delete
-                      </Button>
-                    }
-                  />
-                </>
-              }
-            />
-          )}
-        />
-        <TableWrap>
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 sticky top-0 z-10">
-              <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
-                <th className="px-4 py-3 font-medium">Invoice</th>
-                <th className="px-4 py-3 font-medium">Date</th>
-                {isAdmin && <th className="px-4 py-3 font-medium">Shop</th>}
-                <th className="px-4 py-3 font-medium">Customer</th>
-                <th className="px-4 py-3 font-medium">Paid by</th>
-                <th className="px-4 py-3 font-medium text-right">Items</th>
-                <th className="px-4 py-3 font-medium text-right">Discount</th>
-                <th className="px-4 py-3 font-medium text-right">Total</th>
-                {isAdmin && <th className="px-4 py-3 font-medium text-right">Profit</th>}
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((s) => (
-                <tr
-                  key={s.id}
+          <Card className="overflow-hidden">
+            <MobileCards
+              items={rows}
+              keyOf={(s) => s.id}
+              empty={<EmptyState hasFilters={hasFilters} onClear={clearFilters} />}
+              render={(s) => (
+                <ListCard
                   onClick={() => setOpen(s.id)}
-                  className={`border-t cursor-pointer transition-colors hover:bg-muted/40 ${
-                    // A returned invoice still shows, but reads as struck from
-                    // the figures rather than sitting there looking like income.
-                    s.status === "Returned" ? "text-muted-foreground" : ""
-                  }`}
-                >
-                  <td className="px-4 py-3 font-mono text-xs">{s.invoice}</td>
-                  <td className="px-4 py-3 whitespace-nowrap tabular-nums">
-                    {new Date(s.date).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}
-                    <span className="block text-xs text-muted-foreground">
-                      {new Date(s.date).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
-                    </span>
-                  </td>
-                  {isAdmin && <td className="px-4 py-3">{shops.find((sh) => sh.id === s.shopId)?.name}</td>}
-                  <td className="px-4 py-3 max-w-[14rem] truncate"><CustomerName sale={s} /></td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full border ${
-                      s.payment === "Credit"
-                        ? "bg-warning/15 text-warning-strong border-warning/40"
-                        : "bg-muted text-muted-foreground border-border"
-                    }`}>
-                      {s.payment}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">{s.lines.reduce((a, l) => a + l.qty, 0)}</td>
-                  {/* Split in the tooltip rather than in two more columns: the
-                      table is already wide, and the breakdown is what you check
-                      on one invoice, not something you scan down a page. */}
-                  <td
-                    className={cn(
-                      "px-4 py-3 text-right tabular-nums",
-                      s.discount > 0 ? "text-success-strong" : "text-muted-foreground",
-                    )}
-                    title={
-                      s.discount > 0
-                        ? `${formatRs(discountSplitOf(s).items, settings.currency)} on items · ${formatRs(discountSplitOf(s).bill, settings.currency)} on the bill`
-                        : undefined
-                    }
-                  >
-                    {s.discount > 0 ? `− ${formatRs(s.discount, settings.currency)}` : "No discount"}
-                  </td>
-                  {/* tabular-nums keeps the rupee columns aligned digit-for-digit;
-                      proportional figures made every row's total sit differently. */}
-                  <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatRs(s.total, settings.currency)}</td>
-                  {isAdmin && (
-                    <td className="px-4 py-3 text-right font-medium tabular-nums text-success-strong">
-                      {s.status === "Returned" ? "Returned" : formatRs(s.profit, settings.currency)}
-                    </td>
-                  )}
-                  <td className="px-4 py-3"><StatusPill status={s.status} /></td>
-                  {/* stopPropagation so acting on a row doesn't also open the detail sheet. */}
-                  <td className="px-4 py-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                    {owesOn(s) > 0 && (
+                  title={<span className="font-mono">{s.invoice}</span>}
+                  subtitle={`${new Date(s.date).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}${isAdmin ? ` · ${shops.find((sh) => sh.id === s.shopId)?.name ?? ""}` : ""}`}
+                  right={
+                    <span className="tabular-nums">{formatRs(s.total, settings.currency)}</span>
+                  }
+                  rightSub={
+                    isAdmin && s.status !== "Returned" ? (
+                      <span className="text-success-strong tabular-nums">
+                        {formatRs(s.profit, settings.currency)} profit
+                      </span>
+                    ) : undefined
+                  }
+                  badges={
+                    <>
+                      <StatusPill status={s.status} />
+                      <StatusPill status={s.payment} />
+                    </>
+                  }
+                  fields={[
+                    { label: "Customer", value: <CustomerName sale={s} /> },
+                    { label: "Items", value: s.lines.reduce((a, l) => a + l.qty, 0) },
+                    ...(s.discount > 0
+                      ? [
+                          {
+                            label: "Discount",
+                            value: `− ${formatRs(s.discount, settings.currency)}`,
+                            className: "text-success-strong",
+                          },
+                        ]
+                      : []),
+                  ]}
+                  actions={
+                    <>
+                      {/* The money on a "pay later" invoice is collected from here
+                      rather than three screens away on the Customers page. */}
+                      {owesOn(s) > 0 && (
+                        <Button size="sm" onClick={() => setCollectFrom(accountFor(s))}>
+                          <HandCoins className="h-3.5 w-3.5 mr-1.5" />
+                          Receive
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" onClick={() => setBillFor(s)}>
+                        <FileText className="h-3.5 w-3.5 mr-1.5" />
+                        Bill
+                      </Button>
                       <Button
                         size="sm"
-                        variant="ghost"
-                        className="text-warning-strong hover:text-warning-strong"
-                        title={`Receive payment from ${s.customer}`}
-                        onClick={() => setCollectFrom(accountFor(s))}
+                        variant="outline"
+                        onClick={() => setEditing(s)}
+                        disabled={s.status === "Returned"}
                       >
-                        <HandCoins className="h-3.5 w-3.5" />
+                        <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                        Edit
                       </Button>
-                    )}
-                    <Button size="sm" variant="ghost" onClick={() => setEditing(s)} disabled={s.status === "Returned"}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Confirm
-                      title={`Delete ${s.invoice}?`}
-                      description={
-                        <>
-                          The invoice is removed from all sales figures{s.status === "Returned" ? "" : " and its items go back into stock"}.
-                          This can't be undone.
-                        </>
-                      }
-                      confirmLabel="Delete sale"
-                      destructive
-                      onConfirm={() => { deleteSale(s.id); toast.success(`${s.invoice} deleted`); }}
-                      trigger={
-                        <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      }
-                    />
-                  </td>
-                </tr>
-              ))}
-              {/* Shop users see fewer columns than admins — a fixed colSpan left
-                  the empty row overhanging and breaking the bottom border. */}
-              {rows.length === 0 && (
-                <tr>
-                  {/* 9 base columns, plus Shop and Profit for an owner. */}
-                  <td colSpan={isAdmin ? 11 : 9} className="px-4 py-16">
-                    <EmptyState hasFilters={hasFilters} onClear={clearFilters} />
-                  </td>
-                </tr>
+                      <Confirm
+                        title={`Delete ${s.invoice}?`}
+                        description={
+                          <>
+                            The invoice is removed from all sales figures
+                            {s.status === "Returned" ? "" : " and its items go back into stock"}.
+                            <ClosedDayWarning sale={s} sessions={daySessions} /> It is recorded on
+                            the Activity page, where the owner can put it back.
+                          </>
+                        }
+                        confirmLabel="Delete sale"
+                        destructive
+                        onConfirm={() => {
+                          deleteSale(s.id);
+                          toast.success(`${s.invoice} deleted`);
+                        }}
+                        trigger={
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                            Delete
+                          </Button>
+                        }
+                      />
+                    </>
+                  }
+                />
               )}
-            </tbody>
-            {rows.length > 0 && (
-              <tfoot>
-                <tr className="border-t-2 bg-muted/30 font-semibold">
-                  <td className="px-4 py-3" colSpan={isAdmin ? 5 : 4}>
-                    Total
-                    <span className="ml-2 font-normal text-xs text-muted-foreground">
-                      {stats.invoices} invoice{stats.invoices === 1 ? "" : "s"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">{stats.items.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-success-strong">
-                    {stats.discount > 0 ? `− ${formatRs(stats.discount, settings.currency)}` : "No discount"}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">{formatRs(stats.revenue, settings.currency)}</td>
-                  {isAdmin && (
-                    <td className="px-4 py-3 text-right tabular-nums text-success-strong">
-                      {formatRs(stats.profit, settings.currency)}
-                    </td>
+            />
+            <TableWrap>
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 sticky top-0 z-10">
+                  <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+                    <th className="px-4 py-3 font-medium">Invoice</th>
+                    <th className="px-4 py-3 font-medium">Date</th>
+                    {isAdmin && <th className="px-4 py-3 font-medium">Shop</th>}
+                    <th className="px-4 py-3 font-medium">Customer</th>
+                    <th className="px-4 py-3 font-medium">Paid by</th>
+                    <th className="px-4 py-3 font-medium text-right">Items</th>
+                    <th className="px-4 py-3 font-medium text-right">Discount</th>
+                    <th className="px-4 py-3 font-medium text-right">Total</th>
+                    {isAdmin && <th className="px-4 py-3 font-medium text-right">Profit</th>}
+                    <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((s) => (
+                    <tr
+                      key={s.id}
+                      onClick={() => setOpen(s.id)}
+                      className={`border-t cursor-pointer transition-colors hover:bg-muted/40 ${
+                        // A returned invoice still shows, but reads as struck from
+                        // the figures rather than sitting there looking like income.
+                        s.status === "Returned" ? "text-muted-foreground" : ""
+                      }`}
+                    >
+                      <td className="px-4 py-3 font-mono text-xs">{s.invoice}</td>
+                      <td className="px-4 py-3 whitespace-nowrap tabular-nums">
+                        {new Date(s.date).toLocaleDateString(undefined, {
+                          day: "2-digit",
+                          month: "short",
+                        })}
+                        <span className="block text-xs text-muted-foreground">
+                          {new Date(s.date).toLocaleTimeString(undefined, {
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </td>
+                      {isAdmin && (
+                        <td className="px-4 py-3">
+                          {shops.find((sh) => sh.id === s.shopId)?.name}
+                        </td>
+                      )}
+                      <td className="px-4 py-3 max-w-[14rem] truncate">
+                        <CustomerName sale={s} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full border ${
+                            s.payment === "Credit"
+                              ? "bg-warning/15 text-warning-strong border-warning/40"
+                              : "bg-muted text-muted-foreground border-border"
+                          }`}
+                        >
+                          {s.payment}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {s.lines.reduce((a, l) => a + l.qty, 0)}
+                      </td>
+                      {/* Split in the tooltip rather than in two more columns: the
+                      table is already wide, and the breakdown is what you check
+                      on one invoice, not something you scan down a page. */}
+                      <td
+                        className={cn(
+                          "px-4 py-3 text-right tabular-nums",
+                          s.discount > 0 ? "text-success-strong" : "text-muted-foreground",
+                        )}
+                        title={
+                          s.discount > 0
+                            ? `${formatRs(discountSplitOf(s).items, settings.currency)} on items · ${formatRs(discountSplitOf(s).bill, settings.currency)} on the bill`
+                            : undefined
+                        }
+                      >
+                        {s.discount > 0
+                          ? `− ${formatRs(s.discount, settings.currency)}`
+                          : "No discount"}
+                      </td>
+                      {/* tabular-nums keeps the rupee columns aligned digit-for-digit;
+                      proportional figures made every row's total sit differently. */}
+                      <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                        {formatRs(s.total, settings.currency)}
+                      </td>
+                      {isAdmin && (
+                        <td className="px-4 py-3 text-right font-medium tabular-nums text-success-strong">
+                          {s.status === "Returned"
+                            ? "Returned"
+                            : formatRs(s.profit, settings.currency)}
+                        </td>
+                      )}
+                      <td className="px-4 py-3">
+                        <StatusPill status={s.status} />
+                      </td>
+                      {/* stopPropagation so acting on a row doesn't also open the detail sheet. */}
+                      <td
+                        className="px-4 py-3 text-right whitespace-nowrap"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {owesOn(s) > 0 && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-warning-strong hover:text-warning-strong"
+                            title={`Receive payment from ${s.customer}`}
+                            onClick={() => setCollectFrom(accountFor(s))}
+                          >
+                            <HandCoins className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setEditing(s)}
+                          disabled={s.status === "Returned"}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Confirm
+                          title={`Delete ${s.invoice}?`}
+                          description={
+                            <>
+                              The invoice is removed from all sales figures
+                              {s.status === "Returned" ? "" : " and its items go back into stock"}.
+                              This can't be undone.
+                            </>
+                          }
+                          confirmLabel="Delete sale"
+                          destructive
+                          onConfirm={() => {
+                            deleteSale(s.id);
+                            toast.success(`${s.invoice} deleted`);
+                          }}
+                          trigger={
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-muted-foreground hover:text-destructive"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          }
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  {/* Shop users see fewer columns than admins — a fixed colSpan left
+                  the empty row overhanging and breaking the bottom border. */}
+                  {rows.length === 0 && (
+                    <tr>
+                      {/* 9 base columns, plus Shop and Profit for an owner. */}
+                      <td colSpan={isAdmin ? 11 : 9} className="px-4 py-16">
+                        <EmptyState hasFilters={hasFilters} onClear={clearFilters} />
+                      </td>
+                    </tr>
                   )}
-                  <td className="px-4 py-3" colSpan={2} />
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </TableWrap>
-      </Card>
+                </tbody>
+                {rows.length > 0 && (
+                  <tfoot>
+                    <tr className="border-t-2 bg-muted/30 font-semibold">
+                      <td className="px-4 py-3" colSpan={isAdmin ? 5 : 4}>
+                        Total
+                        <span className="ml-2 font-normal text-xs text-muted-foreground">
+                          {stats.invoices} invoice{stats.invoices === 1 ? "" : "s"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {stats.items.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-success-strong">
+                        {stats.discount > 0
+                          ? `− ${formatRs(stats.discount, settings.currency)}`
+                          : "No discount"}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {formatRs(stats.revenue, settings.currency)}
+                      </td>
+                      {isAdmin && (
+                        <td className="px-4 py-3 text-right tabular-nums text-success-strong">
+                          {formatRs(stats.profit, settings.currency)}
+                        </td>
+                      )}
+                      <td className="px-4 py-3" colSpan={2} />
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </TableWrap>
+          </Card>
         </TabsContent>
       </Tabs>
 
@@ -710,15 +965,30 @@ function SalesPage() {
               <SheetHeader>
                 <SheetTitle className="font-mono text-base">{selected.invoice}</SheetTitle>
                 <SheetDescription>
-                  {new Date(selected.date).toLocaleString()} · {shops.find((s) => s.id === selected.shopId)?.name}
+                  {new Date(selected.date).toLocaleString()} ·{" "}
+                  {shops.find((s) => s.id === selected.shopId)?.name}
                 </SheetDescription>
               </SheetHeader>
               <div className="mt-6 space-y-4">
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div><div className="text-muted-foreground text-xs">Customer</div><div className="font-medium"><CustomerName sale={selected} /></div></div>
-                  <div><div className="text-muted-foreground text-xs">Cashier</div><div className="font-medium">{selected.cashier}</div></div>
-                  <div><div className="text-muted-foreground text-xs">Payment</div><div className="font-medium">{selected.payment}</div></div>
-                  <div><div className="text-muted-foreground text-xs">Status</div><StatusPill status={selected.status} /></div>
+                  <div>
+                    <div className="text-muted-foreground text-xs">Customer</div>
+                    <div className="font-medium">
+                      <CustomerName sale={selected} />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground text-xs">Cashier</div>
+                    <div className="font-medium">{selected.cashier}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground text-xs">Payment</div>
+                    <div className="font-medium">{selected.payment}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground text-xs">Status</div>
+                    <StatusPill status={selected.status} />
+                  </div>
                 </div>
 
                 {/*
@@ -732,12 +1002,16 @@ function SalesPage() {
                   <div
                     className={cn(
                       "rounded-lg border p-3 flex flex-wrap items-center justify-between gap-3",
-                      owesOn(selected) > 0 ? "border-warning/40 bg-warning/10" : "border-success/40 bg-success/10",
+                      owesOn(selected) > 0
+                        ? "border-warning/40 bg-warning/10"
+                        : "border-success/40 bg-success/10",
                     )}
                   >
                     <div>
                       <div className="text-sm font-medium">
-                        {owesOn(selected) > 0 ? "Sold on account — still owing" : "Sold on account — settled"}
+                        {owesOn(selected) > 0
+                          ? "Sold on account — still owing"
+                          : "Sold on account — settled"}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {owesOn(selected) > 0
@@ -747,7 +1021,8 @@ function SalesPage() {
                     </div>
                     {owesOn(selected) > 0 && (
                       <Button size="sm" onClick={() => setCollectFrom(accountFor(selected))}>
-                        <HandCoins className="h-3.5 w-3.5 mr-1.5" />Receive payment
+                        <HandCoins className="h-3.5 w-3.5 mr-1.5" />
+                        Receive payment
                       </Button>
                     )}
                   </div>
@@ -772,9 +1047,18 @@ function SalesPage() {
                         <tr key={i} className="border-t">
                           <td className="px-3 py-2">{l.name}</td>
                           <td className="px-3 py-2 text-right tabular-nums">{l.qty}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{formatRs(l.price, settings.currency)}</td>
-                          <td className={cn("px-3 py-2 text-right tabular-nums", l.discount > 0 ? "text-success-strong" : "text-muted-foreground")}>
-                            {l.discount > 0 ? `− ${formatRs(l.discount, settings.currency)}` : "Full price"}
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {formatRs(l.price, settings.currency)}
+                          </td>
+                          <td
+                            className={cn(
+                              "px-3 py-2 text-right tabular-nums",
+                              l.discount > 0 ? "text-success-strong" : "text-muted-foreground",
+                            )}
+                          >
+                            {l.discount > 0
+                              ? `− ${formatRs(l.discount, settings.currency)}`
+                              : "Full price"}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums font-medium">
                             {formatRs(l.qty * l.price - l.discount, settings.currency)}
@@ -795,7 +1079,9 @@ function SalesPage() {
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span className="tabular-nums">{formatRs(selected.subtotal, settings.currency)}</span>
+                    <span className="tabular-nums">
+                      {formatRs(selected.subtotal, settings.currency)}
+                    </span>
                   </div>
                   {/* Itemised and whole-slip discounts are different decisions —
                       a standing rate versus something knocked off at the
@@ -807,18 +1093,23 @@ function SalesPage() {
                         {d.items > 0 && (
                           <div className="flex justify-between text-success-strong">
                             <span>Item discounts</span>
-                            <span className="tabular-nums">− {formatRs(d.items, settings.currency)}</span>
+                            <span className="tabular-nums">
+                              − {formatRs(d.items, settings.currency)}
+                            </span>
                           </div>
                         )}
                         {d.bill > 0 && (
                           <div className="flex justify-between text-success-strong">
                             <span>Discount on the bill</span>
-                            <span className="tabular-nums">− {formatRs(d.bill, settings.currency)}</span>
+                            <span className="tabular-nums">
+                              − {formatRs(d.bill, settings.currency)}
+                            </span>
                           </div>
                         )}
                         {d.total === 0 && (
                           <div className="flex justify-between text-muted-foreground">
-                            <span>Discount</span><span>none</span>
+                            <span>Discount</span>
+                            <span>none</span>
                           </div>
                         )}
                       </>
@@ -826,12 +1117,16 @@ function SalesPage() {
                   })()}
                   <div className="flex justify-between font-semibold text-base pt-2 border-t">
                     <span>Total</span>
-                    <span className="tabular-nums">{formatRs(selected.total, settings.currency)}</span>
+                    <span className="tabular-nums">
+                      {formatRs(selected.total, settings.currency)}
+                    </span>
                   </div>
                   {isAdmin && (
                     <div className="flex justify-between text-success-strong">
                       <span>Profit</span>
-                      <span className="tabular-nums">{formatRs(selected.profit, settings.currency)}</span>
+                      <span className="tabular-nums">
+                        {formatRs(selected.profit, settings.currency)}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -840,25 +1135,39 @@ function SalesPage() {
                   {/* A bill, not a till slip: A4, ruled, and carrying the
                       customer's running balance — what goes out with a bulk
                       delivery and what a trade buyer asks to be sent a copy of. */}
-                  <Button className="flex-1 min-w-[8rem]" onClick={() => { setBillFor(selected); setOpen(null); }}>
-                    <FileText className="h-4 w-4 mr-1.5" />Bill / PDF
+                  <Button
+                    className="flex-1 min-w-[8rem]"
+                    onClick={() => {
+                      setBillFor(selected);
+                      setOpen(null);
+                    }}
+                  >
+                    <FileText className="h-4 w-4 mr-1.5" />
+                    Bill / PDF
                   </Button>
-                  <Button variant="outline" className="flex-1" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" />Receipt</Button>
+                  <Button variant="outline" className="flex-1" onClick={() => window.print()}>
+                    <Printer className="h-4 w-4 mr-1.5" />
+                    Receipt
+                  </Button>
                   <Button
                     variant="outline"
                     className="flex-1"
                     disabled={selected.status === "Returned"}
-                    onClick={() => { setEditing(selected); setOpen(null); }}
+                    onClick={() => {
+                      setEditing(selected);
+                      setOpen(null);
+                    }}
                   >
-                    <Pencil className="h-4 w-4 mr-1.5" />Edit
+                    <Pencil className="h-4 w-4 mr-1.5" />
+                    Edit
                   </Button>
                   <Confirm
                     title={`Return ${selected.invoice}?`}
                     description={
                       <>
                         This refunds <strong>{formatRs(selected.total)}</strong>, puts{" "}
-                        {selected.lines.reduce((a, l) => a + l.qty, 0)} item(s) back into stock, and marks the
-                        invoice as returned. This can't be undone.
+                        {selected.lines.reduce((a, l) => a + l.qty, 0)} item(s) back into stock, and
+                        marks the invoice as returned. This can't be undone.
                       </>
                     }
                     confirmLabel="Process return"
@@ -866,7 +1175,11 @@ function SalesPage() {
                     disabled={selected.status === "Returned"}
                     onConfirm={() => processReturn(selected)}
                     trigger={
-                      <Button variant="outline" className="flex-1" disabled={selected.status === "Returned"}>
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        disabled={selected.status === "Returned"}
+                      >
                         <Undo2 className="h-4 w-4 mr-1.5" />
                         {selected.status === "Returned" ? "Returned" : "Return"}
                       </Button>
@@ -918,7 +1231,9 @@ function Metric({
 }) {
   const inner = (
     <>
-      <dt className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{label}</dt>
+      <dt className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+        {label}
+      </dt>
       <dd
         className={cn(
           "mt-1 font-semibold tabular-nums break-words",
@@ -929,7 +1244,9 @@ function Metric({
       >
         {value}
       </dd>
-      {sub && <dd className="text-[11px] text-muted-foreground mt-0.5 tabular-nums break-words">{sub}</dd>}
+      {sub && (
+        <dd className="text-[11px] text-muted-foreground mt-0.5 tabular-nums break-words">{sub}</dd>
+      )}
     </>
   );
 
@@ -960,7 +1277,9 @@ function EmptyState({ hasFilters, onClear }: { hasFilters: boolean; onClear: () 
       <div className="mx-auto h-11 w-11 rounded-full bg-muted flex items-center justify-center mb-3">
         <ReceiptText className="h-5 w-5 text-muted-foreground" />
       </div>
-      <p className="text-sm font-medium">{hasFilters ? "No sales match these filters" : "No sales recorded yet"}</p>
+      <p className="text-sm font-medium">
+        {hasFilters ? "No sales match these filters" : "No sales recorded yet"}
+      </p>
       <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
         {hasFilters
           ? "Try widening the date range, or clear the filters to see everything."
@@ -968,7 +1287,8 @@ function EmptyState({ hasFilters, onClear }: { hasFilters: boolean; onClear: () 
       </p>
       {hasFilters && (
         <Button variant="outline" size="sm" className="mt-4" onClick={onClear}>
-          <RotateCcw className="h-3.5 w-3.5 mr-1.5" />Clear filters
+          <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+          Clear filters
         </Button>
       )}
     </div>

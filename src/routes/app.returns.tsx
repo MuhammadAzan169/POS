@@ -1,13 +1,36 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useStore, formatRs, todayISO, customerNameOf, type ReturnRec, type Shop, type Purchase, type Product, type Sale } from "@/lib/store";
+import {
+  useStore,
+  formatRs,
+  todayISO,
+  customerNameOf,
+  type ReturnRec,
+  type Shop,
+  type Purchase,
+  type Product,
+  type Sale,
+} from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Confirm } from "@/components/Confirm";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
@@ -24,7 +47,11 @@ export const Route = createFileRoute("/app/returns")({ component: ReturnsPage })
 type Filters = { q: string; shopFilter: string; from: string; to: string };
 
 function FilterBar({
-  filters, setFilters, shops, isAdmin, onExport,
+  filters,
+  setFilters,
+  shops,
+  isAdmin,
+  onExport,
 }: {
   filters: Filters;
   setFilters: (f: Filters) => void;
@@ -50,30 +77,55 @@ function FilterBar({
       {isAdmin && (
         <div className="space-y-1.5 col-span-2 sm:col-auto">
           <Label className="text-xs">Shop</Label>
-          <Select value={shopFilter} onValueChange={(v) => setFilters({ ...filters, shopFilter: v })}>
-            <SelectTrigger className="w-full sm:w-44"><SelectValue /></SelectTrigger>
+          <Select
+            value={shopFilter}
+            onValueChange={(v) => setFilters({ ...filters, shopFilter: v })}
+          >
+            <SelectTrigger className="w-full sm:w-44">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All shops</SelectItem>
-              {shops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+              {shops.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
       )}
       <div className="space-y-1.5">
         <Label className="text-xs">From</Label>
-        <Input type="date" value={from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} className="w-full sm:w-40" />
+        <Input
+          type="date"
+          value={from}
+          onChange={(e) => setFilters({ ...filters, from: e.target.value })}
+          className="w-full sm:w-40"
+        />
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs">To</Label>
-        <Input type="date" value={to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} className="w-full sm:w-40" />
+        <Input
+          type="date"
+          value={to}
+          onChange={(e) => setFilters({ ...filters, to: e.target.value })}
+          className="w-full sm:w-40"
+        />
       </div>
       {dirty && (
-        <Button variant="ghost" size="sm" className="col-span-2 sm:col-auto" onClick={() => setFilters({ q: "", shopFilter: "all", from: "", to: "" })}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="col-span-2 sm:col-auto"
+          onClick={() => setFilters({ q: "", shopFilter: "all", from: "", to: "" })}
+        >
           Clear
         </Button>
       )}
       <Button variant="outline" className="col-span-2 sm:col-auto sm:ml-auto" onClick={onExport}>
-        <Download className="h-4 w-4 mr-1.5" />Export CSV
+        <Download className="h-4 w-4 mr-1.5" />
+        Export CSV
       </Button>
     </Card>
   );
@@ -81,7 +133,10 @@ function FilterBar({
 
 /** A return record as a card — shared by the customer and supplier lists. */
 function ReturnCard({
-  r, shopName, kind, actions,
+  r,
+  shopName,
+  kind,
+  actions,
 }: {
   r: ReturnRec;
   shopName?: string;
@@ -135,14 +190,19 @@ function EditReturnDialog({ rec, onClose }: { rec: ReturnRec | null; onClose: ()
     inventory.find((r) => r.productId === productId && r.shopId === rec.shopId)?.qty ?? 0;
 
   const isSupplier = rec.kind === "supplier";
-  const items = rec.items.map((i) => ({ ...i, qty: qtys[i.productId] ?? i.qty })).filter((i) => i.qty > 0);
+  const items = rec.items
+    .map((i) => ({ ...i, qty: qtys[i.productId] ?? i.qty }))
+    .filter((i) => i.qty > 0);
 
   const save = () => {
     if (items.length === 0) {
       toast.error("A return needs at least one item — delete it instead.");
       return;
     }
-    if (refund < 0) { toast.error("The amount can't be negative"); return; }
+    if (refund < 0) {
+      toast.error("The amount can't be negative");
+      return;
+    }
     // Sending MORE back to the supplier than the shop still holds would drive
     // its stock negative, so the extra units are refused up front.
     if (isSupplier) {
@@ -166,8 +226,8 @@ function EditReturnDialog({ rec, onClose }: { rec: ReturnRec | null; onClose: ()
         <DialogHeader>
           <DialogTitle>Correct {rec.returnNo}</DialogTitle>
           <DialogDescription>
-            Against {isSupplier ? "bill" : "invoice"} {rec.invoice}. Changing a quantity moves the stock by
-            the difference — nothing is counted twice.
+            Against {isSupplier ? "bill" : "invoice"} {rec.invoice}. Changing a quantity moves the
+            stock by the difference — nothing is counted twice.
           </DialogDescription>
         </DialogHeader>
 
@@ -187,20 +247,30 @@ function EditReturnDialog({ rec, onClose }: { rec: ReturnRec | null; onClose: ()
                   min={0}
                   value={qtys[i.productId] ?? i.qty}
                   onChange={(e) =>
-                    setQtys((prev) => ({ ...prev, [i.productId]: Math.max(0, Number(e.target.value) || 0) }))
+                    setQtys((prev) => ({
+                      ...prev,
+                      [i.productId]: Math.max(0, Number(e.target.value) || 0),
+                    }))
                   }
                   className="h-9 w-20 text-right"
                 />
               </div>
             ))}
           </div>
-          <p className="text-xs text-muted-foreground">Set a line to 0 to take it off this return.</p>
+          <p className="text-xs text-muted-foreground">
+            Set a line to 0 to take it off this return.
+          </p>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>{isSupplier ? "Credit from supplier" : "Refund amount"}</Label>
-            <Input type="number" min={0} value={refund} onChange={(e) => setRefund(Math.max(0, Number(e.target.value) || 0))} />
+            <Input
+              type="number"
+              min={0}
+              value={refund}
+              onChange={(e) => setRefund(Math.max(0, Number(e.target.value) || 0))}
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Date</Label>
@@ -214,7 +284,9 @@ function EditReturnDialog({ rec, onClose }: { rec: ReturnRec | null; onClose: ()
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
           <Button onClick={save}>Save correction</Button>
         </DialogFooter>
       </DialogContent>
@@ -234,7 +306,10 @@ function NewCustomerReturn({ sales, shopId }: { sales: Sale[]; shopId?: string }
   const selectedSale = sales.find((s) => s.id === invoiceId);
 
   const save = () => {
-    if (!selectedSale) { toast.error("Select an invoice"); return; }
+    if (!selectedSale) {
+      toast.error("Select an invoice");
+      return;
+    }
     addReturn({
       kind: "customer",
       date: todayISO(),
@@ -253,42 +328,66 @@ function NewCustomerReturn({ sales, shopId }: { sales: Sale[]; shopId?: string }
 
   return (
     <>
-      <Button onClick={() => setOpen(true)}><Undo2 className="h-4 w-4 mr-1.5" />New return</Button>
+      <Button onClick={() => setOpen(true)}>
+        <Undo2 className="h-4 w-4 mr-1.5" />
+        New return
+      </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>New customer return</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>New customer return</DialogTitle>
+          </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
               <Label>Original invoice</Label>
               <Select
                 value={invoiceId}
-                onValueChange={(id) => { setInvoiceId(id); setRefund(sales.find((s) => s.id === id)?.total ?? 0); }}
+                onValueChange={(id) => {
+                  setInvoiceId(id);
+                  setRefund(sales.find((s) => s.id === id)?.total ?? 0);
+                }}
               >
-                <SelectTrigger><SelectValue placeholder="Select an invoice…" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an invoice…" />
+                </SelectTrigger>
                 <SelectContent>
                   {eligible.slice(0, 50).map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.invoice} · {customerNameOf(s)} · {formatRs(s.total)}</SelectItem>
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.invoice} · {customerNameOf(s)} · {formatRs(s.total)}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
               <Label>Refund amount</Label>
-              <Input type="number" min={0} value={refund} onChange={(e) => setRefund(Math.max(0, Number(e.target.value)))} />
+              <Input
+                type="number"
+                min={0}
+                value={refund}
+                onChange={(e) => setRefund(Math.max(0, Number(e.target.value)))}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Reason</Label>
-              <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Wrong size, damaged item" />
+              <Input
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="e.g. Wrong size, damaged item"
+              />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
             <Confirm
               title="Record this return?"
               description={
                 <>
-                  A refund of <strong>{formatRs(refund || selectedSale?.total || 0)}</strong> will be recorded, the items
-                  go back into stock, and <strong>{selectedSale?.invoice ?? "the invoice"}</strong> is marked as returned.
+                  A refund of <strong>{formatRs(refund || selectedSale?.total || 0)}</strong> will
+                  be recorded, the items go back into stock, and{" "}
+                  <strong>{selectedSale?.invoice ?? "the invoice"}</strong> is marked as returned.
                   This can't be undone.
                 </>
               }
@@ -307,7 +406,10 @@ function NewCustomerReturn({ sales, shopId }: { sales: Sale[]; shopId?: string }
 
 /** Admin flow: send stock back to the wholesaler. Inventory goes down. */
 function NewSupplierReturn({
-  purchases, products, shops, stockAt,
+  purchases,
+  products,
+  shops,
+  stockAt,
 }: {
   purchases: Purchase[];
   products: Product[];
@@ -324,7 +426,9 @@ function NewSupplierReturn({
 
   const purchase = purchases.find((p) => p.id === purchaseId);
   // Only lines that went to the selected shop can be sent back from it.
-  const candidateLines = (purchase?.lines ?? []).filter((l) => (shopId ? l.shopId === shopId : true));
+  const candidateLines = (purchase?.lines ?? []).filter((l) =>
+    shopId ? l.shopId === shopId : true,
+  );
   const stockHere = (productId: string) => stockAt(productId, shopId);
 
   const pick = (id: string) => {
@@ -336,19 +440,34 @@ function NewSupplierReturn({
   };
 
   const chosen = candidateLines
-    .map((l) => ({ line: l, product: products.find((p) => p.id === l.productId), qty: qtys[l.productId] ?? 0 }))
+    .map((l) => ({
+      line: l,
+      product: products.find((p) => p.id === l.productId),
+      qty: qtys[l.productId] ?? 0,
+    }))
     .filter((x) => x.qty > 0 && x.product);
 
   const suggestedCredit = chosen.reduce((a, x) => a + x.qty * x.line.rate, 0);
 
   const save = () => {
-    if (!purchase) { toast.error("Select a purchase bill"); return; }
-    if (!shopId) { toast.error("Select the shop the stock leaves from"); return; }
-    if (chosen.length === 0) { toast.error("Enter a quantity for at least one item"); return; }
+    if (!purchase) {
+      toast.error("Select a purchase bill");
+      return;
+    }
+    if (!shopId) {
+      toast.error("Select the shop the stock leaves from");
+      return;
+    }
+    if (chosen.length === 0) {
+      toast.error("Enter a quantity for at least one item");
+      return;
+    }
     // Never let a return drive a shop's stock negative.
     const overdrawn = chosen.find((x) => x.qty > stockHere(x.product!.id));
     if (overdrawn) {
-      toast.error(`Only ${stockHere(overdrawn.product!.id)} of ${overdrawn.product!.name} in stock at this shop`);
+      toast.error(
+        `Only ${stockHere(overdrawn.product!.id)} of ${overdrawn.product!.name} in stock at this shop`,
+      );
       return;
     }
     addReturn({
@@ -364,36 +483,62 @@ function NewSupplierReturn({
     });
     toast.success(`Returned to ${purchase.supplier}`);
     setOpen(false);
-    setPurchaseId(""); setShopId(""); setQtys({}); setCredit(0); setReason("Damaged on arrival");
+    setPurchaseId("");
+    setShopId("");
+    setQtys({});
+    setCredit(0);
+    setReason("Damaged on arrival");
   };
 
   return (
     <>
-      <Button onClick={() => setOpen(true)}><PackageMinus className="h-4 w-4 mr-1.5" />Return to supplier</Button>
+      <Button onClick={() => setOpen(true)}>
+        <PackageMinus className="h-4 w-4 mr-1.5" />
+        Return to supplier
+      </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Return stock to supplier</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Return stock to supplier</DialogTitle>
+          </DialogHeader>
           <div className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Purchase bill</Label>
                 <Select value={purchaseId} onValueChange={pick}>
-                  <SelectTrigger><SelectValue placeholder="Select a bill…" /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a bill…" />
+                  </SelectTrigger>
                   <SelectContent>
                     {purchases.slice(0, 50).map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{p.billNo} · {p.supplier} · {p.date}</SelectItem>
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.billNo} · {p.supplier} · {p.date}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
                 <Label>Return from shop</Label>
-                <Select value={shopId} onValueChange={(v) => { setShopId(v); setQtys({}); }} disabled={!purchase}>
-                  <SelectTrigger><SelectValue placeholder="Select a shop…" /></SelectTrigger>
+                <Select
+                  value={shopId}
+                  onValueChange={(v) => {
+                    setShopId(v);
+                    setQtys({});
+                  }}
+                  disabled={!purchase}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a shop…" />
+                  </SelectTrigger>
                   <SelectContent>
-                    {Array.from(new Set((purchase?.lines ?? []).map((l) => l.shopId))).map((sid) => (
-                      <SelectItem key={sid} value={sid}>{shops.find((s) => s.id === sid)?.name}</SelectItem>
-                    ))}
+                    {Array.from(new Set((purchase?.lines ?? []).map((l) => l.shopId))).map(
+                      (sid) => (
+                        <SelectItem key={sid} value={sid}>
+                          {shops.find((s) => s.id === sid)?.name}
+                        </SelectItem>
+                      ),
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -418,7 +563,9 @@ function NewSupplierReturn({
                       return (
                         <tr key={l.productId} className="border-t">
                           <td className="px-3 py-2">{p.name}</td>
-                          <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{p.barcode || "No barcode"}</td>
+                          <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                            {p.barcode || "No barcode"}
+                          </td>
                           <td className="px-3 py-2 text-right text-muted-foreground">{l.qty}</td>
                           <td className="px-3 py-2 text-right">{stockHere(p.id)}</td>
                           <td className="px-3 py-2">
@@ -427,7 +574,12 @@ function NewSupplierReturn({
                               min={0}
                               max={Math.min(l.qty, stockHere(p.id))}
                               value={qtys[l.productId] ?? 0}
-                              onChange={(e) => setQtys((prev) => ({ ...prev, [l.productId]: Math.max(0, Number(e.target.value) || 0) }))}
+                              onChange={(e) =>
+                                setQtys((prev) => ({
+                                  ...prev,
+                                  [l.productId]: Math.max(0, Number(e.target.value) || 0),
+                                }))
+                              }
                               className="h-8 text-right"
                             />
                           </td>
@@ -442,18 +594,31 @@ function NewSupplierReturn({
             <div className="grid sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Credit from supplier</Label>
-                <Input type="number" min={0} value={credit || suggestedCredit} onChange={(e) => setCredit(Math.max(0, Number(e.target.value)))} />
-                <p className="text-xs text-muted-foreground">Suggested from purchase rates: {formatRs(suggestedCredit)}</p>
+                <Input
+                  type="number"
+                  min={0}
+                  value={credit || suggestedCredit}
+                  onChange={(e) => setCredit(Math.max(0, Number(e.target.value)))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Suggested from purchase rates: {formatRs(suggestedCredit)}
+                </p>
               </div>
               <div className="space-y-1.5">
                 <Label>Reason</Label>
-                <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Damaged, expired, unsold" />
+                <Input
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="e.g. Damaged, expired, unsold"
+                />
               </div>
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
             <Confirm
               title="Send this stock back?"
               description={
@@ -480,7 +645,9 @@ function NewSupplierReturn({
 function EmptyState({ icon, title, hint }: { icon: ReactNode; title: string; hint: string }) {
   return (
     <div className="text-center py-20 text-sm text-muted-foreground">
-      <div className="inline-flex h-12 w-12 rounded-full bg-muted items-center justify-center mb-3">{icon}</div>
+      <div className="inline-flex h-12 w-12 rounded-full bg-muted items-center justify-center mb-3">
+        {icon}
+      </div>
       <div>{title}</div>
       <div className="text-xs mt-1">{hint}</div>
     </div>
@@ -516,19 +683,24 @@ function ReturnsPage() {
         description={
           r.kind === "customer" ? (
             <>
-              The refund of <strong>{formatRs(r.refund)}</strong> is cancelled, the returned items come back
-              off the shelf, and invoice <strong>{r.invoice}</strong> counts as a completed sale again.
+              The refund of <strong>{formatRs(r.refund)}</strong> is cancelled, the returned items
+              come back off the shelf, and invoice <strong>{r.invoice}</strong> counts as a
+              completed sale again.
             </>
           ) : (
             <>
-              The credit of <strong>{formatRs(r.refund)}</strong> against <strong>{r.supplier}</strong> is
-              cancelled and the stock goes back onto the shelf at this shop.
+              The credit of <strong>{formatRs(r.refund)}</strong> against{" "}
+              <strong>{r.supplier}</strong> is cancelled and the stock goes back onto the shelf at
+              this shop.
             </>
           )
         }
         confirmLabel="Undo return"
         destructive
-        onConfirm={() => { deleteReturn(r.id); toast.success(`${r.returnNo} undone`); }}
+        onConfirm={() => {
+          deleteReturn(r.id);
+          toast.success(`${r.returnNo} undone`);
+        }}
         trigger={
           <Button
             size="sm"
@@ -573,24 +745,33 @@ function ReturnsPage() {
   const supplierRows = applyFilters(visible.filter((r) => r.kind === "supplier"));
 
   const exportRows = (rows: ReturnRec[], kind: "customer" | "supplier") => {
-    if (rows.length === 0) { toast.error("Nothing to export"); return; }
+    if (rows.length === 0) {
+      toast.error("Nothing to export");
+      return;
+    }
     downloadCsv(
       `${kind}-returns-${todayISO()}.csv`,
       [
         kind === "customer" ? "Return no" : "Supplier return no",
-        "Date", "Shop",
+        "Date",
+        "Shop",
         kind === "customer" ? "Invoice" : "Bill no",
         ...(kind === "supplier" ? ["Supplier"] : []),
-        "Items", "Units",
+        "Items",
+        "Units",
         kind === "customer" ? "Refund" : "Credit",
         "Reason",
       ],
       rows.map((r) => [
-        r.returnNo, r.date, shops.find((s) => s.id === r.shopId)?.name ?? "", r.invoice,
+        r.returnNo,
+        r.date,
+        shops.find((s) => s.id === r.shopId)?.name ?? "",
+        r.invoice,
         ...(kind === "supplier" ? [r.supplier ?? ""] : []),
         r.items.map((i) => `${i.qty} × ${i.name}`).join("; "),
         r.items.reduce((a, i) => a + i.qty, 0),
-        r.refund, r.reason,
+        r.refund,
+        r.reason,
       ]),
     );
     toast.success(`Exported ${rows.length} returns`);
@@ -610,7 +791,9 @@ function ReturnsPage() {
       <Tabs defaultValue="customer">
         <TabsList>
           <TabsTrigger value="customer">Customer returns ({customerRows.length})</TabsTrigger>
-          {isAdmin && <TabsTrigger value="supplier">Supplier returns ({supplierRows.length})</TabsTrigger>}
+          {isAdmin && (
+            <TabsTrigger value="supplier">Supplier returns ({supplierRows.length})</TabsTrigger>
+          )}
         </TabsList>
 
         {/* ---------------- Customer returns ---------------- */}
@@ -619,8 +802,8 @@ function ReturnsPage() {
             <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 border rounded-md p-2.5 mb-4">
               <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
               <span>
-                View only. Customer returns are recorded by the shop that handled the sale — from Sales, open the
-                invoice and choose Return.
+                View only. Customer returns are recorded by the shop that handled the sale — from
+                Sales, open the invoice and choose Return.
               </span>
             </div>
           ) : (
@@ -639,49 +822,61 @@ function ReturnsPage() {
 
           <Card className="overflow-hidden">
             {customerRows.length === 0 ? (
-              <EmptyState icon={<Undo2 className="h-5 w-5" />} title="No customer returns." hint="Open a sale invoice and choose Return to record one." />
+              <EmptyState
+                icon={<Undo2 className="h-5 w-5" />}
+                title="No customer returns."
+                hint="Open a sale invoice and choose Return to record one."
+              />
             ) : (
               <>
-              <MobileCards
-                items={customerRows}
-                keyOf={(r) => r.id}
-                render={(r) => (
-                  <ReturnCard
-                    r={r}
-                    kind="customer"
-                    shopName={shops.find((s) => s.id === r.shopId)?.name}
-                    actions={rowActions(r, false)}
-                  />
-                )}
-              />
-              <TableWrap>
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50 sticky top-0 z-10"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
-                    <th className="px-4 py-3 font-medium">Return no</th>
-                    <th className="px-4 py-3 font-medium">Date</th>
-                    <th className="px-4 py-3 font-medium">Shop</th>
-                    <th className="px-4 py-3 font-medium">Invoice</th>
-                    <th className="px-4 py-3 font-medium">Items</th>
-                    <th className="px-4 py-3 font-medium text-right">Refund</th>
-                    <th className="px-4 py-3 font-medium">Reason</th>
-                    <th className="px-4 py-3 font-medium text-right">Actions</th>
-                  </tr></thead>
-                  <tbody>
-                    {customerRows.map((r) => (
-                      <tr key={r.id} className="border-t hover:bg-muted/40">
-                        <td className="px-4 py-3 font-mono text-xs">{r.returnNo}</td>
-                        <td className="px-4 py-3">{r.date}</td>
-                        <td className="px-4 py-3">{shops.find((s) => s.id === r.shopId)?.name}</td>
-                        <td className="px-4 py-3 font-mono text-xs">{r.invoice}</td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground">{r.items.map((i) => `${i.qty} × ${i.name}`).join(", ")}</td>
-                        <td className="px-4 py-3 text-right font-medium">{formatRs(r.refund)}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{r.reason}</td>
-                        <td className="px-4 py-3 text-right whitespace-nowrap">{rowActions(r, true)}</td>
+                <MobileCards
+                  items={customerRows}
+                  keyOf={(r) => r.id}
+                  render={(r) => (
+                    <ReturnCard
+                      r={r}
+                      kind="customer"
+                      shopName={shops.find((s) => s.id === r.shopId)?.name}
+                      actions={rowActions(r, false)}
+                    />
+                  )}
+                />
+                <TableWrap>
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 sticky top-0 z-10">
+                      <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+                        <th className="px-4 py-3 font-medium">Return no</th>
+                        <th className="px-4 py-3 font-medium">Date</th>
+                        <th className="px-4 py-3 font-medium">Shop</th>
+                        <th className="px-4 py-3 font-medium">Invoice</th>
+                        <th className="px-4 py-3 font-medium">Items</th>
+                        <th className="px-4 py-3 font-medium text-right">Refund</th>
+                        <th className="px-4 py-3 font-medium">Reason</th>
+                        <th className="px-4 py-3 font-medium text-right">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </TableWrap>
+                    </thead>
+                    <tbody>
+                      {customerRows.map((r) => (
+                        <tr key={r.id} className="border-t hover:bg-muted/40">
+                          <td className="px-4 py-3 font-mono text-xs">{r.returnNo}</td>
+                          <td className="px-4 py-3">{r.date}</td>
+                          <td className="px-4 py-3">
+                            {shops.find((s) => s.id === r.shopId)?.name}
+                          </td>
+                          <td className="px-4 py-3 font-mono text-xs">{r.invoice}</td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground">
+                            {r.items.map((i) => `${i.qty} × ${i.name}`).join(", ")}
+                          </td>
+                          <td className="px-4 py-3 text-right font-medium">{formatRs(r.refund)}</td>
+                          <td className="px-4 py-3 text-muted-foreground">{r.reason}</td>
+                          <td className="px-4 py-3 text-right whitespace-nowrap">
+                            {rowActions(r, true)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </TableWrap>
               </>
             )}
           </Card>
@@ -691,7 +886,12 @@ function ReturnsPage() {
         {isAdmin && (
           <TabsContent value="supplier" className="mt-4">
             <div className="flex justify-end mb-4">
-              <NewSupplierReturn purchases={purchases} products={products} shops={shops} stockAt={stockAt} />
+              <NewSupplierReturn
+                purchases={purchases}
+                products={products}
+                shops={shops}
+                stockAt={stockAt}
+              />
             </div>
 
             <FilterBar
@@ -704,51 +904,65 @@ function ReturnsPage() {
 
             <Card className="overflow-hidden">
               {supplierRows.length === 0 ? (
-                <EmptyState icon={<PackageMinus className="h-5 w-5" />} title="No supplier returns." hint="Use “Return to supplier” to send faulty or unsold stock back." />
+                <EmptyState
+                  icon={<PackageMinus className="h-5 w-5" />}
+                  title="No supplier returns."
+                  hint="Use “Return to supplier” to send faulty or unsold stock back."
+                />
               ) : (
                 <>
-                <MobileCards
-                  items={supplierRows}
-                  keyOf={(r) => r.id}
-                  render={(r) => (
-                    <ReturnCard
-                      r={r}
-                      kind="supplier"
-                      shopName={shops.find((s) => s.id === r.shopId)?.name}
-                      actions={rowActions(r, false)}
-                    />
-                  )}
-                />
-                <TableWrap>
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/50 sticky top-0 z-10"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
-                      <th className="px-4 py-3 font-medium">Return no</th>
-                      <th className="px-4 py-3 font-medium">Date</th>
-                      <th className="px-4 py-3 font-medium">Supplier</th>
-                      <th className="px-4 py-3 font-medium">Bill no</th>
-                      <th className="px-4 py-3 font-medium">From shop</th>
-                      <th className="px-4 py-3 font-medium">Items</th>
-                      <th className="px-4 py-3 font-medium text-right">Credit</th>
-                      <th className="px-4 py-3 font-medium">Reason</th>
-                      <th className="px-4 py-3 font-medium text-right">Actions</th>
-                    </tr></thead>
-                    <tbody>
-                      {supplierRows.map((r) => (
-                        <tr key={r.id} className="border-t hover:bg-muted/40">
-                          <td className="px-4 py-3 font-mono text-xs">{r.returnNo}</td>
-                          <td className="px-4 py-3">{r.date}</td>
-                          <td className="px-4 py-3">{r.supplier}</td>
-                          <td className="px-4 py-3 font-mono text-xs">{r.invoice}</td>
-                          <td className="px-4 py-3">{shops.find((s) => s.id === r.shopId)?.name}</td>
-                          <td className="px-4 py-3 text-xs text-muted-foreground">{r.items.map((i) => `${i.qty} × ${i.name}`).join(", ")}</td>
-                          <td className="px-4 py-3 text-right font-medium">{formatRs(r.refund)}</td>
-                          <td className="px-4 py-3 text-muted-foreground">{r.reason}</td>
-                          <td className="px-4 py-3 text-right whitespace-nowrap">{rowActions(r, true)}</td>
+                  <MobileCards
+                    items={supplierRows}
+                    keyOf={(r) => r.id}
+                    render={(r) => (
+                      <ReturnCard
+                        r={r}
+                        kind="supplier"
+                        shopName={shops.find((s) => s.id === r.shopId)?.name}
+                        actions={rowActions(r, false)}
+                      />
+                    )}
+                  />
+                  <TableWrap>
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 sticky top-0 z-10">
+                        <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+                          <th className="px-4 py-3 font-medium">Return no</th>
+                          <th className="px-4 py-3 font-medium">Date</th>
+                          <th className="px-4 py-3 font-medium">Supplier</th>
+                          <th className="px-4 py-3 font-medium">Bill no</th>
+                          <th className="px-4 py-3 font-medium">From shop</th>
+                          <th className="px-4 py-3 font-medium">Items</th>
+                          <th className="px-4 py-3 font-medium text-right">Credit</th>
+                          <th className="px-4 py-3 font-medium">Reason</th>
+                          <th className="px-4 py-3 font-medium text-right">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </TableWrap>
+                      </thead>
+                      <tbody>
+                        {supplierRows.map((r) => (
+                          <tr key={r.id} className="border-t hover:bg-muted/40">
+                            <td className="px-4 py-3 font-mono text-xs">{r.returnNo}</td>
+                            <td className="px-4 py-3">{r.date}</td>
+                            <td className="px-4 py-3">{r.supplier}</td>
+                            <td className="px-4 py-3 font-mono text-xs">{r.invoice}</td>
+                            <td className="px-4 py-3">
+                              {shops.find((s) => s.id === r.shopId)?.name}
+                            </td>
+                            <td className="px-4 py-3 text-xs text-muted-foreground">
+                              {r.items.map((i) => `${i.qty} × ${i.name}`).join(", ")}
+                            </td>
+                            <td className="px-4 py-3 text-right font-medium">
+                              {formatRs(r.refund)}
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">{r.reason}</td>
+                            <td className="px-4 py-3 text-right whitespace-nowrap">
+                              {rowActions(r, true)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </TableWrap>
                 </>
               )}
             </Card>

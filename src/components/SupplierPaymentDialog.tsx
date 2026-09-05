@@ -1,14 +1,33 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
-  useStore, formatRs, todayISO, supplierBalance, openSessionFor,
-  type SettledMethod, type Supplier, type SupplierPayment,
+  useStore,
+  formatRs,
+  todayISO,
+  supplierBalance,
+  openSessionFor,
+  type SettledMethod,
+  type Supplier,
+  type SupplierPayment,
 } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { PaymentPicker } from "@/components/PaymentPicker";
 
 /**
@@ -34,8 +53,19 @@ export function SupplierPaymentDialog({
   onClose: () => void;
 }) {
   const {
-    user, shops, purchases, supplierPayments, returns, setOffs, adjustments, sales, customerPayments,
-    daySessions, settings, addSupplierPayment, updateSupplierPayment,
+    user,
+    shops,
+    purchases,
+    supplierPayments,
+    returns,
+    setOffs,
+    adjustments,
+    sales,
+    customerPayments,
+    daySessions,
+    settings,
+    addSupplierPayment,
+    updateSupplierPayment,
   } = useStore();
 
   const isAdmin = user?.role === "admin";
@@ -54,7 +84,15 @@ export function SupplierPaymentDialog({
   const [shopId, setShopId] = useState(user?.shopId ?? "");
 
   const balance = supplier
-    ? supplierBalance(supplier, { sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments })
+    ? supplierBalance(supplier, {
+        sales,
+        customerPayments,
+        purchases,
+        supplierPayments,
+        returns,
+        setOffs,
+        adjustments,
+      })
     : null;
 
   // Re-seeded whenever the dialog is pointed at a different supplier or
@@ -77,7 +115,6 @@ export function SupplierPaymentDialog({
     setShopId(user?.shopId ?? "");
     // `balance` is recomputed every render; keying off the supplier id is what
     // actually decides whether this is a different form.
-
   }, [supplier?.id, editing?.id]);
 
   if (!supplier) return null;
@@ -87,7 +124,10 @@ export function SupplierPaymentDialog({
   const session = shopId ? openSessionFor(daySessions, shopId) : undefined;
 
   const save = () => {
-    if (amount <= 0) { toast.error("Enter an amount"); return; }
+    if (amount <= 0) {
+      toast.error("Enter an amount");
+      return;
+    }
 
     if (editing) {
       updateSupplierPayment({ ...editing, amount, method, date, note, shopId });
@@ -140,7 +180,11 @@ export function SupplierPaymentDialog({
                 <Button size="sm" variant="outline" onClick={() => setAmount(outstanding)}>
                   Pay all — {money(outstanding)}
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => setAmount(Math.round(outstanding / 2))}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setAmount(Math.round(outstanding / 2))}
+                >
                   Half
                 </Button>
               </div>
@@ -160,12 +204,19 @@ export function SupplierPaymentDialog({
             <div className="space-y-1.5">
               <Label>Paid from</Label>
               {isAdmin ? (
-                <Select value={shopId || "__ho__"} onValueChange={(v) => setShopId(v === "__ho__" ? "" : v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select
+                  value={shopId || "__ho__"}
+                  onValueChange={(v) => setShopId(v === "__ho__" ? "" : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__ho__">Head office</SelectItem>
                     {shops.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>{s.name} till</SelectItem>
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name} till
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -189,7 +240,9 @@ export function SupplierPaymentDialog({
           {method === "Cash" && shopId && (
             <p className="text-xs text-warning-strong">
               Cash out of the {shops.find((s) => s.id === shopId)?.name ?? "shop"} till
-              {session ? ` — tonight's count will expect ${money(amount)} less.` : " — no trading day is open there, so it lands on the day's date."}
+              {session
+                ? ` — tonight's count will expect ${money(amount)} less.`
+                : " — no trading day is open there, so it lands on the day's date."}
             </p>
           )}
           {method === "Cash" && !shopId && (
@@ -199,13 +252,16 @@ export function SupplierPaymentDialog({
           )}
           {advanceAfter > 0 && (
             <p className="text-xs text-muted-foreground">
-              {money(advanceAfter)} more than is owed — it will show as an advance you have placed with them.
+              {money(advanceAfter)} more than is owed — it will show as an advance you have placed
+              with them.
             </p>
           )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
           <Button onClick={save}>{editing ? "Save correction" : "Record payment"}</Button>
         </DialogFooter>
       </DialogContent>

@@ -82,7 +82,10 @@ const QUESTIONS = [
   ["How much did we sell today?", ["salesByPeriod.today.revenue"]],
   ["How many invoices today?", ["salesByPeriod.today.invoices"]],
   ["What was our profit this week?", ["salesByPeriod.last7Days.profit"]],
-  ["Are we up or down on last week?", ["trendLast7VsPrevious7.revenueChangePct", "salesByPeriod.previous7Days.revenue"]],
+  [
+    "Are we up or down on last week?",
+    ["trendLast7VsPrevious7.revenueChangePct", "salesByPeriod.previous7Days.revenue"],
+  ],
   ["What did we take in the last 30 days?", ["salesByPeriod.last30Days.revenue"]],
   ["How many items have we sold this month?", ["salesByPeriod.last30Days.units"]],
   ["Which shop is doing best?", ["perShopLast30Days"]],
@@ -138,7 +141,10 @@ const QUESTIONS = [
   /* --- oversight ------------------------------------------------------- */
   ["Has anything been deleted recently?", ["oversight.deletionsLast30Days"]],
   ["Has anyone written off a debt?", ["oversight.writeOffsLast30Days"]],
-  ["What is my overall position — owed in and owed out?", ["receivables.totalOutstanding", "payables.totalOutstanding"]],
+  [
+    "What is my overall position — owed in and owed out?",
+    ["receivables.totalOutstanding", "payables.totalOutstanding"],
+  ],
 ];
 
 /* ------------------------------------------------------------- run it */
@@ -176,10 +182,15 @@ if (LIVE) {
     readFileSync(".env", "utf8")
       .split(/\r?\n/)
       .filter((l) => l.trim() && !l.trim().startsWith("#"))
-      .map((l) => { const i = l.indexOf("="); return [l.slice(0, i).trim(), l.slice(i + 1).trim()]; }),
+      .map((l) => {
+        const i = l.indexOf("=");
+        return [l.slice(0, i).trim(), l.slice(i + 1).trim()];
+      }),
   );
   const key = env.OPENROUTER_API_KEY;
-  const models = [env.OPENROUTER_MODEL1, env.OPENROUTER_MODEL2, env.OPENROUTER_MODEL3].filter(Boolean);
+  const models = [env.OPENROUTER_MODEL1, env.OPENROUTER_MODEL2, env.OPENROUTER_MODEL3].filter(
+    Boolean,
+  );
 
   if (!key) {
     console.log("\nOPENROUTER_API_KEY not set — skipping the live sample.");
@@ -190,7 +201,10 @@ if (LIVE) {
       which one question demonstrates as well as fifty.
     */
     const sample = [
-      ["How much did we take in the last 7 days?", String(insights.salesByPeriod.last7Days.revenue)],
+      [
+        "How much did we take in the last 7 days?",
+        String(insights.salesByPeriod.last7Days.revenue),
+      ],
       ["How many invoices in the last 7 days?", String(insights.salesByPeriod.last7Days.invoices)],
       ["What is our stock worth at cost?", String(insights.inventoryValueAtCost)],
     ];
@@ -198,7 +212,8 @@ if (LIVE) {
     console.log(`\nasking ${models[0]} (${sample.length} questions)\n`);
     for (const [question, expected] of sample) {
       const answer = await ask(key, models, question, brief);
-      const exact = answer.includes(expected) || answer.includes(Number(expected).toLocaleString("en-US"));
+      const exact =
+        answer.includes(expected) || answer.includes(Number(expected).toLocaleString("en-US"));
       console.log(`  ${exact ? "ok  " : "MISS"}  ${question}`);
       console.log(`        expected the figure ${expected}`);
       console.log(`        ${answer.replace(/\s+/g, " ").slice(0, 220)}`);
@@ -216,7 +231,11 @@ async function ask(key, models, question, briefText) {
         body: JSON.stringify({
           model,
           messages: [
-            { role: "system", content: "Answer only from the BUSINESS DATA block. Copy figures exactly, digit for digit. Never calculate." },
+            {
+              role: "system",
+              content:
+                "Answer only from the BUSINESS DATA block. Copy figures exactly, digit for digit. Never calculate.",
+            },
             { role: "user", content: `BUSINESS DATA:\n${briefText}\n\nQUESTION: ${question}` },
           ],
         }),

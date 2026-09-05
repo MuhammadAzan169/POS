@@ -174,7 +174,9 @@ export function matchProduct(products: Product[], term: string): Product | undef
 /** The price a given kind of shop sells at. */
 export function priceFor(product: Pick<Product, "price" | "wholesalePrice">, kind: ShopKind) {
   if (kind !== "wholesale") return product.price;
-  return product.wholesalePrice && product.wholesalePrice > 0 ? product.wholesalePrice : product.price;
+  return product.wholesalePrice && product.wholesalePrice > 0
+    ? product.wholesalePrice
+    : product.price;
 }
 
 export interface InventoryRow {
@@ -289,11 +291,15 @@ export function allocateSale(sale: Pick<Sale, "discount" | "lines">): AllocatedL
   // discount. Same reasoning as the clamp in `discountSplitOf`.
   const bill = Math.min(discountSplitOf(sale).bill, Math.max(0, netTotal));
 
-  const shares = nets.map((n) => (bill > 0 && netTotal > 0 ? Math.round((bill * n) / netTotal) : 0));
+  const shares = nets.map((n) =>
+    bill > 0 && netTotal > 0 ? Math.round((bill * n) / netTotal) : 0,
+  );
   const residue = bill - shares.reduce((a, b) => a + b, 0);
   if (residue !== 0 && shares.length > 0) {
     let biggest = 0;
-    nets.forEach((n, i) => { if (n > nets[biggest]) biggest = i; });
+    nets.forEach((n, i) => {
+      if (n > nets[biggest]) biggest = i;
+    });
     shares[biggest] += residue;
   }
 
@@ -1091,10 +1097,14 @@ export function discountPctFor(productId: string, d: DiscountRules) {
 }
 
 /** Money off a line, rounded to whole currency units. */
-export function discountAmountFor(productId: string, unitPrice: number, qty: number, d: DiscountRules) {
+export function discountAmountFor(
+  productId: string,
+  unitPrice: number,
+  qty: number,
+  d: DiscountRules,
+) {
   return Math.round((unitPrice * qty * discountPctFor(productId, d)) / 100);
 }
-
 
 export interface Settings {
   businessName: string;

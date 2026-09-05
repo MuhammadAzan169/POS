@@ -28,9 +28,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import {
-  Search, Download, Wallet, HandCoins, ArrowLeftRight, AlertTriangle, Trash2, PiggyBank, Scale,
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import {
+  Search,
+  Download,
+  Wallet,
+  HandCoins,
+  ArrowLeftRight,
+  AlertTriangle,
+  Trash2,
+  PiggyBank,
+  Scale,
 } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { cn } from "@/lib/utils";
@@ -53,8 +67,21 @@ export const Route = createFileRoute("/app/ledger")({ component: LedgerPage });
  */
 function LedgerPage() {
   const {
-    user, customers, suppliers, sales, customerPayments, purchases, supplierPayments,
-    returns, setOffs, adjustments, shops, settings, deleteSetOff, deleteSupplierPayment, deleteAdjustment,
+    user,
+    customers,
+    suppliers,
+    sales,
+    customerPayments,
+    purchases,
+    supplierPayments,
+    returns,
+    setOffs,
+    adjustments,
+    shops,
+    settings,
+    deleteSetOff,
+    deleteSupplierPayment,
+    deleteAdjustment,
   } = useStore();
 
   const isAdmin = user?.role === "admin";
@@ -72,16 +99,23 @@ function LedgerPage() {
   /** The account money is being collected against — the receivable side's "Pay". */
   const [collectFrom, setCollectFrom] = useState<Customer | null>(null);
   const [payEditing, setPayEditing] = useState<SupplierPayment | null>(null);
-  const [settleFor, setSettleFor] = useState<{ customer: Customer; supplier: Supplier } | null>(null);
+  const [settleFor, setSettleFor] = useState<{ customer: Customer; supplier: Supplier } | null>(
+    null,
+  );
   /** The party whose balance the owner is moving by hand, and which side of it. */
-  const [adjustFor, setAdjustFor] = useState<{ customer?: Customer; supplier?: Supplier } | null>(null);
+  const [adjustFor, setAdjustFor] = useState<{ customer?: Customer; supplier?: Supplier } | null>(
+    null,
+  );
 
   const data = useMemo(
     () => ({ sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments }),
     [sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments],
   );
 
-  const parties = useMemo(() => partyPositions(customers, suppliers, data), [customers, suppliers, data]);
+  const parties = useMemo(
+    () => partyPositions(customers, suppliers, data),
+    [customers, suppliers, data],
+  );
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -129,7 +163,9 @@ function LedgerPage() {
         .map((sale) => ({
           sale,
           shop: shops.find((sh) => sh.id === sale.shopId),
-          position: sale.customerId ? parties.find((p) => p.customer?.id === sale.customerId) : undefined,
+          position: sale.customerId
+            ? parties.find((p) => p.customer?.id === sale.customerId)
+            : undefined,
         })),
     [sales, shops, parties],
   );
@@ -194,12 +230,30 @@ function LedgerPage() {
   /* -------------------------------------------------------------- export */
 
   const exportParties = () => {
-    if (parties.length === 0) { toast.error("Nothing to export"); return; }
+    if (parties.length === 0) {
+      toast.error("Nothing to export");
+      return;
+    }
     downloadCsv(
       `ledgers-${todayISO()}.csv`,
-      ["Party", "Receivables", "Payables", "Can be set off", "Net", "Advance held", "Advance placed", "Both sides"],
+      [
+        "Party",
+        "Receivables",
+        "Payables",
+        "Can be set off",
+        "Net",
+        "Advance held",
+        "Advance placed",
+        "Both sides",
+      ],
       parties.map((p) => [
-        p.name, p.receivable, p.payable, p.settleable, p.net, p.advanceHeld, p.advancePlaced,
+        p.name,
+        p.receivable,
+        p.payable,
+        p.settleable,
+        p.net,
+        p.advanceHeld,
+        p.advancePlaced,
         p.customer && p.supplier ? "yes" : "no",
       ]),
     );
@@ -212,8 +266,8 @@ function LedgerPage() {
         <PageHeader title="Ledgers" subtitle="Who owes you, and who you owe." />
         <Card className="p-10 text-center text-sm text-muted-foreground">
           Admins only. Your own shop&apos;s credit is on the{" "}
-          <span className="font-medium">Customers</span> tab, and what you still owe suppliers is under{" "}
-          <span className="font-medium">Purchases → Still to pay</span>.
+          <span className="font-medium">Customers</span> tab, and what you still owe suppliers is
+          under <span className="font-medium">Purchases → Still to pay</span>.
         </Card>
       </div>
     );
@@ -226,7 +280,8 @@ function LedgerPage() {
         subtitle="Everyone you deal with on credit, in both directions — customers, vendors, and the ones who are both."
         actions={
           <Button variant="outline" onClick={exportParties}>
-            <Download className="h-4 w-4 mr-1.5" />Export
+            <Download className="h-4 w-4 mr-1.5" />
+            Export
           </Button>
         }
       />
@@ -244,7 +299,11 @@ function LedgerPage() {
           onClick={() => setTab("payable")}
           label="Payables"
           value={money(totals.payable)}
-          sub={overdue.length > 0 ? `${overdue.length} bill${overdue.length === 1 ? "" : "s"} overdue` : "nothing overdue"}
+          sub={
+            overdue.length > 0
+              ? `${overdue.length} bill${overdue.length === 1 ? "" : "s"} overdue`
+              : "nothing overdue"
+          }
           icon={<Wallet className="h-5 w-5" />}
           tone={overdue.length > 0 ? "warning" : "default"}
         />
@@ -279,9 +338,12 @@ function LedgerPage() {
               {money(totals.settleable)} is owed in both directions and could simply be cancelled
             </div>
             <p className="text-muted-foreground mt-1">
-              {parties.filter((p) => p.settleable > 0).map((p) => p.name).join(", ")} both buy from you and
-              sell to you. Open one below and record a set-off — both balances come down together and only
-              the difference is left to settle.
+              {parties
+                .filter((p) => p.settleable > 0)
+                .map((p) => p.name)
+                .join(", ")}{" "}
+              both buy from you and sell to you. Open one below and record a set-off — both balances
+              come down together and only the difference is left to settle.
             </p>
           </div>
         </Card>
@@ -290,7 +352,9 @@ function LedgerPage() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="parties">Everyone ({parties.length})</TabsTrigger>
-          <TabsTrigger value="receivable">Customers to collect from ({toCollect.length})</TabsTrigger>
+          <TabsTrigger value="receivable">
+            Customers to collect from ({toCollect.length})
+          </TabsTrigger>
           <TabsTrigger value="payable">Suppliers to pay ({toPay.length})</TabsTrigger>
           <TabsTrigger value="creditsales">Credit sales ({creditSales.length})</TabsTrigger>
           <TabsTrigger value="bills">Credit purchases ({bills.length})</TabsTrigger>
@@ -312,21 +376,31 @@ function LedgerPage() {
               <Card
                 className={cn(
                   "p-4 mb-4 flex flex-wrap items-center justify-between gap-3",
-                  pane === "receivable" ? "border-warning/40 bg-warning/5" : "border-destructive/30 bg-destructive/5",
+                  pane === "receivable"
+                    ? "border-warning/40 bg-warning/5"
+                    : "border-destructive/30 bg-destructive/5",
                 )}
               >
                 <div className="flex items-start gap-3">
                   <div
                     className={cn(
                       "h-10 w-10 rounded-lg flex items-center justify-center shrink-0",
-                      pane === "receivable" ? "bg-warning/20 text-warning-strong" : "bg-destructive/15 text-destructive",
+                      pane === "receivable"
+                        ? "bg-warning/20 text-warning-strong"
+                        : "bg-destructive/15 text-destructive",
                     )}
                   >
-                    {pane === "receivable" ? <HandCoins className="h-5 w-5" /> : <Wallet className="h-5 w-5" />}
+                    {pane === "receivable" ? (
+                      <HandCoins className="h-5 w-5" />
+                    ) : (
+                      <Wallet className="h-5 w-5" />
+                    )}
                   </div>
                   <div>
                     <h3 className="font-semibold text-sm">
-                      {pane === "receivable" ? "Customers who still have to pay me" : "Suppliers I still have to pay"}
+                      {pane === "receivable"
+                        ? "Customers who still have to pay me"
+                        : "Suppliers I still have to pay"}
                     </h3>
                     <p className="text-xs text-muted-foreground mt-0.5 max-w-prose">
                       {pane === "receivable"
@@ -366,11 +440,18 @@ function LedgerPage() {
 
             <PartyList
               parties={filtered.filter((p) =>
-                pane === "receivable" ? p.receivable > 0 : pane === "payable" ? p.payable > 0 : true,
+                pane === "receivable"
+                  ? p.receivable > 0
+                  : pane === "payable"
+                    ? p.payable > 0
+                    : true,
               )}
               currency={currency}
               onOpen={setDetail}
-              onPay={(sup) => { setPayEditing(null); setPayFor(sup); }}
+              onPay={(sup) => {
+                setPayEditing(null);
+                setPayFor(sup);
+              }}
               onReceive={setCollectFrom}
               onSettle={(c, sup) => setSettleFor({ customer: c, supplier: sup })}
             />
@@ -383,8 +464,9 @@ function LedgerPage() {
             <div>
               <h3 className="font-semibold text-sm">Sold on account</h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Every invoice handed over without payment, across all shops. Receipts are taken against the
-                account rather than a single invoice, so the balance shown is the customer's whole position.
+                Every invoice handed over without payment, across all shops. Receipts are taken
+                against the account rather than a single invoice, so the balance shown is the
+                customer's whole position.
               </p>
             </div>
             <div className="font-display text-2xl font-bold text-warning-strong tabular-nums">
@@ -406,7 +488,10 @@ function LedgerPage() {
                   fields={[
                     { label: "Shop", value: r.shop?.name ?? "—" },
                     { label: "Items", value: String(r.sale.lines.length) },
-                    { label: "They now owe", value: r.position ? money(r.position.receivable) : "—" },
+                    {
+                      label: "They now owe",
+                      value: r.position ? money(r.position.receivable) : "—",
+                    },
                   ]}
                 />
               )}
@@ -436,12 +521,17 @@ function LedgerPage() {
                       <td className="px-4 py-3">{r.sale.customer}</td>
                       <td className="px-4 py-3 text-muted-foreground">{r.shop?.name ?? "—"}</td>
                       <td className="px-4 py-3 text-muted-foreground">{shortDay(r.sale.date)}</td>
-                      <td className="px-4 py-3 text-right text-muted-foreground">{r.sale.lines.length}</td>
+                      <td className="px-4 py-3 text-right text-muted-foreground">
+                        {r.sale.lines.length}
+                      </td>
                       <td className="px-4 py-3 text-right font-medium">{money(r.sale.total)}</td>
                       <td className="px-4 py-3 text-right text-warning-strong">
                         {r.position ? money(r.position.receivable) : "—"}
                       </td>
-                      <td className="px-4 py-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <td
+                        className="px-4 py-3 text-right whitespace-nowrap"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         {r.position?.customer && r.position.receivable > 0 && (
                           <Button
                             size="sm"
@@ -457,9 +547,14 @@ function LedgerPage() {
                     </tr>
                   ))}
                   {creditSales.length === 0 && (
-                    <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                      Nothing has been sold on credit.
-                    </td></tr>
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="px-4 py-12 text-center text-sm text-muted-foreground"
+                      >
+                        Nothing has been sold on credit.
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
@@ -474,7 +569,8 @@ function LedgerPage() {
               <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
               <div className="text-sm">
                 <div className="font-medium text-destructive">
-                  {overdue.length} bill{overdue.length === 1 ? " is" : "s are"} past the date you agreed
+                  {overdue.length} bill{overdue.length === 1 ? " is" : "s are"} past the date you
+                  agreed
                 </div>
                 <p className="text-muted-foreground mt-1">
                   {money(overdue.reduce((a, b) => a + b.balance, 0))} in total, the oldest{" "}
@@ -532,21 +628,32 @@ function LedgerPage() {
                       <td className="px-4 py-3 text-muted-foreground">
                         {b.purchase.dueDate || "No date agreed"}
                         {b.overdueDays > 0 && (
-                          <span className="ml-1.5 text-xs text-destructive">{b.overdueDays}d over</span>
+                          <span className="ml-1.5 text-xs text-destructive">
+                            {b.overdueDays}d over
+                          </span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">{money(b.purchase.total)}</td>
-                      <td className="px-4 py-3 text-right text-muted-foreground">{money(b.paid)}</td>
-                      <td className="px-4 py-3 text-right font-medium text-warning-strong">{money(b.balance)}</td>
+                      <td className="px-4 py-3 text-right text-muted-foreground">
+                        {money(b.paid)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium text-warning-strong">
+                        {money(b.balance)}
+                      </td>
                       <td className="px-4 py-3">
                         <StatusPill status={b.overdueDays > 0 ? "Overdue" : b.status} />
                       </td>
                     </tr>
                   ))}
                   {bills.length === 0 && (
-                    <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                      Every bill is settled.
-                    </td></tr>
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="px-4 py-12 text-center text-sm text-muted-foreground"
+                      >
+                        Every bill is settled.
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
@@ -567,7 +674,12 @@ function LedgerPage() {
                   subtitle={`${p.date} · ${p.method}`}
                   right={money(p.amount)}
                   fields={[
-                    { label: "Paid from", value: p.shopId ? shops.find((s) => s.id === p.shopId)?.name ?? "a shop" : "Head office" },
+                    {
+                      label: "Paid from",
+                      value: p.shopId
+                        ? (shops.find((s) => s.id === p.shopId)?.name ?? "a shop")
+                        : "Head office",
+                    },
                     { label: "Recorded by", value: p.paidBy || "Not recorded" },
                     { label: "Note", value: p.note || "None" },
                   ]}
@@ -592,9 +704,13 @@ function LedgerPage() {
                     <tr key={p.id} className="border-t hover:bg-muted/40">
                       <td className="px-4 py-3 text-muted-foreground">{shortDay(p.date)}</td>
                       <td className="px-4 py-3 font-medium">{supplier?.name ?? "Unknown"}</td>
-                      <td className="px-4 py-3"><StatusPill status={p.method} /></td>
+                      <td className="px-4 py-3">
+                        <StatusPill status={p.method} />
+                      </td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        {p.shopId ? shops.find((s) => s.id === p.shopId)?.name ?? "a shop" : "Head office"}
+                        {p.shopId
+                          ? (shops.find((s) => s.id === p.shopId)?.name ?? "a shop")
+                          : "Head office"}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{p.note || "No note"}</td>
                       <td className="px-4 py-3 text-right font-medium">{money(p.amount)}</td>
@@ -606,7 +722,10 @@ function LedgerPage() {
                           } goes back up by that much.`}
                           confirmLabel="Delete payment"
                           destructive
-                          onConfirm={() => { deleteSupplierPayment(p.id); toast.success("Payment deleted"); }}
+                          onConfirm={() => {
+                            deleteSupplierPayment(p.id);
+                            toast.success("Payment deleted");
+                          }}
                           trigger={
                             <Button size="sm" variant="ghost" aria-label="Delete this payment">
                               <Trash2 className="h-3.5 w-3.5 text-destructive" />
@@ -617,9 +736,14 @@ function LedgerPage() {
                     </tr>
                   ))}
                   {payments.length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                      No payments to suppliers recorded yet.
-                    </td></tr>
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="px-4 py-12 text-center text-sm text-muted-foreground"
+                      >
+                        No payments to suppliers recorded yet.
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
@@ -630,8 +754,9 @@ function LedgerPage() {
         {/* -------------------------------------------------- set-offs */}
         <TabsContent value="setoffs" className="mt-4">
           <Card className="p-4 mb-4 text-sm text-muted-foreground">
-            A set-off cancels what someone owes you against what you owe them. No money moves, so nothing
-            here touches a till or a day&apos;s cash count — only the two balances come down together.
+            A set-off cancels what someone owes you against what you owe them. No money moves, so
+            nothing here touches a till or a day&apos;s cash count — only the two balances come down
+            together.
           </Card>
 
           <Card className="overflow-hidden">
@@ -669,9 +794,13 @@ function LedgerPage() {
                     <tr key={x.id} className="border-t hover:bg-muted/40">
                       <td className="px-4 py-3 text-muted-foreground">{shortDay(x.date)}</td>
                       <td className="px-4 py-3 font-medium">{customer?.name ?? "Unknown"}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{supplier?.name ?? "Unknown"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {supplier?.name ?? "Unknown"}
+                      </td>
                       <td className="px-4 py-3 text-muted-foreground">{x.note || "No note"}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{x.createdBy || "Not recorded"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {x.createdBy || "Not recorded"}
+                      </td>
                       <td className="px-4 py-3 text-right font-medium">{money(x.amount)}</td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <Confirm
@@ -681,7 +810,10 @@ function LedgerPage() {
                           } will owe you that much again, and you will owe ${supplier?.name ?? "the supplier"} the same.`}
                           confirmLabel="Undo set-off"
                           destructive
-                          onConfirm={() => { deleteSetOff(x.id); toast.success("Set-off undone"); }}
+                          onConfirm={() => {
+                            deleteSetOff(x.id);
+                            toast.success("Set-off undone");
+                          }}
                           trigger={
                             <Button size="sm" variant="ghost" aria-label="Undo this set-off">
                               <Trash2 className="h-3.5 w-3.5 text-destructive" />
@@ -692,9 +824,14 @@ function LedgerPage() {
                     </tr>
                   ))}
                   {setOffRows.length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                      No set-offs recorded.
-                    </td></tr>
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="px-4 py-12 text-center text-sm text-muted-foreground"
+                      >
+                        No set-offs recorded.
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
@@ -705,9 +842,9 @@ function LedgerPage() {
         <TabsContent value="adjustments" className="mt-4">
           <Card className="p-4 mb-4 text-sm text-muted-foreground">
             The only figures in the app with no invoice or bill behind them: a debt written off, a
-            balance carried in from before you started, or a correction you agreed. No money moves, so
-            nothing here touches a till or a day&apos;s cash count. Undo one and the balance goes back
-            exactly as it was.
+            balance carried in from before you started, or a correction you agreed. No money moves,
+            so nothing here touches a till or a day&apos;s cash count. Undo one and the balance goes
+            back exactly as it was.
             {writtenOff > 0 && (
               <span className="mt-2 block font-medium text-foreground">
                 {money(writtenOff)} has been written off in total.
@@ -725,7 +862,9 @@ function LedgerPage() {
                   title={party?.name ?? "Unknown"}
                   subtitle={`${a.date} · ${side === "customer" ? "what they owe you" : "what you owe them"}`}
                   right={`${a.amount < 0 ? "−" : "+"} ${money(Math.abs(a.amount))}`}
-                  badges={[<StatusPill key="k" status={a.amount < 0 ? "Written off" : "Increased"} />]}
+                  badges={[
+                    <StatusPill key="k" status={a.amount < 0 ? "Written off" : "Increased"} />,
+                  ]}
                   fields={[
                     { label: "Reason", value: a.reason || "Not given" },
                     { label: "Recorded by", value: a.createdBy || "Not recorded" },
@@ -755,8 +894,12 @@ function LedgerPage() {
                         {side === "customer" ? "Receivables" : "Payables"}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{a.reason || "Not given"}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{a.createdBy || "Not recorded"}</td>
-                      <td className={`px-4 py-3 text-right font-medium ${a.amount < 0 ? "text-success-strong" : "text-warning-strong"}`}>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {a.createdBy || "Not recorded"}
+                      </td>
+                      <td
+                        className={`px-4 py-3 text-right font-medium ${a.amount < 0 ? "text-success-strong" : "text-warning-strong"}`}
+                      >
                         {a.amount < 0 ? "−" : "+"} {money(Math.abs(a.amount))}
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -767,7 +910,10 @@ function LedgerPage() {
                           }'s balance, exactly as it was before.`}
                           confirmLabel="Undo adjustment"
                           destructive
-                          onConfirm={() => { deleteAdjustment(a.id); toast.success("Adjustment undone"); }}
+                          onConfirm={() => {
+                            deleteAdjustment(a.id);
+                            toast.success("Adjustment undone");
+                          }}
                           trigger={
                             <Button size="sm" variant="ghost" aria-label="Undo this adjustment">
                               <Trash2 className="h-3.5 w-3.5 text-destructive" />
@@ -778,9 +924,14 @@ function LedgerPage() {
                     </tr>
                   ))}
                   {adjustmentRows.length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                      No balances have been adjusted by hand.
-                    </td></tr>
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="px-4 py-12 text-center text-sm text-muted-foreground"
+                      >
+                        No balances have been adjusted by hand.
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
@@ -808,14 +959,22 @@ function LedgerPage() {
               <div className="mt-6 space-y-5">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-lg border p-3">
-                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Receivables</div>
-                    <div className={`font-semibold text-lg mt-1 ${detail.receivable > 0 ? "text-warning-strong" : ""}`}>
+                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Receivables
+                    </div>
+                    <div
+                      className={`font-semibold text-lg mt-1 ${detail.receivable > 0 ? "text-warning-strong" : ""}`}
+                    >
                       {money(detail.receivable)}
                     </div>
                   </div>
                   <div className="rounded-lg border p-3">
-                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Payables</div>
-                    <div className={`font-semibold text-lg mt-1 ${detail.payable > 0 ? "text-destructive" : ""}`}>
+                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Payables
+                    </div>
+                    <div
+                      className={`font-semibold text-lg mt-1 ${detail.payable > 0 ? "text-destructive" : ""}`}
+                    >
                       {money(detail.payable)}
                     </div>
                   </div>
@@ -826,7 +985,8 @@ function LedgerPage() {
                     {detail.advanceHeld > 0 && (
                       <div className="flex justify-between">
                         <span className="text-muted-foreground flex items-center gap-1.5">
-                          <PiggyBank className="h-3.5 w-3.5" />Advance you are holding for them
+                          <PiggyBank className="h-3.5 w-3.5" />
+                          Advance you are holding for them
                         </span>
                         <span className="font-medium">{money(detail.advanceHeld)}</span>
                       </div>
@@ -834,7 +994,8 @@ function LedgerPage() {
                     {detail.advancePlaced > 0 && (
                       <div className="flex justify-between">
                         <span className="text-muted-foreground flex items-center gap-1.5">
-                          <PiggyBank className="h-3.5 w-3.5" />Advance you have placed with them
+                          <PiggyBank className="h-3.5 w-3.5" />
+                          Advance you have placed with them
                         </span>
                         <span className="font-medium">{money(detail.advancePlaced)}</span>
                       </div>
@@ -885,7 +1046,8 @@ function LedgerPage() {
                         setPayFor(sup);
                       }}
                     >
-                      <Wallet className="h-3.5 w-3.5 mr-1.5" />Pay them
+                      <Wallet className="h-3.5 w-3.5 mr-1.5" />
+                      Pay them
                     </Button>
                   )}
                   {detail.customer && detail.receivable > 0 && (
@@ -897,7 +1059,8 @@ function LedgerPage() {
                         setCollectFrom(c);
                       }}
                     >
-                      <HandCoins className="h-3.5 w-3.5 mr-1.5" />Receive payment
+                      <HandCoins className="h-3.5 w-3.5 mr-1.5" />
+                      Receive payment
                     </Button>
                   )}
                   {/* A party on both sides gets a button per side: the two
@@ -934,7 +1097,9 @@ function LedgerPage() {
 
                 {detailCustomer && (
                   <section>
-                    <h4 className="font-semibold text-sm mb-2">As a customer — what they have taken</h4>
+                    <h4 className="font-semibold text-sm mb-2">
+                      As a customer — what they have taken
+                    </h4>
                     <LedgerTable
                       entries={detailCustomerEntries}
                       debitLabel="Taken on account"
@@ -947,7 +1112,9 @@ function LedgerPage() {
 
                 {detailSupplier && (
                   <section>
-                    <h4 className="font-semibold text-sm mb-2">As a supplier — what they have billed</h4>
+                    <h4 className="font-semibold text-sm mb-2">
+                      As a supplier — what they have billed
+                    </h4>
                     <LedgerTable
                       entries={detailSupplierEntries}
                       debitLabel="Billed"
@@ -968,7 +1135,10 @@ function LedgerPage() {
       <SupplierPaymentDialog
         supplier={payFor}
         editing={payEditing}
-        onClose={() => { setPayFor(null); setPayEditing(null); }}
+        onClose={() => {
+          setPayFor(null);
+          setPayEditing(null);
+        }}
       />
       <SetOffDialog
         customer={settleFor?.customer ?? null}
@@ -1037,7 +1207,10 @@ function PartyList({
             fields={[
               { label: "Receivables", value: money(p.receivable) },
               { label: "Payables", value: money(p.payable) },
-              { label: "Can cancel", value: p.settleable > 0 ? money(p.settleable) : "Nothing to cancel" },
+              {
+                label: "Can cancel",
+                value: p.settleable > 0 ? money(p.settleable) : "Nothing to cancel",
+              },
             ]}
             actions={
               <>
@@ -1045,17 +1218,20 @@ function PartyList({
                     there is money to move that way. */}
                 {p.customer && p.receivable > 0 && (
                   <Button size="sm" onClick={() => onReceive(p.customer!)}>
-                    <HandCoins className="h-3.5 w-3.5 mr-1.5" />Receive
+                    <HandCoins className="h-3.5 w-3.5 mr-1.5" />
+                    Receive
                   </Button>
                 )}
                 {p.supplier && (
                   <Button size="sm" variant="outline" onClick={() => onPay(p.supplier!)}>
-                    <Wallet className="h-3.5 w-3.5 mr-1.5" />Pay
+                    <Wallet className="h-3.5 w-3.5 mr-1.5" />
+                    Pay
                   </Button>
                 )}
                 {p.customer && p.supplier && p.settleable > 0 && (
                   <Button size="sm" onClick={() => onSettle(p.customer!, p.supplier!)}>
-                    <ArrowLeftRight className="h-3.5 w-3.5 mr-1.5" />Set off
+                    <ArrowLeftRight className="h-3.5 w-3.5 mr-1.5" />
+                    Set off
                   </Button>
                 )}
               </>
@@ -1087,7 +1263,8 @@ function PartyList({
                 <td className="px-4 py-3 text-muted-foreground">
                   {p.customer && p.supplier ? (
                     <span className="inline-flex items-center gap-1.5">
-                      <ArrowLeftRight className="h-3.5 w-3.5" />Both ways
+                      <ArrowLeftRight className="h-3.5 w-3.5" />
+                      Both ways
                     </span>
                   ) : p.customer ? (
                     "Customer"
@@ -1132,7 +1309,10 @@ function PartyList({
                     </>
                   )}
                 </td>
-                <td className="px-4 py-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                <td
+                  className="px-4 py-3 text-right whitespace-nowrap"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   {p.customer && p.receivable > 0 && (
                     <Button
                       size="sm"
@@ -1145,7 +1325,12 @@ function PartyList({
                     </Button>
                   )}
                   {p.supplier && (
-                    <Button size="sm" variant="ghost" onClick={() => onPay(p.supplier!)} title="Record a payment">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onPay(p.supplier!)}
+                      title="Record a payment"
+                    >
                       <Wallet className="h-3.5 w-3.5" />
                     </Button>
                   )}
@@ -1163,9 +1348,11 @@ function PartyList({
               </tr>
             ))}
             {parties.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                Nobody has anything outstanding.
-              </td></tr>
+              <tr>
+                <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                  Nobody has anything outstanding.
+                </td>
+              </tr>
             )}
           </tbody>
         </table>

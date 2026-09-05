@@ -228,7 +228,12 @@
     }
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-family: var(--font-display);
     letter-spacing: -0.02em;
   }
@@ -437,7 +442,8 @@
     display: block !important;
   }
 
-  html, body {
+  html,
+  body {
     height: auto !important;
     overflow: visible !important;
     background: #fff !important;
@@ -454,20 +460,31 @@
     overflow: visible !important;
   }
 
-  main, [data-app-main] > * {
+  main,
+  [data-app-main] > * {
     padding: 0 !important;
     margin: 0 !important;
     max-width: none !important;
   }
 
   /* Cards and tables should read as plain paper, not UI. */
-  .shadow-sm, .shadow, .shadow-md, .shadow-lg {
+  .shadow-sm,
+  .shadow,
+  .shadow-md,
+  .shadow-lg {
     box-shadow: none !important;
   }
 
-  table { break-inside: auto; }
-  tr, .break-avoid { break-inside: avoid; }
-  thead { display: table-header-group; }
+  table {
+    break-inside: auto;
+  }
+  tr,
+  .break-avoid {
+    break-inside: avoid;
+  }
+  thead {
+    display: table-header-group;
+  }
 
   @page {
     margin: 12mm;

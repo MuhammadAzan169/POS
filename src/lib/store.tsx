@@ -117,8 +117,6 @@ interface StoreState {
    * worker types a username that becomes one.
    */
   signIn: (identifier: string, password: string, kind: "owner" | "staff") => Promise<AuthOutcome>;
-  /** True until the first owner has been claimed. Drives the first-run screen. */
-  needsOwner: boolean;
   /** Claims the one owner account. Refused by the database once one exists. */
   createOwner: (details: auth.OwnerDetails) => Promise<AuthOutcome>;
   logout: () => void;
@@ -314,7 +312,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
    * Whether an owner account has been claimed. Only meaningful with a database
    * behind the app.
    */
-  const [needsOwner, setNeedsOwner] = useState(false);
 
   const [online, setOnline] = useState(true);
   const [shops, setShops] = useState<Shop[]>([]);
@@ -534,7 +531,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       messages,
       settings,
       discounts,
-      needsOwner,
       signIn: async (identifier, password, kind) => {
         /*
          * One way in, and it checks the password.
@@ -565,7 +561,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!result.user) return result;
 
         setUser(result.user);
-        setNeedsOwner(false);
         void refreshData();
 
         /*
@@ -1428,7 +1423,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const entry = activity.find((a) => a.id === activityId);
         if (!entry || !isRestorable(entry)) return false;
 
-        const snap = entry.snapshot as any;
+        /*
+         * The snapshot is whichever record was deleted — a sale, a purchase, a
+         * return — so all that is known here is that it has an id. Each branch
+         * below narrows it to the type it actually restores.
+         */
+        const snap = entry.snapshot as { id?: string } | null | undefined;
         if (!snap?.id) return false;
 
         /** Stock the deletion gave back has to be taken away again, and vice versa. */
@@ -1448,7 +1448,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         switch (entry.entity) {
           case "sale": {
             if (taken(sales)) return false;
-            const rec = snap as Sale;
+            const rec = snap as unknown as Sale;
             setSales((prev) => [rec, ...prev]);
             persist("the restored sale", () => db.upsertSale(rec));
             // Deleting a completed sale put its items back on the shelf, so
@@ -1467,7 +1467,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
           case "purchase": {
             if (taken(purchases)) return false;
-            const rec = snap as Purchase;
+            const rec = snap as unknown as Purchase;
             setPurchases((prev) => [rec, ...prev]);
             persist("the restored purchase", () => db.upsertPurchase(rec));
             replay(

@@ -22,9 +22,17 @@ export interface DateRange {
 }
 
 /** The presets offered in the scope bar, in the order they appear. */
-export const RANGE_PRESETS: { key: Exclude<RangeKey, "custom">; label: string; range: () => DateRange }[] = [
+export const RANGE_PRESETS: {
+  key: Exclude<RangeKey, "custom">;
+  label: string;
+  range: () => DateRange;
+}[] = [
   { key: "today", label: "Today", range: () => ({ from: todayISO(), to: todayISO() }) },
-  { key: "yesterday", label: "Yesterday", range: () => ({ from: daysAgoISO(1), to: daysAgoISO(1) }) },
+  {
+    key: "yesterday",
+    label: "Yesterday",
+    range: () => ({ from: daysAgoISO(1), to: daysAgoISO(1) }),
+  },
   { key: "7d", label: "Last 7 days", range: () => ({ from: daysAgoISO(6), to: todayISO() }) },
   { key: "30d", label: "Last 30 days", range: () => ({ from: daysAgoISO(29), to: todayISO() }) },
   { key: "month", label: "This month", range: () => ({ from: startOfMonth(), to: todayISO() }) },
@@ -67,7 +75,10 @@ export function inRange(day: string, range: DateRange) {
 
 export function ScopeProvider({ children }: { children: ReactNode }) {
   const [rangeKey, setRangeKey] = useState<RangeKey>("30d");
-  const [custom, setCustomRange] = useState<DateRange>(() => ({ from: daysAgoISO(29), to: todayISO() }));
+  const [custom, setCustomRange] = useState<DateRange>(() => ({
+    from: daysAgoISO(29),
+    to: todayISO(),
+  }));
   const [shopScope, setShopScope] = useState("all");
 
   // Restored in an effect rather than in useState so the server-rendered markup
@@ -76,7 +87,11 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
     try {
       const raw = window.localStorage.getItem(LS_SCOPE);
       if (!raw) return;
-      const saved = JSON.parse(raw) as Partial<{ rangeKey: RangeKey; custom: DateRange; shopScope: string }>;
+      const saved = JSON.parse(raw) as Partial<{
+        rangeKey: RangeKey;
+        custom: DateRange;
+        shopScope: string;
+      }>;
       if (saved.rangeKey) setRangeKey(saved.rangeKey);
       if (saved.custom?.from && saved.custom?.to) setCustomRange(saved.custom);
       if (saved.shopScope) setShopScope(saved.shopScope);

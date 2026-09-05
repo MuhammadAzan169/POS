@@ -61,8 +61,22 @@ export const Route = createFileRoute("/app/dashboard")({
 
 function Dashboard() {
   const {
-    user, sales, expenses, shops, products, inventory, daySessions, customers, customerPayments,
-    suppliers, purchases, supplierPayments, returns, setOffs, adjustments, settings,
+    user,
+    sales,
+    expenses,
+    shops,
+    products,
+    inventory,
+    daySessions,
+    customers,
+    customerPayments,
+    suppliers,
+    purchases,
+    supplierPayments,
+    returns,
+    setOffs,
+    adjustments,
+    settings,
   } = useStore();
   const { range, previous, rangeLabel, shopScope, isAllTime } = useScope();
 
@@ -166,7 +180,11 @@ function Dashboard() {
       });
     // Every day in the range gets a point, so a closed day reads as a real zero
     // rather than the line simply skipping over it.
-    return days.map((d) => ({ day: d, label: shortDay(d), ...(byDay.get(d) ?? { sales: 0, profit: 0 }) }));
+    return days.map((d) => ({
+      day: d,
+      label: shortDay(d),
+      ...(byDay.get(d) ?? { sales: 0, profit: 0 }),
+    }));
   }, [periodSales, range]);
 
   /** Per-shop totals for the period. Owners only — a shopkeeper has one shop. */
@@ -201,7 +219,12 @@ function Dashboard() {
             session,
             cash: session
               ? summarizeSession(session, {
-                  sales, expenses, returns: [], customerPayments, supplierPayments, purchases,
+                  sales,
+                  expenses,
+                  returns: [],
+                  customerPayments,
+                  supplierPayments,
+                  purchases,
                 })
               : null,
           };
@@ -222,8 +245,13 @@ function Dashboard() {
         product: products.find((p) => p.id === row.productId),
         shop: shops.find((s) => s.id === row.shopId),
       }))
-      .filter((row): row is typeof row & { product: NonNullable<typeof row.product>; shop: NonNullable<typeof row.shop> } =>
-        Boolean(row.product && row.shop),
+      .filter(
+        (
+          row,
+        ): row is typeof row & {
+          product: NonNullable<typeof row.product>;
+          shop: NonNullable<typeof row.shop>;
+        } => Boolean(row.product && row.shop),
       );
   }, [inventory, products, shops, inScope]);
 
@@ -243,22 +271,31 @@ function Dashboard() {
         title={isAdmin ? "Owner dashboard" : "My dashboard"}
         subtitle={
           isAdmin
-            ? `${rangeLabel} · ${shopScope === "all" ? "all shops" : shops.find((s) => s.id === shopScope)?.name ?? "shop"}`
+            ? `${rangeLabel} · ${shopScope === "all" ? "all shops" : (shops.find((s) => s.id === shopScope)?.name ?? "shop")}`
             : `${rangeLabel} at ${shops.find((s) => s.id === user.shopId)?.name ?? "your shop"}`
         }
         actions={
           isAdmin ? (
             <>
               <Button variant="outline" asChild>
-                <Link to="/app/reports"><BarChart3 className="h-4 w-4 mr-1.5" />Reports</Link>
+                <Link to="/app/reports">
+                  <BarChart3 className="h-4 w-4 mr-1.5" />
+                  Reports
+                </Link>
               </Button>
               <Button asChild>
-                <Link to="/app/purchases"><Plus className="h-4 w-4 mr-1.5" />New purchase</Link>
+                <Link to="/app/purchases">
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  New purchase
+                </Link>
               </Button>
             </>
           ) : (
             <Button asChild>
-              <Link to="/app/pos"><Plus className="h-4 w-4 mr-1.5" />New sale</Link>
+              <Link to="/app/pos">
+                <Plus className="h-4 w-4 mr-1.5" />
+                New sale
+              </Link>
             </Button>
           )
         }
@@ -302,7 +339,9 @@ function Dashboard() {
               </div>
               {session && cash && (
                 <div className="text-right shrink-0">
-                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Today</div>
+                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                    Today
+                  </div>
                   <div className="font-semibold">{formatRs(cash.totalSales, currency)}</div>
                 </div>
               )}
@@ -312,14 +351,20 @@ function Dashboard() {
                 <span className="text-muted-foreground">
                   Drawer {formatRs(cash.expectedCash, currency)}
                 </span>
-                <Link to="/app/daybook" className="text-primary hover:underline inline-flex items-center gap-0.5">
+                <Link
+                  to="/app/daybook"
+                  className="text-primary hover:underline inline-flex items-center gap-0.5"
+                >
                   Day book <ArrowRight className="h-3 w-3" />
                 </Link>
               </div>
             )}
             {!session && (
               <div className="mt-3 pt-3 border-t text-xs">
-                <Link to="/app/daybook" className="text-primary hover:underline inline-flex items-center gap-0.5">
+                <Link
+                  to="/app/daybook"
+                  className="text-primary hover:underline inline-flex items-center gap-0.5"
+                >
                   Start the day <ArrowRight className="h-3 w-3" />
                 </Link>
               </div>
@@ -336,12 +381,23 @@ function Dashboard() {
         card stranded alone on a second row at exactly the width most laptops
         run at, whereas 3 splits it 3+2 and reads as deliberate.
       */}
-      <div className={isAdmin ? "grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-5" : "grid gap-3 sm:gap-4 grid-cols-2"}>
+      <div
+        className={
+          isAdmin
+            ? "grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-5"
+            : "grid gap-3 sm:gap-4 grid-cols-2"
+        }
+      >
         <StatCard
           label="Total sales"
           to="/app/sales"
           value={formatRs(totals.sales, currency)}
-          sub={<span className="inline-flex items-center gap-1.5">{totals.invoices} invoices <DeltaBadge current={totals.sales} prior={prior.sales} label={vs} /></span>}
+          sub={
+            <span className="inline-flex items-center gap-1.5">
+              {totals.invoices} invoices{" "}
+              <DeltaBadge current={totals.sales} prior={prior.sales} label={vs} />
+            </span>
+          }
           icon={<ShoppingBag className="h-5 w-5" />}
           tone="primary"
         />
@@ -388,30 +444,30 @@ function Dashboard() {
           apart from the range-filtered figures above rather than inside them. */}
       {isAdmin && owedToYou > 0 && (
         <Link to="/app/customers" className="block rounded-xl mt-4">
-        <Card className="p-4 flex flex-wrap items-center justify-between gap-3 border-warning/40 bg-warning/5 transition-colors hover:bg-warning/10">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-warning/20 text-warning-strong flex items-center justify-center shrink-0">
-              <HandCoins className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="text-sm font-medium">Owed to you on account</div>
-              <div className="text-xs text-muted-foreground">
-                {owingCustomers} customer{owingCustomers === 1 ? "" : "s"} · not counted in cash
+          <Card className="p-4 flex flex-wrap items-center justify-between gap-3 border-warning/40 bg-warning/5 transition-colors hover:bg-warning/10">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-warning/20 text-warning-strong flex items-center justify-center shrink-0">
+                <HandCoins className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="text-sm font-medium">Owed to you on account</div>
+                <div className="text-xs text-muted-foreground">
+                  {owingCustomers} customer{owingCustomers === 1 ? "" : "s"} · not counted in cash
+                </div>
               </div>
             </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="font-display text-2xl font-bold text-warning-strong">
-              {formatRs(owedToYou, currency)}
-            </div>
-            {/* The whole card is the link, so this only has to LOOK like the
+            <div className="flex items-center gap-4">
+              <div className="font-display text-2xl font-bold text-warning-strong">
+                {formatRs(owedToYou, currency)}
+              </div>
+              {/* The whole card is the link, so this only has to LOOK like the
                 button — a real <button> nested inside an <a> is invalid markup
                 and gives the card a second, competing tab stop. */}
-            <span className="inline-flex items-center h-9 px-3 rounded-md border bg-background text-sm font-medium shrink-0">
-              Collect <ArrowRight className="h-3.5 w-3.5 ml-1" />
-            </span>
-          </div>
-        </Card>
+              <span className="inline-flex items-center h-9 px-3 rounded-md border bg-background text-sm font-medium shrink-0">
+                Collect <ArrowRight className="h-3.5 w-3.5 ml-1" />
+              </span>
+            </div>
+          </Card>
         </Link>
       )}
 
@@ -419,27 +475,27 @@ function Dashboard() {
           on account is money already spent, it just has not left yet. */}
       {isAdmin && youOwe > 0 && (
         <Link to="/app/ledger" className="block rounded-xl mt-4">
-        <Card className="p-4 flex flex-wrap items-center justify-between gap-3 border-destructive/30 bg-destructive/5 transition-colors hover:bg-destructive/10">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-destructive/15 text-destructive flex items-center justify-center shrink-0">
-              <Wallet className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="text-sm font-medium">Owed by you to suppliers</div>
-              <div className="text-xs text-muted-foreground">
-                stock already delivered · not yet paid for
+          <Card className="p-4 flex flex-wrap items-center justify-between gap-3 border-destructive/30 bg-destructive/5 transition-colors hover:bg-destructive/10">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-destructive/15 text-destructive flex items-center justify-center shrink-0">
+                <Wallet className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="text-sm font-medium">Owed by you to suppliers</div>
+                <div className="text-xs text-muted-foreground">
+                  stock already delivered · not yet paid for
+                </div>
               </div>
             </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="font-display text-2xl font-bold text-destructive">
-              {formatRs(youOwe, currency)}
+            <div className="flex items-center gap-4">
+              <div className="font-display text-2xl font-bold text-destructive">
+                {formatRs(youOwe, currency)}
+              </div>
+              <span className="inline-flex items-center h-9 px-3 rounded-md border bg-background text-sm font-medium shrink-0">
+                Ledgers <ArrowRight className="h-3.5 w-3.5 ml-1" />
+              </span>
             </div>
-            <span className="inline-flex items-center h-9 px-3 rounded-md border bg-background text-sm font-medium shrink-0">
-              Ledgers <ArrowRight className="h-3.5 w-3.5 ml-1" />
-            </span>
-          </div>
-        </Card>
+          </Card>
         </Link>
       )}
 
@@ -450,21 +506,67 @@ function Dashboard() {
           <span className="text-xs text-muted-foreground">{rangeLabel}</span>
         </div>
         {mix.total === 0 ? (
-          <div className="text-sm text-muted-foreground py-6 text-center">No sales in this period.</div>
+          <div className="text-sm text-muted-foreground py-6 text-center">
+            No sales in this period.
+          </div>
         ) : (
           <>
             {/* A single stacked bar reads the split faster than three numbers. */}
             <div className="flex h-3 rounded-full overflow-hidden bg-muted mb-4">
-              <div className="bg-[var(--color-chart-1)]" style={{ width: `${mix.pct(mix.cash)}%` }} />
-              <div className="bg-[var(--color-chart-2)]" style={{ width: `${mix.pct(mix.card)}%` }} />
-              <div className="bg-[var(--color-chart-3)]" style={{ width: `${mix.pct(mix.online)}%` }} />
-              <div className="bg-[var(--color-chart-4)]" style={{ width: `${mix.pct(mix.credit)}%` }} />
+              <div
+                className="bg-[var(--color-chart-1)]"
+                style={{ width: `${mix.pct(mix.cash)}%` }}
+              />
+              <div
+                className="bg-[var(--color-chart-2)]"
+                style={{ width: `${mix.pct(mix.card)}%` }}
+              />
+              <div
+                className="bg-[var(--color-chart-3)]"
+                style={{ width: `${mix.pct(mix.online)}%` }}
+              />
+              <div
+                className="bg-[var(--color-chart-4)]"
+                style={{ width: `${mix.pct(mix.credit)}%` }}
+              />
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <PayTile icon={<Banknote className="h-4 w-4" />} label="Cash" value={mix.cash} pct={mix.pct(mix.cash)} count={mix.counts.Cash} currency={currency} to="/app/sales" />
-              <PayTile icon={<CreditCard className="h-4 w-4" />} label="Card" value={mix.card} pct={mix.pct(mix.card)} count={mix.counts.Card} currency={currency} to="/app/sales" />
-              <PayTile icon={<Smartphone className="h-4 w-4" />} label="Online" value={mix.online} pct={mix.pct(mix.online)} count={mix.counts.Online} currency={currency} to="/app/sales" />
-              <PayTile icon={<HandCoins className="h-4 w-4" />} label="On credit" value={mix.credit} pct={mix.pct(mix.credit)} count={mix.counts.Credit} currency={currency} to={isAdmin ? "/app/ledger" : "/app/customers"} />
+              <PayTile
+                icon={<Banknote className="h-4 w-4" />}
+                label="Cash"
+                value={mix.cash}
+                pct={mix.pct(mix.cash)}
+                count={mix.counts.Cash}
+                currency={currency}
+                to="/app/sales"
+              />
+              <PayTile
+                icon={<CreditCard className="h-4 w-4" />}
+                label="Card"
+                value={mix.card}
+                pct={mix.pct(mix.card)}
+                count={mix.counts.Card}
+                currency={currency}
+                to="/app/sales"
+              />
+              <PayTile
+                icon={<Smartphone className="h-4 w-4" />}
+                label="Online"
+                value={mix.online}
+                pct={mix.pct(mix.online)}
+                count={mix.counts.Online}
+                currency={currency}
+                to="/app/sales"
+              />
+              <PayTile
+                icon={<HandCoins className="h-4 w-4" />}
+                label="On credit"
+                value={mix.credit}
+                pct={mix.pct(mix.credit)}
+                count={mix.counts.Credit}
+                currency={currency}
+                to={isAdmin ? "/app/ledger" : "/app/customers"}
+              />
             </div>
           </>
         )}
@@ -481,15 +583,40 @@ function Dashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={daily} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="label" stroke="var(--color-muted-foreground)" fontSize={11} minTickGap={16} />
+                <XAxis
+                  dataKey="label"
+                  stroke="var(--color-muted-foreground)"
+                  fontSize={11}
+                  minTickGap={16}
+                />
                 <YAxis stroke="var(--color-muted-foreground)" fontSize={11} />
                 <Tooltip
-                  contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8 }}
+                  contentStyle={{
+                    background: "var(--color-popover)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 8,
+                  }}
                   formatter={(v: number) => formatRs(v, currency)}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="sales" name="Sales" stroke="var(--color-chart-1)" strokeWidth={2} dot={false} />
-                {isAdmin && <Line type="monotone" dataKey="profit" name="Profit" stroke="var(--color-chart-2)" strokeWidth={2} dot={false} />}
+                <Line
+                  type="monotone"
+                  dataKey="sales"
+                  name="Sales"
+                  stroke="var(--color-chart-1)"
+                  strokeWidth={2}
+                  dot={false}
+                />
+                {isAdmin && (
+                  <Line
+                    type="monotone"
+                    dataKey="profit"
+                    name="Profit"
+                    stroke="var(--color-chart-2)"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                )}
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -497,15 +624,24 @@ function Dashboard() {
 
         <Card className="p-4 sm:p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-warning-strong" /> Low stock</h3>
-            <Link to="/app/inventory" className="text-xs text-primary hover:underline">View all</Link>
+            <h3 className="font-semibold flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning-strong" /> Low stock
+            </h3>
+            <Link to="/app/inventory" className="text-xs text-primary hover:underline">
+              View all
+            </Link>
           </div>
           {lowStock.length === 0 ? (
-            <div className="text-sm text-muted-foreground py-6 text-center">All stock levels healthy.</div>
+            <div className="text-sm text-muted-foreground py-6 text-center">
+              All stock levels healthy.
+            </div>
           ) : (
             <div className="space-y-3">
               {lowStock.map((row) => (
-                <div key={`${row.productId}-${row.shopId}`} className="flex items-center justify-between gap-3">
+                <div
+                  key={`${row.productId}-${row.shopId}`}
+                  className="flex items-center justify-between gap-3"
+                >
                   <div className="min-w-0">
                     <div className="text-sm font-medium truncate">{row.product.name}</div>
                     <div className="text-xs text-muted-foreground truncate">{row.shop.name}</div>
@@ -532,12 +668,26 @@ function Dashboard() {
                 <XAxis dataKey="name" stroke="var(--color-muted-foreground)" fontSize={11} />
                 <YAxis stroke="var(--color-muted-foreground)" fontSize={11} />
                 <Tooltip
-                  contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8 }}
+                  contentStyle={{
+                    background: "var(--color-popover)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 8,
+                  }}
                   formatter={(v: number) => formatRs(v, currency)}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="sales" name="Sales" fill="var(--color-chart-1)" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="profit" name="Profit" fill="var(--color-chart-2)" radius={[6, 6, 0, 0]} />
+                <Bar
+                  dataKey="sales"
+                  name="Sales"
+                  fill="var(--color-chart-1)"
+                  radius={[6, 6, 0, 0]}
+                />
+                <Bar
+                  dataKey="profit"
+                  name="Profit"
+                  fill="var(--color-chart-2)"
+                  radius={[6, 6, 0, 0]}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -548,7 +698,9 @@ function Dashboard() {
       <Card className="mt-4 sm:mt-6 p-4 sm:p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold">Recent activity</h3>
-          <Link to="/app/sales" className="text-xs text-primary hover:underline">All sales →</Link>
+          <Link to="/app/sales" className="text-xs text-primary hover:underline">
+            All sales →
+          </Link>
         </div>
         {/* -mx-4 lets the cards run to the card's own edges, matching the table. */}
         <div className="-mx-4 -mb-4 border-t md:hidden">
@@ -561,7 +713,13 @@ function Dashboard() {
                 title={<span className="font-mono">{s.invoice}</span>}
                 subtitle={shops.find((sh) => sh.id === s.shopId)?.name}
                 right={formatRs(s.total, currency)}
-                rightSub={isAdmin ? <span className="text-success-strong">{formatRs(s.profit, currency)} profit</span> : undefined}
+                rightSub={
+                  isAdmin ? (
+                    <span className="text-success-strong">
+                      {formatRs(s.profit, currency)} profit
+                    </span>
+                  ) : undefined
+                }
                 badges={<StatusPill status={s.status} />}
                 fields={[
                   { label: "Customer", value: <CustomerName sale={s} /> },
@@ -592,15 +750,32 @@ function Dashboard() {
                   <td className="px-5 py-3 font-mono text-xs">{s.invoice}</td>
                   <td className="px-5 py-3 whitespace-nowrap">{shortDay(businessDayOf(s))}</td>
                   <td className="px-5 py-3">{shops.find((sh) => sh.id === s.shopId)?.name}</td>
-                  <td className="px-5 py-3"><CustomerName sale={s} /></td>
+                  <td className="px-5 py-3">
+                    <CustomerName sale={s} />
+                  </td>
                   <td className="px-5 py-3">{s.payment}</td>
-                  <td className="px-5 py-3 text-right font-medium">{formatRs(s.total, currency)}</td>
-                  {isAdmin && <td className="px-5 py-3 text-right text-success-strong font-medium">{formatRs(s.profit, currency)}</td>}
-                  <td className="px-5 py-3"><StatusPill status={s.status} /></td>
+                  <td className="px-5 py-3 text-right font-medium">
+                    {formatRs(s.total, currency)}
+                  </td>
+                  {isAdmin && (
+                    <td className="px-5 py-3 text-right text-success-strong font-medium">
+                      {formatRs(s.profit, currency)}
+                    </td>
+                  )}
+                  <td className="px-5 py-3">
+                    <StatusPill status={s.status} />
+                  </td>
                 </tr>
               ))}
               {recent.length === 0 && (
-                <tr><td colSpan={isAdmin ? 8 : 7} className="px-5 py-10 text-center text-sm text-muted-foreground">No sales in this period.</td></tr>
+                <tr>
+                  <td
+                    colSpan={isAdmin ? 8 : 7}
+                    className="px-5 py-10 text-center text-sm text-muted-foreground"
+                  >
+                    No sales in this period.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -636,7 +811,9 @@ function PayTile({
         <span className="truncate">{label}</span>
       </div>
       <div className="font-semibold mt-1 break-words">{formatRs(value, currency)}</div>
-      <div className="text-xs text-muted-foreground mt-0.5">{pct}% · {count} sale{count === 1 ? "" : "s"}</div>
+      <div className="text-xs text-muted-foreground mt-0.5">
+        {pct}% · {count} sale{count === 1 ? "" : "s"}
+      </div>
     </>
   );
 

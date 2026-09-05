@@ -21,24 +21,62 @@ import { PageHeader } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Minus, X, FileText, ScanLine, CheckCircle2, Sunrise, Warehouse, ShoppingCart, Trash2, PackageSearch } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Plus,
+  Minus,
+  X,
+  FileText,
+  ScanLine,
+  CheckCircle2,
+  Sunrise,
+  Warehouse,
+  ShoppingCart,
+  Trash2,
+  PackageSearch,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Confirm } from "@/components/Confirm";
 import { PaymentPicker } from "@/components/PaymentPicker";
 
 export const Route = createFileRoute("/app/pos")({ component: POS });
 
-interface CartLine { product: Product; qty: number; discount: number; }
-
+interface CartLine {
+  product: Product;
+  qty: number;
+  discount: number;
+}
 
 function POS() {
   const {
-    user, products, inventory, addSale, settings, shops, discounts, daySessions, pendingMigration,
-    customers, customerPayments, sales, addCustomer,
+    user,
+    products,
+    inventory,
+    addSale,
+    settings,
+    shops,
+    discounts,
+    daySessions,
+    pendingMigration,
+    customers,
+    customerPayments,
+    sales,
+    addCustomer,
   } = useStore();
   const shopId = user?.shopId ?? shops[0]?.id ?? "";
   const shop = shops.find((s) => s.id === shopId);
@@ -119,12 +157,15 @@ function POS() {
     return () => window.clearTimeout(t);
   }, [flashId]);
 
-  useEffect(() => { searchRef.current?.focus(); }, []);
+  useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
 
   // Declared before `filtered`, which calls it during render — a const arrow
   // defined below would be in its temporal dead zone and throw.
   /** Units physically on the shelf at this shop, before anything is reserved. */
-  const stockFor = (pid: string) => inventory.find((r) => r.productId === pid && r.shopId === shopId)?.qty ?? 0;
+  const stockFor = (pid: string) =>
+    inventory.find((r) => r.productId === pid && r.shopId === shopId)?.qty ?? 0;
 
   /** How many of a product the cashier has already put in this cart. */
   const cartQtyFor = (pid: string) => cart.find((l) => l.product.id === pid)?.qty ?? 0;
@@ -146,23 +187,30 @@ function POS() {
 
   const filtered = useMemo(() => {
     const lo = q.trim().toLowerCase();
-    return products
-      .filter((p) => p.active !== false)
-      .filter((p) => (category === "all" ? true : p.category === category))
-      .filter((p) => (lo ? p.name.toLowerCase().includes(lo) || p.barcode.includes(q.trim()) : true))
-      // Out-of-stock sinks to the bottom rather than occupying prime grid space
-      // that a cashier's thumb is aiming for.
-      .sort((a, b) => {
-        const sa = stockFor(a.id) === 0 ? 1 : 0;
-        const sb = stockFor(b.id) === 0 ? 1 : 0;
-        return sa - sb || a.name.localeCompare(b.name);
-      })
-      .slice(0, 40);
+    return (
+      products
+        .filter((p) => p.active !== false)
+        .filter((p) => (category === "all" ? true : p.category === category))
+        .filter((p) =>
+          lo ? p.name.toLowerCase().includes(lo) || p.barcode.includes(q.trim()) : true,
+        )
+        // Out-of-stock sinks to the bottom rather than occupying prime grid space
+        // that a cashier's thumb is aiming for.
+        .sort((a, b) => {
+          const sa = stockFor(a.id) === 0 ? 1 : 0;
+          const sb = stockFor(b.id) === 0 ? 1 : 0;
+          return sa - sb || a.name.localeCompare(b.name);
+        })
+        .slice(0, 40)
+    );
   }, [products, q, category, inventory, shopId]);
 
   const addToCart = (p: Product) => {
     const stock = stockFor(p.id);
-    if (stock === 0) { toast.error(`${p.name} is out of stock`); return; }
+    if (stock === 0) {
+      toast.error(`${p.name} is out of stock`);
+      return;
+    }
     if (availableFor(p.id) === 0) {
       toast.error(`All ${stock} of ${p.name} are already in the cart`);
       return;
@@ -171,7 +219,10 @@ function POS() {
       const i = prev.findIndex((l) => l.product.id === p.id);
       if (i >= 0) {
         // Never let the cart exceed what this shop actually has on hand.
-        if (prev[i].qty >= stock) { toast.error(`Only ${stock} in stock`); return prev; }
+        if (prev[i].qty >= stock) {
+          toast.error(`Only ${stock} in stock`);
+          return prev;
+        }
         const next = [...prev];
         next[i] = { ...next[i], qty: next[i].qty + 1 };
         return next;
@@ -227,7 +278,10 @@ function POS() {
   const cartUnits = cart.reduce((a, l) => a + l.qty, 0);
   const subtotal = cart.reduce((a, l) => a + l.qty * unitPrice(l.product), 0);
   // Discounts come from the Discounts tab: a product's own rate, else the overall rate.
-  const autoDiscount = cart.reduce((a, l) => a + discountAmountFor(l.product.id, unitPrice(l.product), l.qty, discounts), 0);
+  const autoDiscount = cart.reduce(
+    (a, l) => a + discountAmountFor(l.product.id, unitPrice(l.product), l.qty, discounts),
+    0,
+  );
   /**
    * The counter discount applies to what is left AFTER the automatic rules, so
    * "10%" never quietly takes ten percent of a figure the customer was never
@@ -267,8 +321,15 @@ function POS() {
   }, [selectedCustomer, payment]);
 
   const pickCustomer = (id: string) => {
-    if (id === "__walkin__") { setCustomerId(null); setCustomer(""); return; }
-    if (id === "__new__") { setNewCustomer({ name: "", phone: "" }); return; }
+    if (id === "__walkin__") {
+      setCustomerId(null);
+      setCustomer("");
+      return;
+    }
+    if (id === "__new__") {
+      setNewCustomer({ name: "", phone: "" });
+      return;
+    }
     const c = customers.find((x) => x.id === id);
     if (!c) return;
     setCustomerId(c.id);
@@ -277,7 +338,10 @@ function POS() {
 
   const saveNewCustomer = () => {
     const name = newCustomer?.name.trim();
-    if (!name) { toast.error("Customer name required"); return; }
+    if (!name) {
+      toast.error("Customer name required");
+      return;
+    }
     if (customers.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
       toast.error(`“${name}” already exists`);
       return;
@@ -301,23 +365,36 @@ function POS() {
 
   const complete = () => {
     if (receiptOpen) return;
-    if (cart.length === 0) { toast.error("Cart is empty"); return; }
+    if (cart.length === 0) {
+      toast.error("Cart is empty");
+      return;
+    }
     // Re-checked at the moment of sale, not just when the button was rendered:
     // the cart may have grown since the customer was picked.
     if (payment === "Credit") {
-      if (!selectedCustomer) { toast.error("Pick a customer before selling on credit"); return; }
+      if (!selectedCustomer) {
+        toast.error("Pick a customer before selling on credit");
+        return;
+      }
       if (total > headroom) {
-        toast.error(`${selectedCustomer.name} only has ${formatRs(headroom, settings.currency)} of credit left`);
+        toast.error(
+          `${selectedCustomer.name} only has ${formatRs(headroom, settings.currency)} of credit left`,
+        );
         return;
       }
     }
     const lines = cart.map((l) => ({
-      productId: l.product.id, name: l.product.name, qty: l.qty, price: unitPrice(l.product), cost: l.product.cost,
+      productId: l.product.id,
+      name: l.product.name,
+      qty: l.qty,
+      price: unitPrice(l.product),
+      cost: l.product.cost,
       discount: discountAmountFor(l.product.id, unitPrice(l.product), l.qty, discounts),
     }));
     const profit = lines.reduce((a, l) => a + l.qty * (l.price - l.cost), 0) - discount;
     const sale = addSale({
-      shopId, date: new Date().toISOString(),
+      shopId,
+      date: new Date().toISOString(),
       customer: selectedCustomer?.name ?? (customer.trim() || WALK_IN),
       customerId: selectedCustomer?.id,
       cashier: user?.name ?? "Shop",
@@ -325,7 +402,13 @@ function POS() {
       // still counts towards the day the shop opened.
       businessDate: session?.businessDate,
       sessionId: session?.id,
-      lines, subtotal, discount, total, profit, payment, status: "Completed",
+      lines,
+      subtotal,
+      discount,
+      total,
+      profit,
+      payment,
+      status: "Completed",
     });
     setLastSaleRecord(sale);
     setLastSale({
@@ -342,10 +425,17 @@ function POS() {
       at: new Date(),
       cashier: user?.name ?? "Shop",
       shopName: shops.find((s) => s.id === shopId)?.name,
-      lines: cart.map((l) => ({ name: l.product.name, qty: l.qty, price: unitPrice(l.product), barcode: l.product.barcode })),
+      lines: cart.map((l) => ({
+        name: l.product.name,
+        qty: l.qty,
+        price: unitPrice(l.product),
+        barcode: l.product.barcode,
+      })),
     });
     if (payment === "Credit" && selectedCustomer) {
-      toast.warning(`${formatRs(total, settings.currency)} added to ${selectedCustomer.name}'s account`);
+      toast.warning(
+        `${formatRs(total, settings.currency)} added to ${selectedCustomer.name}'s account`,
+      );
     }
     setReceiptOpen(true);
     setCheckoutOpen(false);
@@ -388,13 +478,15 @@ function POS() {
             to whenever you lock up, even after midnight.
           </p>
           <Button className="mt-6" asChild>
-            <Link to="/app/daybook"><Sunrise className="h-4 w-4 mr-1.5" />Go to the day book</Link>
+            <Link to="/app/daybook">
+              <Sunrise className="h-4 w-4 mr-1.5" />
+              Go to the day book
+            </Link>
           </Button>
         </Card>
       </div>
     );
   }
-
 
   /* ------------------------------------------------------------- cart panel */
 
@@ -405,7 +497,9 @@ function POS() {
    * moves: products scroll inside their own pane, the sale does not.
    */
   const cartHeader = (extra?: string) => (
-    <div className={cn("px-4 py-3 border-b flex items-center justify-between gap-3 shrink-0", extra)}>
+    <div
+      className={cn("px-4 py-3 border-b flex items-center justify-between gap-3 shrink-0", extra)}
+    >
       <div className="min-w-0">
         <h3 className="font-semibold flex items-center gap-2">
           <ShoppingCart className="h-4 w-4 text-primary" />
@@ -423,10 +517,19 @@ function POS() {
           description={`All ${cart.length} line${cart.length === 1 ? "" : "s"} will be removed. This can't be undone.`}
           confirmLabel="Clear cart"
           destructive
-          onConfirm={() => { setCart([]); setTendered(0); toast.success("Cart cleared"); }}
+          onConfirm={() => {
+            setCart([]);
+            setTendered(0);
+            toast.success("Cart cleared");
+          }}
           trigger={
-            <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground hover:text-destructive">
-              <Trash2 className="h-3.5 w-3.5 mr-1.5" />Clear
+            <Button
+              variant="ghost"
+              size="sm"
+              className="shrink-0 text-muted-foreground hover:text-destructive"
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+              Clear
             </Button>
           }
         />
@@ -455,7 +558,9 @@ function POS() {
                 <div className="text-xs text-muted-foreground tabular-nums mt-0.5">
                   {formatRs(unitPrice(l.product), settings.currency)} each
                   {l.discount > 0 && (
-                    <span className="ml-1.5 text-success-strong">− {formatRs(l.discount, settings.currency)}</span>
+                    <span className="ml-1.5 text-success-strong">
+                      − {formatRs(l.discount, settings.currency)}
+                    </span>
                   )}
                 </div>
               </div>
@@ -498,24 +603,30 @@ function POS() {
     <div className="px-3 py-2 space-y-2 border-t bg-muted/20 shrink-0">
       <div className="flex items-center gap-2">
         {!customersUnavailable && (
-        <Select value={customerId ?? "__walkin__"} onValueChange={pickCustomer}>
-          <SelectTrigger className="h-9 flex-1 min-w-0"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__walkin__">Walk-in (no account)</SelectItem>
-            {/* Trade buyers first at a wholesale counter — they're who you serve. */}
-            {[...customers]
-              .filter((c) => c.active)
-              .sort((a, b) =>
-                isWholesale && a.kind !== b.kind
-                  ? a.kind === "wholesale" ? -1 : 1
-                  : a.name.localeCompare(b.name),
-              )
-              .map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            <SelectItem value="__new__">+ Add new customer…</SelectItem>
-          </SelectContent>
-        </Select>
+          <Select value={customerId ?? "__walkin__"} onValueChange={pickCustomer}>
+            <SelectTrigger className="h-9 flex-1 min-w-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__walkin__">Walk-in (no account)</SelectItem>
+              {/* Trade buyers first at a wholesale counter — they're who you serve. */}
+              {[...customers]
+                .filter((c) => c.active)
+                .sort((a, b) =>
+                  isWholesale && a.kind !== b.kind
+                    ? a.kind === "wholesale"
+                      ? -1
+                      : 1
+                    : a.name.localeCompare(b.name),
+                )
+                .map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              <SelectItem value="__new__">+ Add new customer…</SelectItem>
+            </SelectContent>
+          </Select>
         )}
 
         {/* The counter discount belongs on the same row as the customer: both
@@ -528,7 +639,9 @@ function POS() {
               onClick={() => setManualMode(m)}
               className={cn(
                 "px-2.5 h-8 text-sm rounded-[5px] transition-colors tabular-nums",
-                manualMode === m ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted",
+                manualMode === m
+                  ? "bg-primary text-primary-foreground font-medium"
+                  : "hover:bg-muted",
               )}
             >
               {m === "amount" ? settings.currency : "%"}
@@ -588,7 +701,8 @@ function POS() {
               <span className="text-warning-strong font-medium">
                 {formatRs(balance.outstanding, settings.currency)}
               </span>
-              {selectedCustomer.creditLimit > 0 && ` of ${formatRs(selectedCustomer.creditLimit, settings.currency)}`}
+              {selectedCustomer.creditLimit > 0 &&
+                ` of ${formatRs(selectedCustomer.creditLimit, settings.currency)}`}
             </>
           ) : (
             "Account settled"
@@ -605,7 +719,12 @@ function POS() {
             autoFocus
             value={newCustomer.name}
             onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveNewCustomer(); } }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                saveNewCustomer();
+              }
+            }}
             placeholder="Name, e.g. Bilal Traders"
           />
           <Input
@@ -614,8 +733,12 @@ function POS() {
             placeholder="Phone (optional)"
           />
           <div className="flex gap-2 justify-end">
-            <Button size="sm" variant="outline" onClick={() => setNewCustomer(null)}>Cancel</Button>
-            <Button size="sm" onClick={saveNewCustomer}>Add</Button>
+            <Button size="sm" variant="outline" onClick={() => setNewCustomer(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={saveNewCustomer}>
+              Add
+            </Button>
           </div>
           <p className="text-xs text-muted-foreground">
             A credit limit can be set later on the Customers page.
@@ -669,7 +792,10 @@ function POS() {
             <span>
               Counter discount
               {manualMode === "percent" && (
-                <span className="text-muted-foreground"> ({Math.min(100, Math.max(0, manualInput))}%)</span>
+                <span className="text-muted-foreground">
+                  {" "}
+                  ({Math.min(100, Math.max(0, manualInput))}%)
+                </span>
               )}
             </span>
             <span className="tabular-nums">− {formatRs(manualDiscount, settings.currency)}</span>
@@ -744,7 +870,9 @@ function POS() {
           <div
             className={cn(
               "flex justify-between items-baseline rounded-lg px-3 py-2 font-medium",
-              tendered >= total ? "bg-success/10 text-success-strong" : "bg-destructive/10 text-destructive",
+              tendered >= total
+                ? "bg-success/10 text-success-strong"
+                : "bg-destructive/10 text-destructive",
             )}
           >
             <span className="text-sm">{tendered >= total ? "Change due" : "Short by"}</span>
@@ -758,7 +886,9 @@ function POS() {
           <div className="rounded-md bg-warning/10 border border-warning/40 p-2.5 text-xs space-y-1">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Owes now</span>
-              <span className="tabular-nums">{formatRs(balance.outstanding, settings.currency)}</span>
+              <span className="tabular-nums">
+                {formatRs(balance.outstanding, settings.currency)}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">This sale</span>
@@ -766,18 +896,24 @@ function POS() {
             </div>
             <div className="flex justify-between font-semibold border-t border-warning/30 pt-1">
               <span>Will owe</span>
-              <span className="tabular-nums">{formatRs(balance.outstanding + total, settings.currency)}</span>
+              <span className="tabular-nums">
+                {formatRs(balance.outstanding + total, settings.currency)}
+              </span>
             </div>
           </div>
         )}
 
-        <Button className="w-full h-14 text-base font-semibold" onClick={complete} disabled={cart.length === 0}>
+        <Button
+          className="w-full h-14 text-base font-semibold"
+          onClick={complete}
+          disabled={cart.length === 0}
+        >
           <CheckCircle2 className="h-5 w-5 mr-2" />
           {cart.length === 0 ? "Add items to sell" : "Complete sale"}
         </Button>
         <p className="text-[11px] text-muted-foreground text-center">
-          Press <kbd className="px-1 py-0.5 rounded border bg-muted font-mono text-[10px]">F9</kbd> to complete ·
-          selling price only
+          Press <kbd className="px-1 py-0.5 rounded border bg-muted font-mono text-[10px]">F9</kbd>{" "}
+          to complete · selling price only
         </p>
       </div>
     </div>
@@ -820,15 +956,15 @@ function POS() {
               )}
             </Button>
             {session ? (
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full border bg-success/10 text-success-strong border-success/30">
-              <Sunrise className="h-3.5 w-3.5" />
-              Day open · {shortDay(session.businessDate)}
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full border bg-warning/15 text-warning-strong border-warning/40">
-              <Sunrise className="h-3.5 w-3.5" />
-              Day book off
-            </span>
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full border bg-success/10 text-success-strong border-success/30">
+                <Sunrise className="h-3.5 w-3.5" />
+                Day open · {shortDay(session.businessDate)}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full border bg-warning/15 text-warning-strong border-warning/40">
+                <Sunrise className="h-3.5 w-3.5" />
+                Day book off
+              </span>
             )}
           </>
         }
@@ -839,8 +975,8 @@ function POS() {
           <Sunrise className="h-4 w-4 shrink-0 mt-0.5 text-warning-strong" />
           <span>
             Selling without a trading day — sales are booked to today's calendar date, so anything
-            rung up after midnight lands on the next day. Run the pending database update to turn the
-            day book on.
+            rung up after midnight lands on the next day. Run the pending database update to turn
+            the day book on.
           </span>
         </Card>
       )}
@@ -849,7 +985,8 @@ function POS() {
         <Card className="p-3 mb-4 flex items-center gap-2.5 border-accent/40 bg-accent/5 text-sm shrink-0">
           <Warehouse className="h-4 w-4 shrink-0 text-accent-strong" />
           <span>
-            Trade counter — items are priced at their <strong>wholesale rate</strong>, not the shelf price.
+            Trade counter — items are priced at their <strong>wholesale rate</strong>, not the shelf
+            price.
           </span>
         </Card>
       )}
@@ -876,7 +1013,10 @@ function POS() {
               />
               {q && (
                 <button
-                  onClick={() => { setQ(""); searchRef.current?.focus(); }}
+                  onClick={() => {
+                    setQ("");
+                    searchRef.current?.focus();
+                  }}
                   aria-label="Clear search"
                   className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                 >
@@ -927,7 +1067,9 @@ function POS() {
                     key={p.id}
                     className={cn(
                       "group relative rounded-xl border bg-card flex flex-col transition-all duration-150",
-                      inCart > 0 ? "border-primary ring-1 ring-primary/30" : "hover:border-primary/50 hover:shadow-md",
+                      inCart > 0
+                        ? "border-primary ring-1 ring-primary/30"
+                        : "hover:border-primary/50 hover:shadow-md",
                       out && inCart === 0 && "opacity-60",
                       // A brief ring on the tile just added: confirmation the tap
                       // landed, without an animation that costs the next tap.
@@ -965,8 +1107,12 @@ function POS() {
                               means the cart already holds every unit there is.
                               Different problems, different fixes. */}
                           {out
-                            ? stockFor(p.id) === 0 ? "OUT OF STOCK" : "0 left"
-                            : low ? `${left} left` : `${left} in stock`}
+                            ? stockFor(p.id) === 0
+                              ? "OUT OF STOCK"
+                              : "0 left"
+                            : low
+                              ? `${left} left`
+                              : `${left} in stock`}
                         </span>
                       </div>
 
@@ -1097,7 +1243,9 @@ function POS() {
           side="bottom"
           className="p-0 sm:p-0 gap-0 overflow-y-hidden flex flex-col max-h-[85dvh] mx-auto w-full sm:max-w-lg sm:bottom-4 sm:rounded-2xl sm:border"
         >
-          <SheetHeader className="sr-only"><SheetTitle>Current sale</SheetTitle></SheetHeader>
+          <SheetHeader className="sr-only">
+            <SheetTitle>Current sale</SheetTitle>
+          </SheetHeader>
           {cartHeader("pr-12")}
           <div className="flex-1 min-h-0 overflow-y-auto">{cartLines}</div>
           {customerBlock}
@@ -1107,14 +1255,21 @@ function POS() {
 
       <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
         <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
-          <DialogHeader data-print="hide"><DialogTitle>Sale complete</DialogTitle></DialogHeader>
+          <DialogHeader data-print="hide">
+            <DialogTitle>Sale complete</DialogTitle>
+          </DialogHeader>
           {lastSale && (
             <div data-print="only" className="max-h-[55dvh] overflow-y-auto">
               <ReceiptView data={lastSale} settings={settings} />
             </div>
           )}
-          <DialogFooter data-print="hide" className="flex-col-reverse gap-2 sm:flex-row sm:!justify-between">
-            <Button variant="outline" onClick={() => setReceiptOpen(false)}>New sale</Button>
+          <DialogFooter
+            data-print="hide"
+            className="flex-col-reverse gap-2 sm:flex-row sm:!justify-between"
+          >
+            <Button variant="outline" onClick={() => setReceiptOpen(false)}>
+              New sale
+            </Button>
             <div className="flex gap-2">
               {/* A trade order leaves with paperwork, not a till slip — so the
                   bill is offered here rather than only from the Sales page,
@@ -1122,12 +1277,22 @@ function POS() {
               {lastSaleRecord && (
                 <Button
                   variant="outline"
-                  onClick={() => { setBillFor(lastSaleRecord); setReceiptOpen(false); }}
+                  onClick={() => {
+                    setBillFor(lastSaleRecord);
+                    setReceiptOpen(false);
+                  }}
                 >
-                  <FileText className="h-4 w-4 mr-1.5" />Bill / PDF
+                  <FileText className="h-4 w-4 mr-1.5" />
+                  Bill / PDF
                 </Button>
               )}
-              <Button onClick={() => { window.print(); }}>Print receipt</Button>
+              <Button
+                onClick={() => {
+                  window.print();
+                }}
+              >
+                Print receipt
+              </Button>
             </div>
           </DialogFooter>
         </DialogContent>

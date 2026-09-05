@@ -39,7 +39,10 @@ export function openSessionFor(sessions: DaySession[], shopId: string | undefine
 export function sessionsFor(sessions: DaySession[], shopId: string) {
   return sessions
     .filter((s) => s.shopId === shopId)
-    .sort((a, b) => b.businessDate.localeCompare(a.businessDate) || b.openedAt.localeCompare(a.openedAt));
+    .sort(
+      (a, b) =>
+        b.businessDate.localeCompare(a.businessDate) || b.openedAt.localeCompare(a.openedAt),
+    );
 }
 
 /**
@@ -74,7 +77,11 @@ export function currentBusinessDate(sessions: DaySession[], shopId: string | und
 }
 
 /** Records belonging to one session — by id, with a date fallback for pre-session rows. */
-function belongsTo(session: DaySession, rec: { sessionId?: string; date: string }, shopMatches: boolean) {
+function belongsTo(
+  session: DaySession,
+  rec: { sessionId?: string; date: string },
+  shopMatches: boolean,
+) {
   if (rec.sessionId) return rec.sessionId === session.id;
   return shopMatches && dayOf(rec.date) === session.businessDate;
 }
@@ -116,12 +123,21 @@ export function summarizeSession(
   const collections = (data.customerPayments ?? []).filter(
     (p) => p.shopId === session.shopId && belongsTo(session, p, true),
   );
-  const creditCollected = collections.filter((p) => p.method === "Cash").reduce((a, p) => a + p.amount, 0);
-  const creditCollectedOther = collections.filter((p) => p.method !== "Cash").reduce((a, p) => a + p.amount, 0);
+  const creditCollected = collections
+    .filter((p) => p.method === "Cash")
+    .reduce((a, p) => a + p.amount, 0);
+  const creditCollectedOther = collections
+    .filter((p) => p.method !== "Cash")
+    .reduce((a, p) => a + p.amount, 0);
 
   // Refunds are paid out of the drawer in cash, so they reduce what's in it.
   const refunds = data.returns
-    .filter((r) => r.kind === "customer" && r.shopId === session.shopId && dayOf(r.date) === session.businessDate)
+    .filter(
+      (r) =>
+        r.kind === "customer" &&
+        r.shopId === session.shopId &&
+        dayOf(r.date) === session.businessDate,
+    )
     .reduce((a, r) => a + r.refund, 0);
 
   const drawerExpenses = data.expenses
@@ -131,7 +147,9 @@ export function summarizeSession(
   // Money handed to suppliers from this till. Head-office payments carry no
   // shopId and so never reach a shop's count.
   const supplierCashPaid = (data.supplierPayments ?? [])
-    .filter((p) => p.method === "Cash" && p.shopId === session.shopId && belongsTo(session, p, true))
+    .filter(
+      (p) => p.method === "Cash" && p.shopId === session.shopId && belongsTo(session, p, true),
+    )
     .reduce((a, p) => a + p.amount, 0);
 
   // A bill the shopkeeper raised and settled in cash on the spot. Matched on
@@ -146,8 +164,14 @@ export function summarizeSession(
   const creditPurchases = shopBills.reduce((a, b) => a + purchaseSettlement(b).balance, 0);
 
   const expectedCash =
-    session.openingCash + cashSales + creditCollected - refunds - drawerExpenses - supplierCashPaid - billCashPaid;
-  const countedCash = session.status === "closed" ? session.countedCash ?? 0 : null;
+    session.openingCash +
+    cashSales +
+    creditCollected -
+    refunds -
+    drawerExpenses -
+    supplierCashPaid -
+    billCashPaid;
+  const countedCash = session.status === "closed" ? (session.countedCash ?? 0) : null;
 
   return {
     openingCash: session.openingCash,
@@ -204,7 +228,8 @@ export function closedSessionFor(
 /** Payment split across any set of sales — how the takings were settled. */
 export function paymentMix(sales: Sale[]) {
   const live = sales.filter((s) => s.status !== "Returned");
-  const sum = (p: Sale["payment"]) => live.filter((s) => s.payment === p).reduce((a, s) => a + s.total, 0);
+  const sum = (p: Sale["payment"]) =>
+    live.filter((s) => s.payment === p).reduce((a, s) => a + s.total, 0);
   const count = (p: Sale["payment"]) => live.filter((s) => s.payment === p).length;
   const cash = sum("Cash");
   const card = sum("Card");
@@ -217,7 +242,12 @@ export function paymentMix(sales: Sale[]) {
     online,
     credit,
     total,
-    counts: { Cash: count("Cash"), Card: count("Card"), Online: count("Online"), Credit: count("Credit") },
+    counts: {
+      Cash: count("Cash"),
+      Card: count("Card"),
+      Online: count("Online"),
+      Credit: count("Credit"),
+    },
     pct: (v: number) => (total > 0 ? Math.round((v / total) * 100) : 0),
   };
 }
@@ -286,7 +316,12 @@ export function customerBalance(
 /** Total owed to the business across every customer. */
 export function totalOutstanding(
   customers: Customer[],
-  data: { sales: Sale[]; customerPayments: CustomerPayment[]; setOffs?: SetOff[]; adjustments?: Adjustment[] },
+  data: {
+    sales: Sale[];
+    customerPayments: CustomerPayment[];
+    setOffs?: SetOff[];
+    adjustments?: Adjustment[];
+  },
 ) {
   return customers.reduce((a, c) => a + customerBalance(c, data).outstanding, 0);
 }
@@ -294,7 +329,12 @@ export function totalOutstanding(
 /** Advances held across every customer — money in the drawer that isn't yours. */
 export function totalAdvances(
   customers: Customer[],
-  data: { sales: Sale[]; customerPayments: CustomerPayment[]; setOffs?: SetOff[]; adjustments?: Adjustment[] },
+  data: {
+    sales: Sale[];
+    customerPayments: CustomerPayment[];
+    setOffs?: SetOff[];
+    adjustments?: Adjustment[];
+  },
 ) {
   return customers.reduce((a, c) => a + customerBalance(c, data).advance, 0);
 }
@@ -305,7 +345,12 @@ export function totalAdvances(
  */
 export function creditHeadroom(
   customer: Pick<Customer, "id" | "creditLimit">,
-  data: { sales: Sale[]; customerPayments: CustomerPayment[]; setOffs?: SetOff[]; adjustments?: Adjustment[] },
+  data: {
+    sales: Sale[];
+    customerPayments: CustomerPayment[];
+    setOffs?: SetOff[];
+    adjustments?: Adjustment[];
+  },
 ) {
   const bal = customerBalance(customer, data);
   // An advance is spending money, not borrowing it, so it is always available

@@ -36,16 +36,28 @@ function resolveSource(specifier, parentURL) {
 
 export async function resolve(specifier, context, next) {
   if (/\.tsx?$/.test(specifier)) {
-    return { url: new URL(specifier, context.parentURL).href, shortCircuit: true, format: "module" };
+    return {
+      url: new URL(specifier, context.parentURL).href,
+      shortCircuit: true,
+      format: "module",
+    };
   }
   // The `@/…` alias tsconfig maps to src/.
   if (specifier.startsWith("@/")) {
     const fromSrc = new URL(`../src/${specifier.slice(2)}`, import.meta.url);
-    return { url: resolveSource(fromSrc.href.replace(/\.[a-z]+$/i, ""), import.meta.url), shortCircuit: true, format: "module" };
+    return {
+      url: resolveSource(fromSrc.href.replace(/\.[a-z]+$/i, ""), import.meta.url),
+      shortCircuit: true,
+      format: "module",
+    };
   }
   // TypeScript source omits the extension ("./store-types"); add it back.
   if (specifier.startsWith(".") && !/\.[a-z]+$/i.test(specifier)) {
-    return { url: resolveSource(specifier, context.parentURL), shortCircuit: true, format: "module" };
+    return {
+      url: resolveSource(specifier, context.parentURL),
+      shortCircuit: true,
+      format: "module",
+    };
   }
   return next(specifier, context);
 }

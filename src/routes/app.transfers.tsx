@@ -1,15 +1,45 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useStore, formatRs, todayISO, shopKind, matchProduct, type Shop, type Transfer } from "@/lib/store";
+import {
+  useStore,
+  formatRs,
+  todayISO,
+  shopKind,
+  matchProduct,
+  type Shop,
+  type Transfer,
+} from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ArrowRight, Plus, Trash2, Download, ScanLine, Warehouse, Pencil, Undo2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  ArrowRight,
+  Plus,
+  Trash2,
+  Download,
+  ScanLine,
+  Warehouse,
+  Pencil,
+  Undo2,
+} from "lucide-react";
 import { Confirm } from "@/components/Confirm";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
@@ -19,7 +49,17 @@ export const Route = createFileRoute("/app/transfers")({ component: TransfersPag
 type Line = { productId: string; qty: number };
 
 function TransfersPage() {
-  const { user, shops, products, inventory, transfers, addTransfer, updateTransfer, deleteTransfer, settings } = useStore();
+  const {
+    user,
+    shops,
+    products,
+    inventory,
+    transfers,
+    addTransfer,
+    updateTransfer,
+    deleteTransfer,
+    settings,
+  } = useStore();
   const isAdmin = user?.role === "admin";
 
   const defaultFrom = shops[0]?.id ?? "";
@@ -40,7 +80,9 @@ function TransfersPage() {
   const rows = useMemo(
     () =>
       transfers
-        .filter((t) => (isAdmin ? true : t.fromShopId === user?.shopId || t.toShopId === user?.shopId))
+        .filter((t) =>
+          isAdmin ? true : t.fromShopId === user?.shopId || t.toShopId === user?.shopId,
+        )
         .filter((t) => (filter === "all" ? true : t.fromShopId === filter || t.toShopId === filter))
         .sort((a, b) => b.date.localeCompare(a.date)),
     [transfers, filter, isAdmin, user?.shopId],
@@ -81,7 +123,7 @@ function TransfersPage() {
   const headroomAt = (productId: string, shopId: string) => {
     const shipped =
       editing && editing.fromShopId === shopId
-        ? editing.items.find((i) => i.productId === productId)?.qty ?? 0
+        ? (editing.items.find((i) => i.productId === productId)?.qty ?? 0)
         : 0;
     return stockAt(productId, shopId) + shipped;
   };
@@ -104,7 +146,10 @@ function TransfersPage() {
     // Shared with the till and the purchase bill, so a code that finds an item
     // on one screen finds the same item on all of them.
     const p = matchProduct(products, code);
-    if (!p) { toast.error(`No product matches “${code}”`); return; }
+    if (!p) {
+      toast.error(`No product matches “${code}”`);
+      return;
+    }
     addLine(p.id);
     setScan("");
   };
@@ -116,17 +161,31 @@ function TransfersPage() {
   }, 0);
 
   const save = () => {
-    if (!fromShop || !toShop) { toast.error("Pick both a source and a destination"); return; }
-    if (fromShop === toShop) { toast.error("Source and destination must be different shops"); return; }
-    if (lines.length === 0) { toast.error("Add at least one product"); return; }
-    if (lines.some((l) => l.qty <= 0)) { toast.error("Every line needs a quantity of at least 1"); return; }
+    if (!fromShop || !toShop) {
+      toast.error("Pick both a source and a destination");
+      return;
+    }
+    if (fromShop === toShop) {
+      toast.error("Source and destination must be different shops");
+      return;
+    }
+    if (lines.length === 0) {
+      toast.error("Add at least one product");
+      return;
+    }
+    if (lines.some((l) => l.qty <= 0)) {
+      toast.error("Every line needs a quantity of at least 1");
+      return;
+    }
 
     // Moving more than the source holds would leave it with negative stock, so
     // the transfer is rejected rather than silently clamped to what's there.
     const short = lines.find((l) => l.qty > headroomAt(l.productId, fromShop));
     if (short) {
       const p = products.find((x) => x.id === short.productId);
-      toast.error(`${shopName(fromShop)} only has ${headroomAt(short.productId, fromShop)} × ${p?.name ?? "that item"}`);
+      toast.error(
+        `${shopName(fromShop)} only has ${headroomAt(short.productId, fromShop)} × ${p?.name ?? "that item"}`,
+      );
       return;
     }
 
@@ -139,7 +198,14 @@ function TransfersPage() {
     if (editing) {
       // id, transfer number and who recorded it are the movement's identity —
       // a correction re-states what moved, it doesn't become a new movement.
-      updateTransfer({ ...editing, date, fromShopId: fromShop, toShopId: toShop, items, notes: notes.trim() });
+      updateTransfer({
+        ...editing,
+        date,
+        fromShopId: fromShop,
+        toShopId: toShop,
+        items,
+        notes: notes.trim(),
+      });
       toast.success(`${editing.transferNo} corrected — stock adjusted at both shops`);
     } else {
       addTransfer({
@@ -179,7 +245,10 @@ function TransfersPage() {
         }
         confirmLabel="Undo transfer"
         destructive
-        onConfirm={() => { deleteTransfer(t.id); toast.success(`${t.transferNo} undone`); }}
+        onConfirm={() => {
+          deleteTransfer(t.id);
+          toast.success(`${t.transferNo} undone`);
+        }}
         trigger={
           <Button
             size="sm"
@@ -196,12 +265,24 @@ function TransfersPage() {
   );
 
   const exportCsv = () => {
-    if (rows.length === 0) { toast.error("Nothing to export"); return; }
+    if (rows.length === 0) {
+      toast.error("Nothing to export");
+      return;
+    }
     downloadCsv(
       `transfers-${todayISO()}.csv`,
       ["Transfer no", "Date", "From", "To", "Product", "Qty", "By", "Notes"],
       rows.flatMap((t) =>
-        t.items.map((i) => [t.transferNo, t.date, shopName(t.fromShopId), shopName(t.toShopId), i.name, i.qty, t.createdBy, t.notes]),
+        t.items.map((i) => [
+          t.transferNo,
+          t.date,
+          shopName(t.fromShopId),
+          shopName(t.toShopId),
+          i.name,
+          i.qty,
+          t.createdBy,
+          t.notes,
+        ]),
       ),
     );
     toast.success("Transfers exported");
@@ -216,8 +297,14 @@ function TransfersPage() {
         subtitle="Move your own stock between your own locations. This is internal distribution — nothing here is a sale."
         actions={
           <>
-            <Button variant="outline" onClick={exportCsv}><Download className="h-4 w-4 mr-1.5" />Export</Button>
-            <Button onClick={openDialog}><Plus className="h-4 w-4 mr-1.5" />New transfer</Button>
+            <Button variant="outline" onClick={exportCsv}>
+              <Download className="h-4 w-4 mr-1.5" />
+              Export
+            </Button>
+            <Button onClick={openDialog}>
+              <Plus className="h-4 w-4 mr-1.5" />
+              New transfer
+            </Button>
           </>
         }
       />
@@ -227,14 +314,22 @@ function TransfersPage() {
           <div className="space-y-1.5">
             <Label className="text-xs">Shop</Label>
             <Select value={filter} onValueChange={setFilter}>
-              <SelectTrigger className="w-full sm:w-56"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-56">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All shops</SelectItem>
-                {shops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                {shops.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
-          <p className="text-xs text-muted-foreground sm:ml-auto">Shows transfers in or out of the chosen shop.</p>
+          <p className="text-xs text-muted-foreground sm:ml-auto">
+            Shows transfers in or out of the chosen shop.
+          </p>
         </Card>
       )}
 
@@ -287,32 +382,49 @@ function TransfersPage() {
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
                       {t.items.map((i) => (
-                        <span key={i.productId} className="text-xs px-2 py-0.5 bg-muted rounded-full">
+                        <span
+                          key={i.productId}
+                          className="text-xs px-2 py-0.5 bg-muted rounded-full"
+                        >
                           {i.name} × {i.qty}
                         </span>
                       ))}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-right font-medium">{t.items.reduce((a, i) => a + i.qty, 0)}</td>
+                  <td className="px-4 py-3 text-right font-medium">
+                    {t.items.reduce((a, i) => a + i.qty, 0)}
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">{t.createdBy}</td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs">{t.notes || "No notes"}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">
+                    {t.notes || "No notes"}
+                  </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">{rowActions(t, true)}</td>
                 </tr>
               ))}
               {rows.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                  No stock has been transferred yet.
-                </td></tr>
+                <tr>
+                  <td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                    No stock has been transferred yet.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
         </TableWrap>
       </Card>
 
-      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setEditing(null); }}>
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) setEditing(null);
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? `Correct ${editing.transferNo}` : "New stock transfer"}</DialogTitle>
+            <DialogTitle>
+              {editing ? `Correct ${editing.transferNo}` : "New stock transfer"}
+            </DialogTitle>
             <DialogDescription>
               {editing
                 ? "Stock at both shops is adjusted by the difference, so nothing is moved twice."
@@ -324,21 +436,33 @@ function TransfersPage() {
             <div className="space-y-1.5">
               <Label>From</Label>
               <Select value={fromShop} onValueChange={setFromShop}>
-                <SelectTrigger><SelectValue placeholder="Source" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Source" />
+                </SelectTrigger>
                 <SelectContent>
-                  {shops.map((s) => <SelectItem key={s.id} value={s.id}>{shopLabel(s)}</SelectItem>)}
+                  {shops.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {shopLabel(s)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
               <Label>To</Label>
               <Select value={toShop} onValueChange={setToShop}>
-                <SelectTrigger><SelectValue placeholder="Destination" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Destination" />
+                </SelectTrigger>
                 <SelectContent>
                   {/* Excluding the source removes the only invalid choice up front. */}
-                  {shops.filter((s) => s.id !== fromShop).map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{shopLabel(s)}</SelectItem>
-                  ))}
+                  {shops
+                    .filter((s) => s.id !== fromShop)
+                    .map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {shopLabel(s)}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -355,7 +479,12 @@ function TransfersPage() {
               <Input
                 value={scan}
                 onChange={(e) => setScan(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); scanIn(); } }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    scanIn();
+                  }
+                }}
                 placeholder="Scan or type a barcode, then press Enter…"
                 className="pl-9"
               />
@@ -366,7 +495,9 @@ function TransfersPage() {
             <div className="flex items-center justify-between mb-2">
               <Label>Items</Label>
               <Select value="" onValueChange={addLine}>
-                <SelectTrigger className="w-56 h-9"><SelectValue placeholder="+ Add a product…" /></SelectTrigger>
+                <SelectTrigger className="w-56 h-9">
+                  <SelectValue placeholder="+ Add a product…" />
+                </SelectTrigger>
                 <SelectContent>
                   {products.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
@@ -391,11 +522,15 @@ function TransfersPage() {
                   const available = headroomAt(l.productId, fromShop);
                   const tooMany = l.qty > available;
                   return (
-                    <div key={l.productId} className="grid grid-cols-2 gap-2 items-end rounded-lg border p-3 sm:grid-cols-12 sm:border-0 sm:p-0">
+                    <div
+                      key={l.productId}
+                      className="grid grid-cols-2 gap-2 items-end rounded-lg border p-3 sm:grid-cols-12 sm:border-0 sm:p-0"
+                    >
                       <div className="col-span-2 sm:col-span-6 min-w-0">
                         <div className="text-sm font-medium truncate">{p?.name ?? l.productId}</div>
                         <div className="text-xs text-muted-foreground">
-                          {available} at {shopName(fromShop)} · {stockAt(l.productId, toShop)} at {toShop ? shopName(toShop) : "destination"}
+                          {available} at {shopName(fromShop)} · {stockAt(l.productId, toShop)} at{" "}
+                          {toShop ? shopName(toShop) : "destination"}
                         </div>
                       </div>
                       <div className="sm:col-span-3">
@@ -407,13 +542,21 @@ function TransfersPage() {
                           max={available}
                           value={l.qty}
                           onChange={(e) =>
-                            setLines((prev) => prev.map((x, j) => (j === i ? { ...x, qty: Math.max(0, Number(e.target.value) || 0) } : x)))
+                            setLines((prev) =>
+                              prev.map((x, j) =>
+                                j === i
+                                  ? { ...x, qty: Math.max(0, Number(e.target.value) || 0) }
+                                  : x,
+                              ),
+                            )
                           }
                           className={tooMany ? "border-destructive" : undefined}
                         />
                       </div>
                       <div className="col-span-2 flex items-center justify-between gap-2 sm:col-span-3 sm:justify-end">
-                        <span className="text-xs text-muted-foreground">{formatRs((p?.cost ?? 0) * l.qty, settings.currency)}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatRs((p?.cost ?? 0) * l.qty, settings.currency)}
+                        </span>
                         <button
                           onClick={() => setLines((prev) => prev.filter((_, j) => j !== i))}
                           aria-label="Remove item"
@@ -436,16 +579,31 @@ function TransfersPage() {
 
           <div className="space-y-1.5">
             <Label>Notes (optional)</Label>
-            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Moving slow stock to DHA" />
+            <Input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. Moving slow stock to DHA"
+            />
           </div>
 
           <DialogFooter className="border-t pt-4 flex-col gap-3 !justify-between sm:flex-row sm:items-center">
             <div className="text-sm">
               <span className="font-semibold">{totalUnits} units</span>
-              <span className="text-muted-foreground"> · {formatRs(totalValue, settings.currency)} at cost</span>
+              <span className="text-muted-foreground">
+                {" "}
+                · {formatRs(totalValue, settings.currency)} at cost
+              </span>
             </div>
             <div className="flex gap-2 [&>*]:flex-1 sm:[&>*]:flex-none">
-              <Button variant="outline" onClick={() => { setOpen(false); setEditing(null); }}>Cancel</Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setOpen(false);
+                  setEditing(null);
+                }}
+              >
+                Cancel
+              </Button>
               <Button onClick={save}>{editing ? "Save correction" : "Transfer stock"}</Button>
             </div>
           </DialogFooter>

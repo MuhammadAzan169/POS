@@ -3,7 +3,13 @@ import { RANGE_PRESETS, useScope, delta } from "@/lib/scope";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 
@@ -29,7 +35,9 @@ export function ScopeBar({ showShop = true }: { showShop?: boolean }) {
             onClick={() => setPreset(p.key)}
             className={cn(
               "shrink-0 text-xs px-3 py-1.5 rounded-full border transition-colors",
-              rangeKey === p.key ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted",
+              rangeKey === p.key
+                ? "bg-primary text-primary-foreground border-primary"
+                : "hover:bg-muted",
             )}
           >
             {p.label}
@@ -62,12 +70,15 @@ export function ScopeBar({ showShop = true }: { showShop?: boolean }) {
           <div className="space-y-1.5 col-span-2 sm:col-auto">
             <Label className="text-xs">Shop</Label>
             <Select value={shopScope} onValueChange={setShopScope}>
-              <SelectTrigger className="w-full sm:w-52"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-52">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All shops</SelectItem>
                 {shops.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
-                    {s.name}{shopKind(s) === "wholesale" ? " (wholesale)" : ""}
+                    {s.name}
+                    {shopKind(s) === "wholesale" ? " (wholesale)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -85,7 +96,15 @@ export function ScopeBar({ showShop = true }: { showShop?: boolean }) {
  * Renders nothing when there's no baseline to compare against — "+100% vs zero"
  * is noise dressed up as insight.
  */
-export function DeltaBadge({ current, prior, label }: { current: number; prior: number; label?: string }) {
+export function DeltaBadge({
+  current,
+  prior,
+  label,
+}: {
+  current: number;
+  prior: number;
+  label?: string;
+}) {
   const d = delta(current, prior);
   if (!d) return null;
 

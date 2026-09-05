@@ -8,7 +8,13 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Download, CalendarClock, RotateCcw, PackagePlus } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
@@ -28,7 +34,7 @@ function InventoryPage() {
   const { user, inventory, products, shops, sales, purchases, returns, settings } = useStore();
   const isAdmin = user?.role === "admin";
   const navigate = useNavigate();
-  const [shop, setShop] = useState<string>(isAdmin ? "all" : user?.shopId ?? "all");
+  const [shop, setShop] = useState<string>(isAdmin ? "all" : (user?.shopId ?? "all"));
   const [q, setQ] = useState("");
   const today = todayISO();
   const [asOf, setAsOf] = useState(today);
@@ -42,29 +48,36 @@ function InventoryPage() {
   );
 
   const rows = useMemo(() => {
-    return source
-      .filter((r) => (shop === "all" ? true : r.shopId === shop))
-      .filter((r) => (!isAdmin ? r.shopId === user?.shopId : true))
-      .map((r) => ({
-        ...r,
-        product: products.find((p) => p.id === r.productId)!,
-        shop: shops.find((s) => s.id === r.shopId)!,
-      }))
-      // A row whose product/shop no longer exists would blow up the sort below.
-      .filter((r) => Boolean(r.product && r.shop))
-      .filter((r) =>
-        q
-          ? r.product.name.toLowerCase().includes(q.toLowerCase()) || r.product.barcode.includes(q)
-          : true,
-      )
-      .sort((a, b) => a.product.name.localeCompare(b.product.name));
+    return (
+      source
+        .filter((r) => (shop === "all" ? true : r.shopId === shop))
+        .filter((r) => (!isAdmin ? r.shopId === user?.shopId : true))
+        .map((r) => ({
+          ...r,
+          product: products.find((p) => p.id === r.productId)!,
+          shop: shops.find((s) => s.id === r.shopId)!,
+        }))
+        // A row whose product/shop no longer exists would blow up the sort below.
+        .filter((r) => Boolean(r.product && r.shop))
+        .filter((r) =>
+          q
+            ? r.product.name.toLowerCase().includes(q.toLowerCase()) ||
+              r.product.barcode.includes(q)
+            : true,
+        )
+        .sort((a, b) => a.product.name.localeCompare(b.product.name))
+    );
   }, [source, products, shops, shop, q, isAdmin, user?.shopId]);
 
-  const statusOf = (qty: number, lowAlert: number) => (qty === 0 ? "OUT" : qty <= lowAlert ? "LOW" : "OK");
+  const statusOf = (qty: number, lowAlert: number) =>
+    qty === 0 ? "OUT" : qty <= lowAlert ? "LOW" : "OK";
 
   /** Hands off to Purchases, which opens a bill prefilled for this product+shop. */
   const restock = (productId: string, shopId: string, qty: number, lowAlert: number) =>
-    navigate({ to: "/app/purchases", search: { restock: productId, shop: shopId, qty: Math.max(1, lowAlert * 2 - qty) } });
+    navigate({
+      to: "/app/purchases",
+      search: { restock: productId, shop: shopId, qty: Math.max(1, lowAlert * 2 - qty) },
+    });
 
   const totals = useMemo(
     () => ({
@@ -76,10 +89,24 @@ function InventoryPage() {
   );
 
   const exportCsv = () => {
-    if (rows.length === 0) { toast.error("Nothing to export"); return; }
+    if (rows.length === 0) {
+      toast.error("Nothing to export");
+      return;
+    }
     downloadCsv(
       `inventory-${asOf}.csv`,
-      ["Product", "Barcode", "Category", "Brand", "Shop", "Qty", "Low alert", "Status", ...(isAdmin ? ["Unit cost", "Stock value"] : []), "As of"],
+      [
+        "Product",
+        "Barcode",
+        "Category",
+        "Brand",
+        "Shop",
+        "Qty",
+        "Low alert",
+        "Status",
+        ...(isAdmin ? ["Unit cost", "Stock value"] : []),
+        "As of",
+      ],
       rows.map((r) => [
         r.product.name,
         r.product.barcode,
@@ -101,34 +128,57 @@ function InventoryPage() {
       <PageHeader
         title="Inventory"
         subtitle={isAdmin ? "Stock per shop across the business." : "Your shop's current stock."}
-        actions={<Button variant="outline" onClick={exportCsv}><Download className="h-4 w-4 mr-1.5" />Export CSV</Button>}
+        actions={
+          <Button variant="outline" onClick={exportCsv}>
+            <Download className="h-4 w-4 mr-1.5" />
+            Export CSV
+          </Button>
+        }
       />
 
       <Card className="p-3 sm:p-4 mb-4 space-y-4">
         <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-end">
           <div className="space-y-1.5">
             <Label className="text-xs">Search</Label>
-            <Input placeholder="Product name or barcode…" value={q} onChange={(e) => setQ(e.target.value)} className="w-full sm:w-64" />
+            <Input
+              placeholder="Product name or barcode…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              className="w-full sm:w-64"
+            />
           </div>
           {isAdmin && (
             <div className="space-y-1.5">
               <Label className="text-xs">Shop</Label>
               <Select value={shop} onValueChange={setShop}>
-                <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-48">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All shops</SelectItem>
-                  {shops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  {shops.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
           )}
           <div className="space-y-1.5">
             <Label className="text-xs">Stock as of</Label>
-            <Input type="date" max={today} value={asOf} onChange={(e) => setAsOf(e.target.value || today)} className="w-full sm:w-44" />
+            <Input
+              type="date"
+              max={today}
+              value={asOf}
+              onChange={(e) => setAsOf(e.target.value || today)}
+              className="w-full sm:w-44"
+            />
           </div>
           {isHistorical && (
             <Button variant="ghost" size="sm" onClick={() => setAsOf(today)}>
-              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />Back to today
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+              Back to today
             </Button>
           )}
         </div>
@@ -141,7 +191,9 @@ function InventoryPage() {
                 key={p.label}
                 onClick={() => setAsOf(value)}
                 className={`shrink-0 text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                  asOf === value ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"
+                  asOf === value
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "hover:bg-muted"
                 }`}
               >
                 {p.label}
@@ -154,8 +206,9 @@ function InventoryPage() {
           <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 border rounded-md p-2.5">
             <CalendarClock className="h-3.5 w-3.5 mt-0.5 shrink-0" />
             <span>
-              Showing stock as it stood at the end of <strong className="text-foreground">{asOf}</strong>, rebuilt by
-              rewinding sales, purchases and returns recorded after that date.
+              Showing stock as it stood at the end of{" "}
+              <strong className="text-foreground">{asOf}</strong>, rebuilt by rewinding sales,
+              purchases and returns recorded after that date.
             </span>
           </div>
         )}
@@ -163,22 +216,33 @@ function InventoryPage() {
 
       <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4 mb-4">
         <Card className="p-4">
-          <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Rows</div>
+          <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+            Rows
+          </div>
           <div className="text-2xl font-bold mt-1">{rows.length}</div>
         </Card>
         <Card className="p-4">
-          <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Units in stock</div>
+          <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+            Units in stock
+          </div>
           <div className="text-2xl font-bold mt-1">{totals.units.toLocaleString()}</div>
         </Card>
         <Card className="p-4">
-          <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Need attention</div>
-          <div className={`text-2xl font-bold mt-1 ${totals.low > 0 ? "text-warning-strong" : ""}`}>{totals.low}</div>
+          <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+            Need attention
+          </div>
+          <div className={`text-2xl font-bold mt-1 ${totals.low > 0 ? "text-warning-strong" : ""}`}>
+            {totals.low}
+          </div>
         </Card>
         {isAdmin && (
           <Card className="p-4">
-            <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Value at cost</div>
+            <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              Value at cost
+            </div>
             <div className="text-2xl font-bold mt-1">
-              {settings.currency} {totals.value.toLocaleString("en-PK", { maximumFractionDigits: 0 })}
+              {settings.currency}{" "}
+              {totals.value.toLocaleString("en-PK", { maximumFractionDigits: 0 })}
             </div>
           </Card>
         )}
@@ -211,7 +275,8 @@ function InventoryPage() {
                       title={isHistorical ? "Switch back to today to reorder" : "Reorder this item"}
                       onClick={() => restock(r.productId, r.shopId, r.qty, r.product.lowAlert)}
                     >
-                      <PackagePlus className="h-3.5 w-3.5 mr-1.5" />Restock
+                      <PackagePlus className="h-3.5 w-3.5 mr-1.5" />
+                      Restock
                     </Button>
                   ) : undefined
                 }
@@ -221,15 +286,17 @@ function InventoryPage() {
         />
         <TableWrap>
           <table className="w-full text-sm">
-            <thead className="bg-muted/50 sticky top-0 z-10"><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <th className="px-4 py-3 font-medium">Product</th>
-              <th className="px-4 py-3 font-medium">Shop</th>
-              <th className="px-4 py-3 font-medium text-right">Qty</th>
-              <th className="px-4 py-3 font-medium text-right">Low alert</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Barcode</th>
-              {isAdmin && <th className="px-4 py-3 font-medium text-right">Action</th>}
-            </tr></thead>
+            <thead className="bg-muted/50 sticky top-0 z-10">
+              <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+                <th className="px-4 py-3 font-medium">Product</th>
+                <th className="px-4 py-3 font-medium">Shop</th>
+                <th className="px-4 py-3 font-medium text-right">Qty</th>
+                <th className="px-4 py-3 font-medium text-right">Low alert</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Barcode</th>
+                {isAdmin && <th className="px-4 py-3 font-medium text-right">Action</th>}
+              </tr>
+            </thead>
             <tbody>
               {rows.map((r) => {
                 const status = statusOf(r.qty, r.product.lowAlert);
@@ -238,19 +305,28 @@ function InventoryPage() {
                     <td className="px-4 py-3 font-medium">{r.product.name}</td>
                     <td className="px-4 py-3 text-muted-foreground">{r.shop.name}</td>
                     <td className="px-4 py-3 text-right font-medium">{r.qty}</td>
-                    <td className="px-4 py-3 text-right text-muted-foreground">{r.product.lowAlert}</td>
-                    <td className="px-4 py-3"><StatusPill status={status} /></td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.product.barcode || "No barcode"}</td>
+                    <td className="px-4 py-3 text-right text-muted-foreground">
+                      {r.product.lowAlert}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusPill status={status} />
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                      {r.product.barcode || "No barcode"}
+                    </td>
                     {isAdmin && (
                       <td className="px-4 py-3 text-right">
                         <Button
                           size="sm"
                           variant="outline"
                           disabled={isHistorical}
-                          title={isHistorical ? "Switch back to today to reorder" : "Reorder this item"}
+                          title={
+                            isHistorical ? "Switch back to today to reorder" : "Reorder this item"
+                          }
                           onClick={() => restock(r.productId, r.shopId, r.qty, r.product.lowAlert)}
                         >
-                          <PackagePlus className="h-3.5 w-3.5 mr-1.5" />Restock
+                          <PackagePlus className="h-3.5 w-3.5 mr-1.5" />
+                          Restock
                         </Button>
                       </td>
                     )}
@@ -258,9 +334,14 @@ function InventoryPage() {
                 );
               })}
               {rows.length === 0 && (
-                <tr><td colSpan={isAdmin ? 7 : 6} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                  {q ? `No stock rows match “${q}”.` : "No stock records for this selection."}
-                </td></tr>
+                <tr>
+                  <td
+                    colSpan={isAdmin ? 7 : 6}
+                    className="px-4 py-12 text-center text-sm text-muted-foreground"
+                  >
+                    {q ? `No stock rows match “${q}”.` : "No stock records for this selection."}
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>

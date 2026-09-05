@@ -60,7 +60,9 @@ export function supplierBalance(supplier: Pick<Supplier, "id">, data: LedgerData
   const payments = data.supplierPayments.filter((p) => p.supplierId === supplier.id);
   const paidLater = payments.reduce((a, p) => a + p.amount, 0);
 
-  const setOff = data.setOffs.filter((x) => x.supplierId === supplier.id).reduce((a, x) => a + x.amount, 0);
+  const setOff = data.setOffs
+    .filter((x) => x.supplierId === supplier.id)
+    .reduce((a, x) => a + x.amount, 0);
 
   const returnCredit = data.returns
     .filter((r) => r.kind === "supplier" && r.supplierId === supplier.id)
@@ -158,7 +160,9 @@ export function customerLedger(customer: Pick<Customer, "id">, data: LedgerData)
   const rows: Omit<LedgerEntry, "balance">[] = [];
 
   data.sales
-    .filter((s) => s.customerId === customer.id && s.payment === "Credit" && s.status !== "Returned")
+    .filter(
+      (s) => s.customerId === customer.id && s.payment === "Credit" && s.status !== "Returned",
+    )
     .forEach((s) =>
       rows.push({
         id: s.id,
@@ -336,7 +340,9 @@ export interface PartyPosition {
 
 /** The supplier record a customer is linked to, if any. */
 export function linkedSupplier(customer: Customer, suppliers: Supplier[]) {
-  return customer.linkedSupplierId ? suppliers.find((s) => s.id === customer.linkedSupplierId) : undefined;
+  return customer.linkedSupplierId
+    ? suppliers.find((s) => s.id === customer.linkedSupplierId)
+    : undefined;
 }
 
 /** The customer record linked to a supplier, if any. Derived from the customer side. */
@@ -373,7 +379,11 @@ export function partyPosition(
  * 30,000, settle 30,000" as one line, not as two rows in two different tabs
  * that nobody thinks to compare.
  */
-export function partyPositions(customers: Customer[], suppliers: Supplier[], data: LedgerData): PartyPosition[] {
+export function partyPositions(
+  customers: Customer[],
+  suppliers: Supplier[],
+  data: LedgerData,
+): PartyPosition[] {
   const used = new Set<string>();
   const out: PartyPosition[] = [];
 
@@ -383,7 +393,9 @@ export function partyPositions(customers: Customer[], suppliers: Supplier[], dat
     out.push(partyPosition({ customer: c, supplier: sup }, data));
   });
 
-  suppliers.filter((s) => !used.has(s.id)).forEach((s) => out.push(partyPosition({ supplier: s }, data)));
+  suppliers
+    .filter((s) => !used.has(s.id))
+    .forEach((s) => out.push(partyPosition({ supplier: s }, data)));
 
   return out
     .filter((p) => p.receivable > 0 || p.payable > 0 || p.advanceHeld > 0 || p.advancePlaced > 0)
@@ -414,7 +426,10 @@ export function openBills(data: LedgerData, today: string): OpenBill[] {
       const due = p.dueDate;
       const overdueDays =
         due && due < today
-          ? Math.max(0, Math.round((parseDay(today).getTime() - parseDay(due).getTime()) / 86_400_000))
+          ? Math.max(
+              0,
+              Math.round((parseDay(today).getTime() - parseDay(due).getTime()) / 86_400_000),
+            )
           : 0;
       return { purchase: p, paid: st.paid, balance: st.balance, status: st.status, overdueDays };
     })
@@ -428,5 +443,8 @@ export function maxSetOff(
   supplier: Pick<Supplier, "id">,
   data: LedgerData,
 ) {
-  return Math.min(customerBalance(customer, data).outstanding, supplierBalance(supplier, data).outstanding);
+  return Math.min(
+    customerBalance(customer, data).outstanding,
+    supplierBalance(supplier, data).outstanding,
+  );
 }

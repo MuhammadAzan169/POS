@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { useStore, formatRs, priceForProfit, type Product } from "@/lib/store";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +17,13 @@ import { toast } from "sonner";
  * Editing a product lived nowhere — `updateProduct` existed in the store but no
  * screen called it. Shared by Products and Discounts so both edit the same way.
  */
-export function ProductEditDialog({ product, onClose }: { product: Product | null; onClose: () => void }) {
+export function ProductEditDialog({
+  product,
+  onClose,
+}: {
+  product: Product | null;
+  onClose: () => void;
+}) {
   const { products, updateProduct, settings } = useStore();
   const [form, setForm] = useState<Product | null>(product);
 
@@ -34,13 +46,18 @@ export function ProductEditDialog({ product, onClose }: { product: Product | nul
     setForm({ ...form, profitTarget: profit, price: priceForProfit(form.cost, profit) });
 
   const setWholesaleProfit = (profit: number) =>
-    setForm({ ...form, wholesaleProfitTarget: profit, wholesalePrice: priceForProfit(form.cost, profit) });
+    setForm({
+      ...form,
+      wholesaleProfitTarget: profit,
+      wholesalePrice: priceForProfit(form.cost, profit),
+    });
 
   /** Changing the cost re-prices anything with a pinned profit. */
   const setCost = (cost: number) => {
     const next = { ...form, cost };
     if (form.profitTarget !== undefined) next.price = priceForProfit(cost, form.profitTarget);
-    if (form.wholesaleProfitTarget !== undefined) next.wholesalePrice = priceForProfit(cost, form.wholesaleProfitTarget);
+    if (form.wholesaleProfitTarget !== undefined)
+      next.wholesalePrice = priceForProfit(cost, form.wholesaleProfitTarget);
     setForm(next);
   };
 
@@ -51,9 +68,18 @@ export function ProductEditDialog({ product, onClose }: { product: Product | nul
       : null;
 
   const save = () => {
-    if (!form.name.trim()) { toast.error("Name required"); return; }
-    if (form.price <= 0) { toast.error("Retail price must be greater than 0"); return; }
-    if (form.cost < 0 || form.lowAlert < 0) { toast.error("Cost and low-stock alert can't be negative"); return; }
+    if (!form.name.trim()) {
+      toast.error("Name required");
+      return;
+    }
+    if (form.price <= 0) {
+      toast.error("Retail price must be greater than 0");
+      return;
+    }
+    if (form.cost < 0 || form.lowAlert < 0) {
+      toast.error("Cost and low-stock alert can't be negative");
+      return;
+    }
     if (form.wholesalePrice !== undefined && form.wholesalePrice < 0) {
       toast.error("Wholesale price can't be negative");
       return;
@@ -71,7 +97,9 @@ export function ProductEditDialog({ product, onClose }: { product: Product | nul
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Edit product</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Edit product</DialogTitle>
+        </DialogHeader>
         {/* Single column on phones: two 150px fields side by side wrapped every
             label ("Low-stock alert", "Sell price (Rs)") onto three lines. */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -81,31 +109,58 @@ export function ProductEditDialog({ product, onClose }: { product: Product | nul
           </div>
           <div className="space-y-1.5">
             <Label>Barcode</Label>
-            <Input value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} />
+            <Input
+              value={form.barcode}
+              onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Brand</Label>
-            <Input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
+            <Input
+              value={form.brand}
+              onChange={(e) => setForm({ ...form, brand: e.target.value })}
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Category</Label>
-            <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+            <Input
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Low-stock alert</Label>
-            <Input type="number" min={0} value={form.lowAlert} onChange={(e) => setForm({ ...form, lowAlert: Math.max(0, Number(e.target.value) || 0) })} />
+            <Input
+              type="number"
+              min={0}
+              value={form.lowAlert}
+              onChange={(e) =>
+                setForm({ ...form, lowAlert: Math.max(0, Number(e.target.value) || 0) })
+              }
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Size</Label>
-            <Input value={form.size ?? ""} onChange={(e) => setForm({ ...form, size: e.target.value })} />
+            <Input
+              value={form.size ?? ""}
+              onChange={(e) => setForm({ ...form, size: e.target.value })}
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Colour</Label>
-            <Input value={form.color ?? ""} onChange={(e) => setForm({ ...form, color: e.target.value })} />
+            <Input
+              value={form.color ?? ""}
+              onChange={(e) => setForm({ ...form, color: e.target.value })}
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Cost ({settings.currency})</Label>
-            <Input type="number" min={0} value={form.cost} onChange={(e) => setCost(Math.max(0, Number(e.target.value) || 0))} />
+            <Input
+              type="number"
+              min={0}
+              value={form.cost}
+              onChange={(e) => setCost(Math.max(0, Number(e.target.value) || 0))}
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Retail price ({settings.currency})</Label>
@@ -120,7 +175,8 @@ export function ProductEditDialog({ product, onClose }: { product: Product | nul
                 setForm({
                   ...form,
                   price,
-                  profitTarget: form.profitTarget === undefined ? undefined : Math.max(0, price - form.cost),
+                  profitTarget:
+                    form.profitTarget === undefined ? undefined : Math.max(0, price - form.cost),
                 });
               }}
             />
@@ -144,7 +200,10 @@ export function ProductEditDialog({ product, onClose }: { product: Product | nul
                   value={form.profitTarget ?? ""}
                   onChange={(e) => {
                     const raw = e.target.value;
-                    if (raw === "") { setForm({ ...form, profitTarget: undefined }); return; }
+                    if (raw === "") {
+                      setForm({ ...form, profitTarget: undefined });
+                      return;
+                    }
                     setRetailProfit(Math.max(0, Number(raw) || 0));
                   }}
                 />
@@ -158,7 +217,10 @@ export function ProductEditDialog({ product, onClose }: { product: Product | nul
                   value={form.wholesaleProfitTarget ?? ""}
                   onChange={(e) => {
                     const raw = e.target.value;
-                    if (raw === "") { setForm({ ...form, wholesaleProfitTarget: undefined }); return; }
+                    if (raw === "") {
+                      setForm({ ...form, wholesaleProfitTarget: undefined });
+                      return;
+                    }
                     setWholesaleProfit(Math.max(0, Number(raw) || 0));
                   }}
                 />
@@ -172,8 +234,9 @@ export function ProductEditDialog({ product, onClose }: { product: Product | nul
                 </>
               ) : (
                 <>
-                  Pinned. The selling price is now {formatRs(form.cost, settings.currency)} cost plus your
-                  profit, and it will follow the cost on the next delivery so this figure does not move.
+                  Pinned. The selling price is now {formatRs(form.cost, settings.currency)} cost
+                  plus your profit, and it will follow the cost on the next delivery so this figure
+                  does not move.
                 </>
               )}
             </p>
@@ -189,13 +252,18 @@ export function ProductEditDialog({ product, onClose }: { product: Product | nul
               value={form.wholesalePrice ?? ""}
               onChange={(e) => {
                 const raw = e.target.value;
-                if (raw === "") { setForm({ ...form, wholesalePrice: undefined, wholesaleProfitTarget: undefined }); return; }
+                if (raw === "") {
+                  setForm({ ...form, wholesalePrice: undefined, wholesaleProfitTarget: undefined });
+                  return;
+                }
                 const wholesalePrice = Math.max(0, Number(raw) || 0);
                 setForm({
                   ...form,
                   wholesalePrice,
                   wholesaleProfitTarget:
-                    form.wholesaleProfitTarget === undefined ? undefined : Math.max(0, wholesalePrice - form.cost),
+                    form.wholesaleProfitTarget === undefined
+                      ? undefined
+                      : Math.max(0, wholesalePrice - form.cost),
                 });
               }}
             />
@@ -205,16 +273,24 @@ export function ProductEditDialog({ product, onClose }: { product: Product | nul
           </div>
 
           {wholesaleMargin !== null && (
-            <div className={`sm:col-span-2 text-sm rounded-md p-2 ${
-              (form.wholesalePrice ?? 0) >= form.cost ? "text-success-strong bg-success/10" : "text-destructive bg-destructive/10"
-            }`}>
-              Wholesale margin: {formatRs((form.wholesalePrice ?? 0) - form.cost, settings.currency)} ({wholesaleMargin}%)
+            <div
+              className={`sm:col-span-2 text-sm rounded-md p-2 ${
+                (form.wholesalePrice ?? 0) >= form.cost
+                  ? "text-success-strong bg-success/10"
+                  : "text-destructive bg-destructive/10"
+              }`}
+            >
+              Wholesale margin:{" "}
+              {formatRs((form.wholesalePrice ?? 0) - form.cost, settings.currency)} (
+              {wholesaleMargin}%)
               {(form.wholesalePrice ?? 0) < form.cost && " — selling below cost"}
             </div>
           )}
 
           {margin !== null && (
-            <div className={`sm:col-span-2 text-sm rounded-md p-2 ${form.price >= form.cost ? "text-success-strong bg-success/10" : "text-destructive bg-destructive/10"}`}>
+            <div
+              className={`sm:col-span-2 text-sm rounded-md p-2 ${form.price >= form.cost ? "text-success-strong bg-success/10" : "text-destructive bg-destructive/10"}`}
+            >
               Margin: {formatRs(form.price - form.cost, settings.currency)} ({margin}%)
               {form.price < form.cost && " — selling below cost"}
             </div>
@@ -223,13 +299,20 @@ export function ProductEditDialog({ product, onClose }: { product: Product | nul
           <div className="sm:col-span-2 flex items-center justify-between gap-3 p-3 border rounded-lg">
             <div>
               <div className="font-medium text-sm">Active</div>
-              <div className="text-xs text-muted-foreground">Inactive products stay in reports but shouldn't be sold.</div>
+              <div className="text-xs text-muted-foreground">
+                Inactive products stay in reports but shouldn't be sold.
+              </div>
             </div>
-            <Switch checked={form.active} onCheckedChange={(v) => setForm({ ...form, active: v })} />
+            <Switch
+              checked={form.active}
+              onCheckedChange={(v) => setForm({ ...form, active: v })}
+            />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
           <Button onClick={save}>Save changes</Button>
         </DialogFooter>
       </DialogContent>

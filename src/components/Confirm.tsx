@@ -56,7 +56,10 @@ export function Confirm({
             onClick={onConfirm}
             className={cn(
               destructive &&
-                cn(buttonVariants({ variant: "destructive" }), "bg-destructive text-destructive-foreground hover:bg-destructive/90"),
+                cn(
+                  buttonVariants({ variant: "destructive" }),
+                  "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+                ),
             )}
           >
             {confirmLabel}

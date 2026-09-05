@@ -21,7 +21,9 @@ export function ThemeToggle({ className }: { className?: string }) {
     let initial = false;
     try {
       const saved = window.localStorage.getItem(THEME_KEY);
-      initial = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+      initial = saved
+        ? saved === "dark"
+        : window.matchMedia("(prefers-color-scheme: dark)").matches;
     } catch {
       initial = false;
     }

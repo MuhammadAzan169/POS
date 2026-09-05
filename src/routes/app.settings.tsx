@@ -537,7 +537,12 @@ function SettingsPage() {
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                 Designing bills for
               </Label>
-              <div className="flex flex-wrap gap-2 mt-2">
+              {/*
+                Wrapping, and capped in height. Eleven buttons — the business
+                default plus ten shops — is a tall block in a 22rem column, and
+                pushed the design controls below the fold on a laptop.
+              */}
+              <div className="flex flex-wrap gap-2 mt-2 max-h-48 overflow-y-auto">
                 <button
                   onClick={() => setBillShopId("")}
                   className={cn(

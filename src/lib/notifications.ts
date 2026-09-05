@@ -138,7 +138,9 @@ export function migrationFilesFor(missing: string[]) {
  * joiner produced "customers and credit and messaging".
  */
 export function migrationFeaturesFor(missing: string[]) {
-  const names = MIGRATIONS.filter((m) => m.match.some((x) => missing.includes(x))).map((m) => m.feature);
+  const names = MIGRATIONS.filter((m) => m.match.some((x) => missing.includes(x))).map(
+    (m) => m.feature,
+  );
   if (names.length === 0) return "some features";
   return names.join(", ");
 }
@@ -216,7 +218,9 @@ export function buildNotifications(s: Source): AppNotification[] {
 
   scope.forEach((shop) => {
     const open = openSessionFor(s.daySessions, shop.id);
-    const startedToday = s.daySessions.some((x) => x.shopId === shop.id && x.businessDate === today);
+    const startedToday = s.daySessions.some(
+      (x) => x.shopId === shop.id && x.businessDate === today,
+    );
 
     // A day left open on an earlier trading date is the expensive one: every
     // sale rung up today is still being booked onto that old day.
@@ -225,8 +229,11 @@ export function buildNotifications(s: Source): AppNotification[] {
         id: `day-stale:${open.id}:${today}`,
         group: "Day book",
         tone: "critical",
-        title: isAdmin ? `${shop.name} never closed ${open.businessDate}` : `Your day of ${open.businessDate} is still open`,
-        detail: "Today's sales are still being booked onto that trading day. End it and start today.",
+        title: isAdmin
+          ? `${shop.name} never closed ${open.businessDate}`
+          : `Your day of ${open.businessDate} is still open`,
+        detail:
+          "Today's sales are still being booked onto that trading day. End it and start today.",
         to: "/app/daybook",
         at: open.openedAt,
       });
@@ -251,7 +258,10 @@ export function buildNotifications(s: Source): AppNotification[] {
   // end of the month when nobody remembers the evening in question.
   const recent = (d: string) => d >= addDays(today, -7);
   s.daySessions
-    .filter((x) => x.status === "closed" && scope.some((sh) => sh.id === x.shopId) && recent(x.businessDate))
+    .filter(
+      (x) =>
+        x.status === "closed" && scope.some((sh) => sh.id === x.shopId) && recent(x.businessDate),
+    )
     .forEach((session) => {
       const cash = summarizeSession(session, {
         sales: s.sales,
@@ -278,7 +288,9 @@ export function buildNotifications(s: Source): AppNotification[] {
   const scopedStock = s.inventory.filter((r) => scope.some((sh) => sh.id === r.shopId));
   const withProduct = scopedStock
     .map((r) => ({ row: r, product: s.products.find((p) => p.id === r.productId) }))
-    .filter((x): x is { row: InventoryRow; product: Product } => Boolean(x.product && x.product.active !== false));
+    .filter((x): x is { row: InventoryRow; product: Product } =>
+      Boolean(x.product && x.product.active !== false),
+    );
 
   const outOfStock = withProduct.filter((x) => x.row.qty === 0);
   const lowStock = withProduct.filter((x) => x.row.qty > 0 && x.row.qty <= x.product.lowAlert);
@@ -291,7 +303,11 @@ export function buildNotifications(s: Source): AppNotification[] {
       group: "Stock",
       tone: "critical",
       title: `${outOfStock.length} item${outOfStock.length === 1 ? " is" : "s are"} out of stock`,
-      detail: outOfStock.slice(0, 3).map((x) => x.product.name).join(", ") + (outOfStock.length > 3 ? "…" : ""),
+      detail:
+        outOfStock
+          .slice(0, 3)
+          .map((x) => x.product.name)
+          .join(", ") + (outOfStock.length > 3 ? "…" : ""),
       to: isAdmin ? "/app/alerts" : "/app/inventory",
     });
   }
@@ -302,7 +318,11 @@ export function buildNotifications(s: Source): AppNotification[] {
       group: "Stock",
       tone: "warning",
       title: `${lowStock.length} item${lowStock.length === 1 ? " is" : "s are"} running low`,
-      detail: lowStock.slice(0, 3).map((x) => `${x.product.name} (${x.row.qty} left)`).join(", ") + (lowStock.length > 3 ? "…" : ""),
+      detail:
+        lowStock
+          .slice(0, 3)
+          .map((x) => `${x.product.name} (${x.row.qty} left)`)
+          .join(", ") + (lowStock.length > 3 ? "…" : ""),
       to: isAdmin ? "/app/alerts" : "/app/inventory",
     });
   }
@@ -376,7 +396,8 @@ export function buildNotifications(s: Source): AppNotification[] {
   if (isAdmin) {
     const cutoff = addDays(today, -7);
     const removed = s.activity.filter(
-      (a) => a.action === "deleted" && a.byRole === "shop" && dayOf(a.at) >= cutoff && !a.restoredAt,
+      (a) =>
+        a.action === "deleted" && a.byRole === "shop" && dayOf(a.at) >= cutoff && !a.restoredAt,
     );
     if (removed.length > 0) {
       const value = removed.reduce((t, a) => t + a.amount, 0);
@@ -460,7 +481,9 @@ export function useNotifications(source: Source) {
 
   // localStorage is read in an effect, not in the initialiser: this component
   // renders on the server too, where `window` does not exist.
-  useEffect(() => { setRead(loadRead()); }, []);
+  useEffect(() => {
+    setRead(loadRead());
+  }, []);
 
   const items = useMemo(() => buildNotifications(source), [source]);
   const readSet = useMemo(() => new Set(read), [read]);
@@ -483,5 +506,12 @@ export function useNotifications(source: Source) {
     });
   }, [items]);
 
-  return { items, unread, unreadCount: unread.length, isRead: (id: string) => readSet.has(id), markRead, markAllRead };
+  return {
+    items,
+    unread,
+    unreadCount: unread.length,
+    isRead: (id: string) => readSet.has(id),
+    markRead,
+    markAllRead,
+  };
 }

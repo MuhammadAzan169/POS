@@ -20,17 +20,51 @@ import { ScopeBar } from "@/components/ScopeBar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Download, Printer, Banknote, CreditCard, Smartphone, Wallet, HandCoins, ArrowRight } from "lucide-react";
+import {
+  Download,
+  Printer,
+  Banknote,
+  CreditCard,
+  Smartphone,
+  Wallet,
+  HandCoins,
+  ArrowRight,
+} from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
-import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend } from "recharts";
+import {
+  LineChart,
+  Line,
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  BarChart,
+  Bar,
+  Legend,
+} from "recharts";
 
 export const Route = createFileRoute("/app/reports")({ component: ReportsPage });
 
 function ReportsPage() {
   const {
-    user, sales, expenses, shops, products, inventory, daySessions, returns, customers,
-    customerPayments, purchases, supplierPayments, suppliers, setOffs, adjustments, settings,
+    user,
+    sales,
+    expenses,
+    shops,
+    products,
+    inventory,
+    daySessions,
+    returns,
+    customers,
+    customerPayments,
+    purchases,
+    supplierPayments,
+    suppliers,
+    setOffs,
+    adjustments,
+    settings,
   } = useStore();
   const { range, rangeLabel, shopScope } = useScope();
   const isAdmin = user?.role === "admin";
@@ -44,7 +78,10 @@ function ReportsPage() {
 
   /** Sales in the chosen period, bucketed by trading day rather than timestamp. */
   const periodSales = useMemo(
-    () => sales.filter((s) => inScope.has(s.shopId) && inRange(businessDayOf(s), range) && s.status !== "Returned"),
+    () =>
+      sales.filter(
+        (s) => inScope.has(s.shopId) && inRange(businessDayOf(s), range) && s.status !== "Returned",
+      ),
     [sales, inScope, range],
   );
   const periodExpenses = useMemo(
@@ -91,7 +128,9 @@ function ReportsPage() {
 
     // Newest day first — the owner reads today's row before last week's.
     const rows = [...days].reverse().map((day) => {
-      const perShop = scopedShops.map((s) => cell.get(key(day, s.id)) ?? { sales: 0, profit: 0, invoices: 0 });
+      const perShop = scopedShops.map(
+        (s) => cell.get(key(day, s.id)) ?? { sales: 0, profit: 0, invoices: 0 },
+      );
       return {
         day,
         perShop,
@@ -140,21 +179,46 @@ function ReportsPage() {
    * bills waiting to be paid are a claim on the same money.
    */
   const youOwe = useMemo(
-    () => totalPayable(suppliers, { sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments }),
-    [suppliers, sales, customerPayments, purchases, supplierPayments, returns, setOffs, adjustments],
+    () =>
+      totalPayable(suppliers, {
+        sales,
+        customerPayments,
+        purchases,
+        supplierPayments,
+        returns,
+        setOffs,
+        adjustments,
+      }),
+    [
+      suppliers,
+      sales,
+      customerPayments,
+      purchases,
+      supplierPayments,
+      returns,
+      setOffs,
+      adjustments,
+    ],
   );
 
   /** Closed days in the period, with the cash actually handed over. */
   const cashDays = useMemo(
     () =>
       daySessions
-        .filter((s) => inScope.has(s.shopId) && s.status === "closed" && inRange(s.businessDate, range))
+        .filter(
+          (s) => inScope.has(s.shopId) && s.status === "closed" && inRange(s.businessDate, range),
+        )
         .sort((a, b) => b.businessDate.localeCompare(a.businessDate))
         .map((s) => ({
           session: s,
           shop: shops.find((x) => x.id === s.shopId),
           cash: summarizeSession(s, {
-            sales, expenses, returns, customerPayments, supplierPayments, purchases,
+            sales,
+            expenses,
+            returns,
+            customerPayments,
+            supplierPayments,
+            purchases,
           }),
         })),
     [daySessions, inScope, range, shops, sales, expenses, returns, customerPayments],
@@ -200,11 +264,13 @@ function ReportsPage() {
       ["Shop", "Sales", "Sales profit", "Expenses", "Net profit"],
       [
         ...perShop.map((s) => [s.name, s.sales, s.profit, s.expenses, s.net]),
-        ["TOTAL",
+        [
+          "TOTAL",
           perShop.reduce((a, s) => a + s.sales, 0),
           perShop.reduce((a, s) => a + s.profit, 0),
           perShop.reduce((a, s) => a + s.expenses, 0),
-          perShop.reduce((a, s) => a + s.net, 0)],
+          perShop.reduce((a, s) => a + s.net, 0),
+        ],
       ],
     );
     toast.success("Report exported");
@@ -212,7 +278,10 @@ function ReportsPage() {
 
   /** The day x shop grid, exported exactly as it appears on screen. */
   const exportMatrix = () => {
-    if (matrix.rows.length === 0) { toast.error("Nothing to export"); return; }
+    if (matrix.rows.length === 0) {
+      toast.error("Nothing to export");
+      return;
+    }
     downloadCsv(
       `daily-sales-by-shop-${range.from}_to_${range.to}.csv`,
       ["Trading day", ...scopedShops.map((s) => s.name), "Day total", "Invoices"],
@@ -225,31 +294,72 @@ function ReportsPage() {
   };
 
   const exportCash = () => {
-    if (cashDays.length === 0) { toast.error("No closed days in this period"); return; }
+    if (cashDays.length === 0) {
+      toast.error("No closed days in this period");
+      return;
+    }
     downloadCsv(
       `cash-handover-${range.from}_to_${range.to}.csv`,
-      ["Trading day", "Shop", "Opening float", "Cash sales", "Card", "Online", "Refunds", "Till expenses",
-        "Expected cash", "Counted cash", "Over/short", "Owner took", "Left in shop"],
+      [
+        "Trading day",
+        "Shop",
+        "Opening float",
+        "Cash sales",
+        "Card",
+        "Online",
+        "Refunds",
+        "Till expenses",
+        "Expected cash",
+        "Counted cash",
+        "Over/short",
+        "Owner took",
+        "Left in shop",
+      ],
       cashDays.map(({ session: s, shop, cash: c }) => [
-        s.businessDate, shop?.name ?? "", c.openingCash, c.cashSales, c.cardSales, c.onlineSales,
-        c.refunds, c.drawerExpenses, c.expectedCash, c.countedCash ?? "", c.variance ?? "",
-        c.cashTakenByOwner, c.cashLeftInShop,
+        s.businessDate,
+        shop?.name ?? "",
+        c.openingCash,
+        c.cashSales,
+        c.cardSales,
+        c.onlineSales,
+        c.refunds,
+        c.drawerExpenses,
+        c.expectedCash,
+        c.countedCash ?? "",
+        c.variance ?? "",
+        c.cashTakenByOwner,
+        c.cashLeftInShop,
       ]),
     );
     toast.success("Cash handover exported");
   };
 
   // Gate after every hook has run, so signing out of this page doesn't change the hook count.
-  if (!isAdmin) return <div className="text-center py-20 text-muted-foreground">Reports with profit are admin-only.</div>;
+  if (!isAdmin)
+    return (
+      <div className="text-center py-20 text-muted-foreground">
+        Reports with profit are admin-only.
+      </div>
+    );
 
   return (
     <div>
-      <PageHeader title="Reports" subtitle={`Owner analytics · ${rangeLabel}`} actions={
-        <>
-          <Button variant="outline" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" />Print</Button>
-          <Button variant="outline" onClick={exportReport}><Download className="h-4 w-4 mr-1.5" />Export</Button>
-        </>
-      } />
+      <PageHeader
+        title="Reports"
+        subtitle={`Owner analytics · ${rangeLabel}`}
+        actions={
+          <>
+            <Button variant="outline" onClick={() => window.print()}>
+              <Printer className="h-4 w-4 mr-1.5" />
+              Print
+            </Button>
+            <Button variant="outline" onClick={exportReport}>
+              <Download className="h-4 w-4 mr-1.5" />
+              Export
+            </Button>
+          </>
+        }
+      />
 
       <ScopeBar />
 
@@ -260,14 +370,18 @@ function ReportsPage() {
           {settings.taxNumber ? ` · NTN ${settings.taxNumber}` : ""}
         </div>
         <div className="text-xs mt-1">
-          Business report · {rangeLabel} ({range.from} to {range.to}) · generated {new Date().toLocaleString()}
+          Business report · {rangeLabel} ({range.from} to {range.to}) · generated{" "}
+          {new Date().toLocaleString()}
         </div>
       </div>
 
       <Tabs defaultValue="daily">
         {/* Only the open tab's content is meaningful on paper. */}
         {/* The tab strip scrolls sideways on a phone rather than wrapping. */}
-        <TabsList data-print="hide" className="max-w-full overflow-x-auto no-scrollbar justify-start">
+        <TabsList
+          data-print="hide"
+          className="max-w-full overflow-x-auto no-scrollbar justify-start"
+        >
           <TabsTrigger value="daily">Daily by shop</TabsTrigger>
           <TabsTrigger value="cash">Cash & payments</TabsTrigger>
           <TabsTrigger value="sales">Trend</TabsTrigger>
@@ -281,23 +395,39 @@ function ReportsPage() {
           <Card className="p-3 sm:p-4 mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm">
               <span className="font-semibold">{formatRs(matrix.grand, currency)}</span>
-              <span className="text-muted-foreground"> across {matrix.rows.length} days · {matrix.grandInvoices} invoices</span>
+              <span className="text-muted-foreground">
+                {" "}
+                across {matrix.rows.length} days · {matrix.grandInvoices} invoices
+              </span>
             </div>
             <Button variant="outline" size="sm" data-print="hide" onClick={exportMatrix}>
-              <Download className="h-4 w-4 mr-1.5" />Export grid
+              <Download className="h-4 w-4 mr-1.5" />
+              Export grid
             </Button>
           </Card>
 
           <Card className="overflow-hidden">
-            {/* Wide by nature — one column per shop — so it scrolls inside the
-                card rather than pushing the page sideways. */}
+            {/*
+              Wide by nature — one column per shop — so it scrolls inside the
+              card rather than pushing the page sideways.
+
+              The minimum width grows with the number of shops. Fixed at 560px
+              it was sized for the three the demo happened to have; at ten, every
+              column was squeezed to a few characters and the figures wrapped
+              mid-number.
+            */}
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[560px]">
+              <table
+                className="w-full text-sm"
+                style={{ minWidth: `${260 + scopedShops.length * 110}px` }}
+              >
                 <thead className="bg-muted/50 sticky top-0 z-10">
                   <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
                     <th className="px-4 py-3 font-medium sticky left-0 bg-muted/50">Trading day</th>
                     {scopedShops.map((s) => (
-                      <th key={s.id} className="px-4 py-3 font-medium text-right whitespace-nowrap">{s.name}</th>
+                      <th key={s.id} className="px-4 py-3 font-medium text-right whitespace-nowrap">
+                        {s.name}
+                      </th>
                     ))}
                     <th className="px-4 py-3 font-medium text-right">Day total</th>
                     <th className="px-4 py-3 font-medium text-right">Profit</th>
@@ -305,34 +435,52 @@ function ReportsPage() {
                 </thead>
                 <tbody>
                   {matrix.rows.map((r) => (
-                    <tr key={r.day} className={`border-t hover:bg-muted/40 ${r.total === 0 ? "text-muted-foreground" : ""}`}>
+                    <tr
+                      key={r.day}
+                      className={`border-t hover:bg-muted/40 ${r.total === 0 ? "text-muted-foreground" : ""}`}
+                    >
                       <td className="px-4 py-3 font-medium whitespace-nowrap sticky left-0 bg-card">
                         {shortDay(r.day)}
-                        <span className="ml-1.5 text-xs text-muted-foreground">{r.invoices || ""}</span>
+                        <span className="ml-1.5 text-xs text-muted-foreground">
+                          {r.invoices || ""}
+                        </span>
                       </td>
                       {r.perShop.map((c, i) => (
                         <td key={scopedShops[i].id} className="px-4 py-3 text-right">
                           {c.sales === 0 ? "No sales" : formatRs(c.sales, currency)}
                         </td>
                       ))}
-                      <td className="px-4 py-3 text-right font-semibold">{formatRs(r.total, currency)}</td>
-                      <td className="px-4 py-3 text-right text-success-strong">{formatRs(r.profit, currency)}</td>
+                      <td className="px-4 py-3 text-right font-semibold">
+                        {formatRs(r.total, currency)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-success-strong">
+                        {formatRs(r.profit, currency)}
+                      </td>
                     </tr>
                   ))}
                   {matrix.rows.length === 0 && (
-                    <tr><td colSpan={scopedShops.length + 3} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                      No trading days in this period.
-                    </td></tr>
+                    <tr>
+                      <td
+                        colSpan={scopedShops.length + 3}
+                        className="px-4 py-12 text-center text-sm text-muted-foreground"
+                      >
+                        No trading days in this period.
+                      </td>
+                    </tr>
                   )}
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 bg-muted/30 font-semibold">
                     <td className="px-4 py-3 sticky left-0 bg-muted/30">Total</td>
                     {matrix.columnTotals.map((c) => (
-                      <td key={c.shop.id} className="px-4 py-3 text-right">{formatRs(c.sales, currency)}</td>
+                      <td key={c.shop.id} className="px-4 py-3 text-right">
+                        {formatRs(c.sales, currency)}
+                      </td>
                     ))}
                     <td className="px-4 py-3 text-right">{formatRs(matrix.grand, currency)}</td>
-                    <td className="px-4 py-3 text-right text-success-strong">{formatRs(matrix.grandProfit, currency)}</td>
+                    <td className="px-4 py-3 text-right text-success-strong">
+                      {formatRs(matrix.grandProfit, currency)}
+                    </td>
                   </tr>
                 </tfoot>
               </table>
@@ -343,11 +491,46 @@ function ReportsPage() {
         {/* --------------------------------------- cash & payment methods */}
         <TabsContent value="cash" className="mt-4">
           <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-4">
-            <MoneyTile icon={<Banknote className="h-5 w-5" />} label="Cash sales" value={mix.cash} sub={`${mix.pct(mix.cash)}% · ${mix.counts.Cash} sales`} currency={currency} tone="success" />
-            <MoneyTile icon={<CreditCard className="h-5 w-5" />} label="Card sales" value={mix.card} sub={`${mix.pct(mix.card)}% · ${mix.counts.Card} sales`} currency={currency} tone="primary" />
-            <MoneyTile icon={<Smartphone className="h-5 w-5" />} label="Online sales" value={mix.online} sub={`${mix.pct(mix.online)}% · ${mix.counts.Online} sales`} currency={currency} tone="accent" />
-            <MoneyTile icon={<HandCoins className="h-5 w-5" />} label="Sold on credit" value={mix.credit} sub={`${mix.pct(mix.credit)}% · ${mix.counts.Credit} sales`} currency={currency} tone="warning" />
-            <MoneyTile icon={<Wallet className="h-5 w-5" />} label="Owner collected" value={cashTotals.taken} sub={`${formatRs(cashTotals.left, currency)} left in shops`} currency={currency} tone="warning" />
+            <MoneyTile
+              icon={<Banknote className="h-5 w-5" />}
+              label="Cash sales"
+              value={mix.cash}
+              sub={`${mix.pct(mix.cash)}% · ${mix.counts.Cash} sales`}
+              currency={currency}
+              tone="success"
+            />
+            <MoneyTile
+              icon={<CreditCard className="h-5 w-5" />}
+              label="Card sales"
+              value={mix.card}
+              sub={`${mix.pct(mix.card)}% · ${mix.counts.Card} sales`}
+              currency={currency}
+              tone="primary"
+            />
+            <MoneyTile
+              icon={<Smartphone className="h-5 w-5" />}
+              label="Online sales"
+              value={mix.online}
+              sub={`${mix.pct(mix.online)}% · ${mix.counts.Online} sales`}
+              currency={currency}
+              tone="accent"
+            />
+            <MoneyTile
+              icon={<HandCoins className="h-5 w-5" />}
+              label="Sold on credit"
+              value={mix.credit}
+              sub={`${mix.pct(mix.credit)}% · ${mix.counts.Credit} sales`}
+              currency={currency}
+              tone="warning"
+            />
+            <MoneyTile
+              icon={<Wallet className="h-5 w-5" />}
+              label="Owner collected"
+              value={cashTotals.taken}
+              sub={`${formatRs(cashTotals.left, currency)} left in shops`}
+              currency={currency}
+              tone="warning"
+            />
           </div>
 
           {/* Standing debt, not period figures — kept visually separate so it is
@@ -362,10 +545,12 @@ function ReportsPage() {
               <Card className="p-4 h-full flex flex-wrap items-center justify-between gap-3 border-warning/40 bg-warning/5 transition-colors hover:bg-warning/10">
                 <div>
                   <h3 className="font-semibold text-sm inline-flex items-center gap-1.5">
-                    <HandCoins className="h-4 w-4 text-warning-strong" />Total receivables
+                    <HandCoins className="h-4 w-4 text-warning-strong" />
+                    Total receivables
                   </h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Owed by customers right now, across all time — not limited to {rangeLabel.toLowerCase()}.
+                    Owed by customers right now, across all time — not limited to{" "}
+                    {rangeLabel.toLowerCase()}.
                   </p>
                   <span className="text-xs text-primary mt-1 inline-flex items-center gap-0.5">
                     Who owes it <ArrowRight className="h-3 w-3" />
@@ -381,10 +566,12 @@ function ReportsPage() {
               <Card className="p-4 h-full flex flex-wrap items-center justify-between gap-3 border-destructive/30 bg-destructive/5 transition-colors hover:bg-destructive/10">
                 <div>
                   <h3 className="font-semibold text-sm inline-flex items-center gap-1.5">
-                    <Wallet className="h-4 w-4 text-destructive" />Total payables
+                    <Wallet className="h-4 w-4 text-destructive" />
+                    Total payables
                   </h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Still owed to suppliers on delivered stock — also all time, not {rangeLabel.toLowerCase()}.
+                    Still owed to suppliers on delivered stock — also all time, not{" "}
+                    {rangeLabel.toLowerCase()}.
                   </p>
                   <span className="text-xs text-primary mt-1 inline-flex items-center gap-0.5">
                     Who to pay <ArrowRight className="h-3 w-3" />
@@ -402,11 +589,13 @@ function ReportsPage() {
               <div>
                 <h3 className="font-semibold">Cash handed over, day by day</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  What each shop counted at close, what you took, and what stayed as the next day's float.
+                  What each shop counted at close, what you took, and what stayed as the next day's
+                  float.
                 </p>
               </div>
               <Button variant="outline" size="sm" data-print="hide" onClick={exportCash}>
-                <Download className="h-4 w-4 mr-1.5" />Export
+                <Download className="h-4 w-4 mr-1.5" />
+                Export
               </Button>
             </div>
             <div className="overflow-x-auto">
@@ -428,32 +617,61 @@ function ReportsPage() {
                 <tbody>
                   {cashDays.map(({ session: s, shop, cash: c }) => (
                     <tr key={s.id} className="border-t hover:bg-muted/40">
-                      <td className="px-4 py-3 whitespace-nowrap font-medium">{shortDay(s.businessDate)}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{shop?.name ?? "Unknown shop"}</td>
-                      <td className="px-4 py-3 text-right text-muted-foreground">{formatRs(c.openingCash, currency)}</td>
-                      <td className="px-4 py-3 text-right">{formatRs(c.cashSales, currency)}</td>
-                      <td className="px-4 py-3 text-right text-muted-foreground">{formatRs(c.refunds + c.drawerExpenses, currency)}</td>
-                      <td className="px-4 py-3 text-right">{formatRs(c.expectedCash, currency)}</td>
-                      <td className="px-4 py-3 text-right font-medium">{c.countedCash === null ? "Not counted" : formatRs(c.countedCash, currency)}</td>
-                      <td className={`px-4 py-3 text-right ${!c.variance ? "text-muted-foreground" : c.variance < 0 ? "text-destructive" : "text-warning-strong"}`}>
-                        {!c.variance ? "Balanced" : `${c.variance > 0 ? "+" : "−"}${formatRs(Math.abs(c.variance), currency)}`}
+                      <td className="px-4 py-3 whitespace-nowrap font-medium">
+                        {shortDay(s.businessDate)}
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold">{formatRs(c.cashTakenByOwner, currency)}</td>
-                      <td className="px-4 py-3 text-right text-muted-foreground">{formatRs(c.cashLeftInShop, currency)}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {shop?.name ?? "Unknown shop"}
+                      </td>
+                      <td className="px-4 py-3 text-right text-muted-foreground">
+                        {formatRs(c.openingCash, currency)}
+                      </td>
+                      <td className="px-4 py-3 text-right">{formatRs(c.cashSales, currency)}</td>
+                      <td className="px-4 py-3 text-right text-muted-foreground">
+                        {formatRs(c.refunds + c.drawerExpenses, currency)}
+                      </td>
+                      <td className="px-4 py-3 text-right">{formatRs(c.expectedCash, currency)}</td>
+                      <td className="px-4 py-3 text-right font-medium">
+                        {c.countedCash === null ? "Not counted" : formatRs(c.countedCash, currency)}
+                      </td>
+                      <td
+                        className={`px-4 py-3 text-right ${!c.variance ? "text-muted-foreground" : c.variance < 0 ? "text-destructive" : "text-warning-strong"}`}
+                      >
+                        {!c.variance
+                          ? "Balanced"
+                          : `${c.variance > 0 ? "+" : "−"}${formatRs(Math.abs(c.variance), currency)}`}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold">
+                        {formatRs(c.cashTakenByOwner, currency)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-muted-foreground">
+                        {formatRs(c.cashLeftInShop, currency)}
+                      </td>
                     </tr>
                   ))}
                   {cashDays.length === 0 && (
-                    <tr><td colSpan={10} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                      No days have been closed in this period.
-                    </td></tr>
+                    <tr>
+                      <td
+                        colSpan={10}
+                        className="px-4 py-12 text-center text-sm text-muted-foreground"
+                      >
+                        No days have been closed in this period.
+                      </td>
+                    </tr>
                   )}
                 </tbody>
                 {cashDays.length > 0 && (
                   <tfoot>
                     <tr className="border-t-2 bg-muted/30 font-semibold">
-                      <td className="px-4 py-3" colSpan={8}>Total collected by owner</td>
-                      <td className="px-4 py-3 text-right">{formatRs(cashTotals.taken, currency)}</td>
-                      <td className="px-4 py-3 text-right">{formatRs(cashTotals.left, currency)}</td>
+                      <td className="px-4 py-3" colSpan={8}>
+                        Total collected by owner
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {formatRs(cashTotals.taken, currency)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {formatRs(cashTotals.left, currency)}
+                      </td>
                     </tr>
                   </tfoot>
                 )}
@@ -474,18 +692,40 @@ function ReportsPage() {
                     dataKey="date"
                     stroke="var(--color-muted-foreground)"
                     fontSize={11}
-                    tickFormatter={(d: string) => new Date(d).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+                    tickFormatter={(d: string) =>
+                      new Date(d).toLocaleDateString(undefined, { day: "numeric", month: "short" })
+                    }
                     minTickGap={16}
                   />
                   <YAxis stroke="var(--color-muted-foreground)" fontSize={11} />
                   <Tooltip
-                    contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8 }}
+                    contentStyle={{
+                      background: "var(--color-popover)",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: 8,
+                    }}
                     formatter={(v: number) => formatRs(v)}
-                    labelFormatter={(d: string) => new Date(d).toLocaleDateString(undefined, { dateStyle: "medium" })}
+                    labelFormatter={(d: string) =>
+                      new Date(d).toLocaleDateString(undefined, { dateStyle: "medium" })
+                    }
                   />
                   <Legend />
-                  <Line type="monotone" name="Sales" dataKey="sales" stroke="var(--color-chart-1)" strokeWidth={2.5} dot={false} />
-                  <Line type="monotone" name="Profit" dataKey="profit" stroke="var(--color-chart-2)" strokeWidth={2.5} dot={false} />
+                  <Line
+                    type="monotone"
+                    name="Sales"
+                    dataKey="sales"
+                    stroke="var(--color-chart-1)"
+                    strokeWidth={2.5}
+                    dot={false}
+                  />
+                  <Line
+                    type="monotone"
+                    name="Profit"
+                    dataKey="profit"
+                    stroke="var(--color-chart-2)"
+                    strokeWidth={2.5}
+                    dot={false}
+                  />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -501,11 +741,33 @@ function ReportsPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                   <XAxis dataKey="name" stroke="var(--color-muted-foreground)" fontSize={12} />
                   <YAxis stroke="var(--color-muted-foreground)" fontSize={12} />
-                  <Tooltip contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8 }} formatter={(v: number) => formatRs(v)} />
+                  <Tooltip
+                    contentStyle={{
+                      background: "var(--color-popover)",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: 8,
+                    }}
+                    formatter={(v: number) => formatRs(v)}
+                  />
                   <Legend />
-                  <Bar dataKey="profit" name="Sales profit" fill="var(--color-chart-2)" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="expenses" name="Expenses" fill="var(--color-chart-4)" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="net" name="Net profit" fill="var(--color-chart-1)" radius={[6, 6, 0, 0]} />
+                  <Bar
+                    dataKey="profit"
+                    name="Sales profit"
+                    fill="var(--color-chart-2)"
+                    radius={[6, 6, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="expenses"
+                    name="Expenses"
+                    fill="var(--color-chart-4)"
+                    radius={[6, 6, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="net"
+                    name="Net profit"
+                    fill="var(--color-chart-1)"
+                    radius={[6, 6, 0, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -519,7 +781,9 @@ function ReportsPage() {
               ))}
               <div className="border-2 border-primary rounded-lg p-4 bg-primary/5">
                 <div className="text-xs text-primary font-medium">Business total</div>
-                <div className="font-bold text-lg mt-1">{formatRs(perShop.reduce((a, s) => a + s.net, 0))}</div>
+                <div className="font-bold text-lg mt-1">
+                  {formatRs(perShop.reduce((a, s) => a + s.net, 0))}
+                </div>
                 <div className="text-xs text-muted-foreground">consolidated net</div>
               </div>
             </div>
@@ -532,10 +796,12 @@ function ReportsPage() {
             <div className="text-3xl font-bold mb-6">{formatRs(inventoryValue)}</div>
             <div className="grid md:grid-cols-3 gap-3">
               {scopedShops.map((s) => {
-                const v = inventory.filter((r) => r.shopId === s.id).reduce((a, r) => {
-                  const p = products.find((pp) => pp.id === r.productId);
-                  return a + (p?.cost ?? 0) * r.qty;
-                }, 0);
+                const v = inventory
+                  .filter((r) => r.shopId === s.id)
+                  .reduce((a, r) => {
+                    const p = products.find((pp) => pp.id === r.productId);
+                    return a + (p?.cost ?? 0) * r.qty;
+                  }, 0);
                 return (
                   <div key={s.id} className="border rounded-lg p-4">
                     <div className="text-xs text-muted-foreground">{s.name}</div>
@@ -561,21 +827,36 @@ function ReportsPage() {
                   </div>
                   <div className="mt-1 flex gap-4 text-xs text-muted-foreground">
                     <span>{t.qty} sold</span>
-                    <span className="text-success-strong font-medium">{formatRs(t.profit)} profit</span>
+                    <span className="text-success-strong font-medium">
+                      {formatRs(t.profit)} profit
+                    </span>
                   </div>
                 </li>
               ))}
-              {topItems.length === 0 && <li className="py-6 text-center text-sm text-muted-foreground">No sales in this period.</li>}
+              {topItems.length === 0 && (
+                <li className="py-6 text-center text-sm text-muted-foreground">
+                  No sales in this period.
+                </li>
+              )}
             </ul>
             <table className="w-full text-sm hidden sm:table">
-              <thead><tr className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b"><th className="py-2 font-medium">Item</th><th className="py-2 font-medium text-right">Qty</th><th className="py-2 font-medium text-right">Revenue</th><th className="py-2 font-medium text-right">Profit</th></tr></thead>
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b">
+                  <th className="py-2 font-medium">Item</th>
+                  <th className="py-2 font-medium text-right">Qty</th>
+                  <th className="py-2 font-medium text-right">Revenue</th>
+                  <th className="py-2 font-medium text-right">Profit</th>
+                </tr>
+              </thead>
               <tbody>
                 {topItems.map((t) => (
                   <tr key={t.name} className="border-b last:border-0">
                     <td className="py-3">{t.name}</td>
                     <td className="py-3 text-right">{t.qty}</td>
                     <td className="py-3 text-right font-medium">{formatRs(t.revenue)}</td>
-                    <td className="py-3 text-right text-success-strong font-medium">{formatRs(t.profit)}</td>
+                    <td className="py-3 text-right text-success-strong font-medium">
+                      {formatRs(t.profit)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -613,11 +894,17 @@ function MoneyTile({
     <Card className="p-4 sm:p-5">
       <div className="flex items-start justify-between gap-2 sm:gap-3">
         <div className="min-w-0">
-          <div className="text-[11px] sm:text-xs uppercase tracking-wider text-muted-foreground font-medium">{label}</div>
-          <div className="font-display text-xl sm:text-2xl font-bold mt-1.5 break-words">{formatRs(value, currency)}</div>
+          <div className="text-[11px] sm:text-xs uppercase tracking-wider text-muted-foreground font-medium">
+            {label}
+          </div>
+          <div className="font-display text-xl sm:text-2xl font-bold mt-1.5 break-words">
+            {formatRs(value, currency)}
+          </div>
           <div className="text-xs text-muted-foreground mt-1.5">{sub}</div>
         </div>
-        <div className={`h-9 w-9 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center shrink-0 ${tones[tone]}`}>
+        <div
+          className={`h-9 w-9 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center shrink-0 ${tones[tone]}`}
+        >
           {icon}
         </div>
       </div>

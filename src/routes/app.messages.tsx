@@ -39,8 +39,15 @@ function dayLabel(iso: string) {
 
 function MessagesPage() {
   const {
-    user, shops, messages, sendMessage, markThreadRead, deleteMessage, clearThread,
-    usingSupabase, pendingMigration,
+    user,
+    shops,
+    messages,
+    sendMessage,
+    markThreadRead,
+    deleteMessage,
+    clearThread,
+    usingSupabase,
+    pendingMigration,
   } = useStore();
   const isAdmin = user?.role === "admin";
 
@@ -53,7 +60,7 @@ function MessagesPage() {
 
   // An owner picks a shop; a shopkeeper only ever has their own thread.
   const [picked, setPicked] = useState<string | null>(null);
-  const shopId = isAdmin ? picked : user?.shopId ?? null;
+  const shopId = isAdmin ? picked : (user?.shopId ?? null);
   const shop = shops.find((s) => s.id === shopId);
 
   const [draft, setDraft] = useState("");
@@ -103,10 +110,19 @@ function MessagesPage() {
   const send = () => {
     const body = draft.trim();
     if (!body) return;
-    if (!shopId) { toast.error("Pick a shop to message"); return; }
-    if (cannotSave) { toast.error("Messages can't be sent until the database is updated"); return; }
+    if (!shopId) {
+      toast.error("Pick a shop to message");
+      return;
+    }
+    if (cannotSave) {
+      toast.error("Messages can't be sent until the database is updated");
+      return;
+    }
     const sent = sendMessage({ shopId, body });
-    if (!sent) { toast.error("Could not send that message"); return; }
+    if (!sent) {
+      toast.error("Could not send that message");
+      return;
+    }
     setDraft("");
     inputRef.current?.focus();
   };
@@ -123,7 +139,10 @@ function MessagesPage() {
   const deleteChat = () => {
     if (!shopId) return;
     const gone = clearThread(shopId);
-    if (gone === 0) { toast.info("There's nothing in this conversation yet"); return; }
+    if (gone === 0) {
+      toast.info("There's nothing in this conversation yet");
+      return;
+    }
     toast.success(`Conversation cleared — ${gone} message${gone === 1 ? "" : "s"} deleted`);
     // The owner drops back to the shop list; a shopkeeper has nowhere else to go.
     if (isAdmin) setPicked(null);
@@ -150,7 +169,7 @@ function MessagesPage() {
         </div>
         <div className="min-w-0 flex-1">
           <div className="font-semibold text-sm truncate">
-            {isAdmin ? shop?.name ?? "Pick a shop" : "Head office"}
+            {isAdmin ? (shop?.name ?? "Pick a shop") : "Head office"}
           </div>
           <div className="text-xs text-muted-foreground truncate">
             {isAdmin
@@ -170,9 +189,8 @@ function MessagesPage() {
                 All <strong>{thread.length}</strong> message
                 {thread.length === 1 ? "" : "s"} between{" "}
                 {isAdmin ? <strong>{shop?.name ?? "this shop"}</strong> : "you"} and{" "}
-                {isAdmin ? "head office" : "the owner"} are deleted{" "}
-                <strong>for both sides</strong> — this is one shared conversation, not two copies.
-                It can't be undone.
+                {isAdmin ? "head office" : "the owner"} are deleted <strong>for both sides</strong>{" "}
+                — this is one shared conversation, not two copies. It can't be undone.
               </>
             }
             confirmLabel="Delete conversation"
@@ -234,7 +252,9 @@ function MessagesPage() {
                       )}
                     >
                       {!mine && (
-                        <div className="text-[11px] font-medium opacity-70 mb-0.5">{m.fromName}</div>
+                        <div className="text-[11px] font-medium opacity-70 mb-0.5">
+                          {m.fromName}
+                        </div>
                       )}
                       {m.body}
                     </div>
@@ -262,7 +282,10 @@ function MessagesPage() {
                           description="It disappears for both sides of the conversation. This can't be undone."
                           confirmLabel="Delete"
                           destructive
-                          onConfirm={() => { deleteMessage(m.id); toast.success("Message deleted"); }}
+                          onConfirm={() => {
+                            deleteMessage(m.id);
+                            toast.success("Message deleted");
+                          }}
                           trigger={
                             <button
                               aria-label="Delete message"
@@ -293,14 +316,21 @@ function MessagesPage() {
             onKeyDown={(e) => {
               // Enter sends, Shift+Enter breaks the line — what every chat does,
               // and the hint under the box says so.
-              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
             }}
             placeholder={isAdmin ? `Message ${shop?.name ?? "the shop"}…` : "Message the owner…"}
             disabled={!shopId || cannotSave}
             // text-base below sm stops iOS zooming the page on focus.
             className="flex-1 min-h-11 max-h-40 resize-y rounded-md border bg-background px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
           />
-          <Button onClick={send} disabled={!draft.trim() || !shopId || cannotSave} className="h-11 px-4 shrink-0">
+          <Button
+            onClick={send}
+            disabled={!draft.trim() || !shopId || cannotSave}
+            className="h-11 px-4 shrink-0"
+          >
             <Send className="h-4 w-4 sm:mr-1.5" />
             <span className="hidden sm:inline">Send</span>
           </Button>
@@ -337,12 +367,16 @@ function MessagesPage() {
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-medium truncate">{shopLabel(s)}</span>
                 {last && (
-                  <span className="text-[11px] text-muted-foreground shrink-0">{clock(last.createdAt)}</span>
+                  <span className="text-[11px] text-muted-foreground shrink-0">
+                    {clock(last.createdAt)}
+                  </span>
                 )}
               </div>
               <div className="flex items-center justify-between gap-2 mt-0.5">
                 <span className="text-xs text-muted-foreground truncate">
-                  {last ? `${last.fromRole === "admin" ? "You" : last.fromName}: ${last.body}` : "No messages yet"}
+                  {last
+                    ? `${last.fromRole === "admin" ? "You" : last.fromName}: ${last.body}`
+                    : "No messages yet"}
                 </span>
                 {unread > 0 && (
                   <span className="shrink-0 min-w-[1.15rem] h-[1.15rem] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold flex items-center justify-center tabular-nums">
@@ -354,7 +388,9 @@ function MessagesPage() {
           </button>
         ))}
         {threads.length === 0 && (
-          <div className="px-4 py-10 text-center text-sm text-muted-foreground">No active shops.</div>
+          <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+            No active shops.
+          </div>
         )}
       </div>
     </Card>
@@ -395,7 +431,9 @@ function MessagesPage() {
         <Card className="p-4 mb-4 border-warning/40 bg-warning/10 flex items-start gap-3 shrink-0">
           <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-warning-strong" />
           <div className="text-sm">
-            <div className="font-medium text-warning-strong">Messaging is off until the database is updated</div>
+            <div className="font-medium text-warning-strong">
+              Messaging is off until the database is updated
+            </div>
             <p className="text-muted-foreground mt-1">
               A message sent now would stay in this browser and never reach the other side. Run{" "}
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-xs break-all">
@@ -411,8 +449,8 @@ function MessagesPage() {
         <Card className="p-3 mb-4 border-warning/40 bg-warning/10 text-sm flex items-start gap-2.5 shrink-0">
           <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-warning-strong" />
           <span>
-            Running on demo data, so this conversation lives in this browser only. Connect Supabase to
-            deliver messages between the owner and the shops for real.
+            Running on demo data, so this conversation lives in this browser only. Connect Supabase
+            to deliver messages between the owner and the shops for real.
           </span>
         </Card>
       )}

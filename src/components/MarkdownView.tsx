@@ -18,10 +18,16 @@ function inline(text: string, keyBase: string): ReactNode[] {
     const key = `${keyBase}-${i}`;
     if (!part) return;
     if (part.startsWith("**") && part.endsWith("**")) {
-      out.push(<strong key={key} className="font-semibold">{part.slice(2, -2)}</strong>);
+      out.push(
+        <strong key={key} className="font-semibold">
+          {part.slice(2, -2)}
+        </strong>,
+      );
     } else if (part.startsWith("`") && part.endsWith("`")) {
       out.push(
-        <code key={key} className="px-1 py-0.5 rounded bg-muted text-[0.9em] font-mono">{part.slice(1, -1)}</code>,
+        <code key={key} className="px-1 py-0.5 rounded bg-muted text-[0.9em] font-mono">
+          {part.slice(1, -1)}
+        </code>,
       );
     } else if (part.startsWith("*") && part.endsWith("*")) {
       out.push(<em key={key}>{part.slice(1, -1)}</em>);
@@ -38,10 +44,16 @@ const isTableRow = (l: string) => l.trim().startsWith("|") && l.trim().length > 
 const isDivider = (l: string) => /^\s*\|?[\s:|-]+\|[\s:|-]*$/.test(l) && l.includes("-");
 
 const cells = (row: string) =>
-  row.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+  row
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((c) => c.trim());
 
 /** Numbers right-align; everything else left-aligns, matching the app's tables. */
-const alignOf = (v: string) => (/^[-+]?[\d.,]+%?$/.test(v.replace(/^(Rs|PKR)\s*/i, "").trim()) ? "text-right" : "text-left");
+const alignOf = (v: string) =>
+  /^[-+]?[\d.,]+%?$/.test(v.replace(/^(Rs|PKR)\s*/i, "").trim()) ? "text-right" : "text-left";
 
 export function MarkdownView({ text }: { text: string }) {
   const lines = text.replace(/\r/g, "").split("\n");
@@ -52,7 +64,10 @@ export function MarkdownView({ text }: { text: string }) {
   while (i < lines.length) {
     const line = lines[i];
 
-    if (!line.trim()) { i++; continue; }
+    if (!line.trim()) {
+      i++;
+      continue;
+    }
 
     // ---- fenced block ----
     // Models sometimes wrap a markdown table in ``` fences. Rendering that as a
@@ -61,7 +76,10 @@ export function MarkdownView({ text }: { text: string }) {
     if (/^\s*```/.test(line)) {
       const body: string[] = [];
       i++;
-      while (i < lines.length && !/^\s*```/.test(lines[i])) { body.push(lines[i]); i++; }
+      while (i < lines.length && !/^\s*```/.test(lines[i])) {
+        body.push(lines[i]);
+        i++;
+      }
       i++; // closing fence
       const looksLikeTable = body.length > 1 && isTableRow(body[0]) && isDivider(body[1]);
       if (looksLikeTable) {
@@ -69,7 +87,10 @@ export function MarkdownView({ text }: { text: string }) {
         continue;
       }
       blocks.push(
-        <pre key={key++} className="overflow-x-auto rounded-lg border bg-muted/50 p-3 text-xs font-mono">
+        <pre
+          key={key++}
+          className="overflow-x-auto rounded-lg border bg-muted/50 p-3 text-xs font-mono"
+        >
           <code>{body.join("\n")}</code>
         </pre>,
       );
@@ -98,7 +119,10 @@ export function MarkdownView({ text }: { text: string }) {
             <thead className="bg-muted/60">
               <tr>
                 {header.map((h, hi) => (
-                  <th key={hi} className={`px-3 py-2 font-medium text-xs uppercase tracking-wider text-muted-foreground ${alignOf(rows[0]?.[hi] ?? "")}`}>
+                  <th
+                    key={hi}
+                    className={`px-3 py-2 font-medium text-xs uppercase tracking-wider text-muted-foreground ${alignOf(rows[0]?.[hi] ?? "")}`}
+                  >
                     {inline(h, `h${hi}`)}
                   </th>
                 ))}
@@ -108,7 +132,9 @@ export function MarkdownView({ text }: { text: string }) {
               {rows.map((r, ri) => (
                 <tr key={ri} className="border-t">
                   {header.map((_, ci) => (
-                    <td key={ci} className={`px-3 py-2 ${alignOf(r[ci] ?? "")}`}>{inline(r[ci] ?? "", `c${ri}-${ci}`)}</td>
+                    <td key={ci} className={`px-3 py-2 ${alignOf(r[ci] ?? "")}`}>
+                      {inline(r[ci] ?? "", `c${ri}-${ci}`)}
+                    </td>
                   ))}
                 </tr>
               ))}
@@ -143,7 +169,11 @@ export function MarkdownView({ text }: { text: string }) {
           items.push({ text: numbered[1], children: [] });
           i++;
           // Sub-bullets, and wrapped continuation lines, attach to this item.
-          while (i < lines.length && /^\s{2,}([-*•]\s+|\S)/.test(lines[i]) && !/^\s*\d+[.)]\s+/.test(lines[i])) {
+          while (
+            i < lines.length &&
+            /^\s{2,}([-*•]\s+|\S)/.test(lines[i]) &&
+            !/^\s*\d+[.)]\s+/.test(lines[i])
+          ) {
             items[items.length - 1].children.push(lines[i].replace(/^\s*[-*•]\s+/, "").trim());
             i++;
           }
@@ -156,7 +186,10 @@ export function MarkdownView({ text }: { text: string }) {
         if (!lines[i].trim()) {
           let j = i;
           while (j < lines.length && !lines[j].trim()) j++;
-          if (/^\s*\d+[.)]\s+/.test(lines[j] ?? "")) { i = j; continue; }
+          if (/^\s*\d+[.)]\s+/.test(lines[j] ?? "")) {
+            i = j;
+            continue;
+          }
         }
         break;
       }
@@ -167,7 +200,9 @@ export function MarkdownView({ text }: { text: string }) {
               {inline(it.text, `ol${key}-${ii}`)}
               {it.children.length > 0 && (
                 <ul className="list-[circle] pl-5 mt-1 space-y-0.5 marker:text-muted-foreground">
-                  {it.children.map((c, ci) => <li key={ci}>{inline(c, `oc${key}-${ii}-${ci}`)}</li>)}
+                  {it.children.map((c, ci) => (
+                    <li key={ci}>{inline(c, `oc${key}-${ii}-${ci}`)}</li>
+                  ))}
                 </ul>
               )}
             </li>
@@ -188,7 +223,9 @@ export function MarkdownView({ text }: { text: string }) {
       blocks.push(
         <ul key={key++} className="list-disc pl-5 space-y-1 marker:text-muted-foreground">
           {items.map((it, ii) => (
-            <li key={ii} className={it.depth ? "ml-4 list-[circle]" : ""}>{inline(it.text, `ul${key}-${ii}`)}</li>
+            <li key={ii} className={it.depth ? "ml-4 list-[circle]" : ""}>
+              {inline(it.text, `ul${key}-${ii}`)}
+            </li>
           ))}
         </ul>,
       );

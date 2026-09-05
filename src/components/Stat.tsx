@@ -40,13 +40,22 @@ export function StatCard({
   const body = (
     <div className="flex items-start justify-between gap-2 sm:gap-3">
       <div className="min-w-0">
-        <div className="text-[11px] sm:text-xs uppercase tracking-wider text-muted-foreground font-medium">{label}</div>
-        <div className="font-display text-xl sm:text-2xl md:text-3xl font-bold mt-1.5 sm:mt-2 break-words">{value}</div>
+        <div className="text-[11px] sm:text-xs uppercase tracking-wider text-muted-foreground font-medium">
+          {label}
+        </div>
+        <div className="font-display text-xl sm:text-2xl md:text-3xl font-bold mt-1.5 sm:mt-2 break-words">
+          {value}
+        </div>
         {sub && <div className="text-xs text-muted-foreground mt-1.5">{sub}</div>}
       </div>
       <div className="flex flex-col items-end gap-1.5 shrink-0">
         {icon && (
-          <div className={cn("h-9 w-9 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center", toneStyles[tone])}>
+          <div
+            className={cn(
+              "h-9 w-9 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center",
+              toneStyles[tone],
+            )}
+          >
             {icon}
           </div>
         )}
@@ -132,7 +141,12 @@ export function StatusPill({ status }: { status: string }) {
     "By shop": "bg-muted text-muted-foreground border-border",
   };
   return (
-    <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border", map[status] ?? "bg-muted text-muted-foreground border-border")}>
+    <span
+      className={cn(
+        "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border",
+        map[status] ?? "bg-muted text-muted-foreground border-border",
+      )}
+    >
       {status}
     </span>
   );

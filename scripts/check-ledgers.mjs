@@ -30,20 +30,30 @@ const returns = [];
 const data = { sales, customerPayments, purchases, supplierPayments, returns, setOffs };
 
 let failures = 0;
-const fail = (msg) => { console.error("  FAIL", msg); failures++; };
+const fail = (msg) => {
+  console.error("  FAIL", msg);
+  failures++;
+};
 
 /* ------------------------------------------------------------ day sessions */
 
 let checked = 0;
-daySessions.filter((s) => s.status === "closed").forEach((session) => {
-  const cash = dayBook.summarizeSession(session, {
-    sales, expenses, returns, customerPayments, supplierPayments, purchases,
+daySessions
+  .filter((s) => s.status === "closed")
+  .forEach((session) => {
+    const cash = dayBook.summarizeSession(session, {
+      sales,
+      expenses,
+      returns,
+      customerPayments,
+      supplierPayments,
+      purchases,
+    });
+    checked++;
+    if (cash.variance !== 0) {
+      fail(`${session.shopId} ${session.businessDate}: variance ${cash.variance}`);
+    }
   });
-  checked++;
-  if (cash.variance !== 0) {
-    fail(`${session.shopId} ${session.businessDate}: variance ${cash.variance}`);
-  }
-});
 console.log(`day sessions: ${checked} closed days, all balancing to zero variance`);
 
 /* ---------------------------------------------------------------- customers */
@@ -58,7 +68,7 @@ seed.CUSTOMERS.forEach((c) => {
   }
   console.log(
     `  ${c.name.padEnd(24)} owes ${String(balance.outstanding).padStart(8)}` +
-    `  advance ${String(balance.advance).padStart(8)}  setOff ${String(balance.setOff).padStart(7)}`,
+      `  advance ${String(balance.advance).padStart(8)}  setOff ${String(balance.setOff).padStart(7)}`,
   );
 });
 
@@ -74,7 +84,7 @@ seed.SUPPLIERS.forEach((s) => {
   }
   console.log(
     `  ${s.name.padEnd(24)} owed ${String(balance.outstanding).padStart(8)}` +
-    `  advance ${String(balance.advance).padStart(8)}  open bills ${balance.unpaidBills}`,
+      `  advance ${String(balance.advance).padStart(8)}  open bills ${balance.unpaidBills}`,
   );
 });
 
@@ -87,7 +97,7 @@ parties.forEach((p) => {
   }
   console.log(
     `  ${p.name.padEnd(24)} receivable ${String(p.receivable).padStart(8)}` +
-    `  payable ${String(p.payable).padStart(8)}  can cancel ${String(p.settleable).padStart(8)}`,
+      `  payable ${String(p.payable).padStart(8)}  can cancel ${String(p.settleable).padStart(8)}`,
   );
 });
 
@@ -98,7 +108,9 @@ console.log(`open bills: ${open.length}, ${open.filter((b) => b.overdueDays > 0)
 open.forEach((b) => {
   if (b.balance <= 0) fail(`bill ${b.purchase.billNo} has no balance but is listed as open`);
   if (b.paid + b.balance !== b.purchase.total) {
-    fail(`bill ${b.purchase.billNo}: paid ${b.paid} + owed ${b.balance} != total ${b.purchase.total}`);
+    fail(
+      `bill ${b.purchase.billNo}: paid ${b.paid} + owed ${b.balance} != total ${b.purchase.total}`,
+    );
   }
 });
 

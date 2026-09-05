@@ -1,14 +1,34 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
-  useStore, formatRs, todayISO, customerBalance, openSessionFor, shortDay,
-  type Customer, type CustomerPayment, type SettledMethod,
+  useStore,
+  formatRs,
+  todayISO,
+  customerBalance,
+  openSessionFor,
+  shortDay,
+  type Customer,
+  type CustomerPayment,
+  type SettledMethod,
 } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { PaymentPicker } from "@/components/PaymentPicker";
 import { HandCoins } from "lucide-react";
 
@@ -43,8 +63,16 @@ export function CustomerPaymentDialog({
   onClose: () => void;
 }) {
   const {
-    user, shops, sales, customerPayments, setOffs, adjustments,
-    daySessions, settings, addCustomerPayment, updateCustomerPayment,
+    user,
+    shops,
+    sales,
+    customerPayments,
+    setOffs,
+    adjustments,
+    daySessions,
+    settings,
+    addCustomerPayment,
+    updateCustomerPayment,
   } = useStore();
 
   const isAdmin = user?.role === "admin";
@@ -79,7 +107,6 @@ export function CustomerPaymentDialog({
     setShopId(user?.shopId ?? shops[0]?.id ?? "");
     // `balance` is recomputed every render; keying off the customer id is what
     // actually decides whether this is a different form.
-
   }, [customer?.id, editing?.id]);
 
   if (!customer) return null;
@@ -97,8 +124,14 @@ export function CustomerPaymentDialog({
   const session = shopId ? openSessionFor(daySessions, shopId) : undefined;
 
   const save = () => {
-    if (amount <= 0) { toast.error("Enter an amount"); return; }
-    if (!shopId) { toast.error("Pick which shop received the money"); return; }
+    if (amount <= 0) {
+      toast.error("Enter an amount");
+      return;
+    }
+    if (!shopId) {
+      toast.error("Pick which shop received the money");
+      return;
+    }
 
     if (editing) {
       updateCustomerPayment({ ...editing, amount, method, shopId, note: note.trim() });
@@ -157,7 +190,11 @@ export function CustomerPaymentDialog({
                 <Button size="sm" variant="outline" onClick={() => setAmount(ceiling)}>
                   Pay all — {money(ceiling)}
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => setAmount(Math.round(ceiling / 2))}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setAmount(Math.round(ceiling / 2))}
+                >
                   Half
                 </Button>
               </div>
@@ -216,10 +253,14 @@ export function CustomerPaymentDialog({
             <Label>Received at</Label>
             {isAdmin ? (
               <Select value={shopId} onValueChange={setShopId}>
-                <SelectTrigger><SelectValue placeholder="Which shop took the money?" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Which shop took the money?" />
+                </SelectTrigger>
                 <SelectContent>
                   {shops.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -250,7 +291,9 @@ export function CustomerPaymentDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
           <Button onClick={save}>
             <HandCoins className="h-4 w-4 mr-1.5" />
             {editing ? "Save correction" : "Record payment"}

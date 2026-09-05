@@ -18,8 +18,21 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   Sunrise,
   Moon,
@@ -48,16 +61,39 @@ export const Route = createFileRoute("/app/daybook")({ component: DayBookPage })
  * words rather than leaving as a dash the reader has to interpret.
  */
 const at = (iso?: string) =>
-  iso ? new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "Still open";
+  iso
+    ? new Date(iso).toLocaleString(undefined, {
+        day: "numeric",
+        month: "short",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "Still open";
 
 const timeOnly = (iso?: string) =>
-  iso ? new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "still open";
+  iso
+    ? new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+    : "still open";
 
 function DayBookPage() {
   const {
-    user, shops, users, sales, expenses, returns, customerPayments, daySessions,
-    supplierPayments, purchases,
-    openDay, closeDay, updateDaySession, reopenDay, deleteDaySession, settings, pendingMigration,
+    user,
+    shops,
+    users,
+    sales,
+    expenses,
+    returns,
+    customerPayments,
+    daySessions,
+    supplierPayments,
+    purchases,
+    openDay,
+    closeDay,
+    updateDaySession,
+    reopenDay,
+    deleteDaySession,
+    settings,
+    pendingMigration,
   } = useStore();
   const isAdmin = user?.role === "admin";
 
@@ -70,7 +106,7 @@ function DayBookPage() {
 
   // Admins pick a shop; shopkeepers only ever see their own.
   const [shopPick, setShopPick] = useState<string>(user?.shopId ?? shops[0]?.id ?? "");
-  const shopId = isAdmin ? shopPick : user?.shopId ?? "";
+  const shopId = isAdmin ? shopPick : (user?.shopId ?? "");
   const shop = shops.find((s) => s.id === shopId);
 
   const [openDialog, setOpenDialog] = useState(false);
@@ -81,7 +117,10 @@ function DayBookPage() {
   const [notes, setNotes] = useState("");
 
   const active = openSessionFor(daySessions, shopId);
-  const history = useMemo(() => (shopId ? sessionsFor(daySessions, shopId) : []), [daySessions, shopId]);
+  const history = useMemo(
+    () => (shopId ? sessionsFor(daySessions, shopId) : []),
+    [daySessions, shopId],
+  );
 
   // Supplier payments and bills belong here because cash also leaves the till
   // going the other way: a shopkeeper who pays a delivery man out of the drawer
@@ -98,15 +137,27 @@ function DayBookPage() {
       daySessions
         .filter((s) => s.status === "closed")
         .sort((a, b) => b.businessDate.localeCompare(a.businessDate))
-        .map((s) => ({ session: s, cash: summarizeSession(s, data), shop: shops.find((x) => x.id === s.shopId) })),
+        .map((s) => ({
+          session: s,
+          cash: summarizeSession(s, data),
+          shop: shops.find((x) => x.id === s.shopId),
+        })),
     [daySessions, data, shops],
   );
 
   const startDay = () => {
-    if (!shopId) { toast.error("Pick a shop first"); return; }
+    if (!shopId) {
+      toast.error("Pick a shop first");
+      return;
+    }
     const created = openDay({ shopId, openingCash, openedBy: user?.name ?? "Unknown" });
-    if (!created) { toast.error("A day is already open for this shop"); return; }
-    toast.success(`Day started for ${shop?.name} — opening cash ${formatRs(openingCash, settings.currency)}`);
+    if (!created) {
+      toast.error("A day is already open for this shop");
+      return;
+    }
+    toast.success(
+      `Day started for ${shop?.name} — opening cash ${formatRs(openingCash, settings.currency)}`,
+    );
     setOpenDialog(false);
   };
 
@@ -125,8 +176,14 @@ function DayBookPage() {
 
   const endDay = () => {
     if (!active || !live) return;
-    if (counted < 0 || taken < 0) { toast.error("Cash amounts can't be negative"); return; }
-    if (taken > counted) { toast.error("The owner can't take more than was counted"); return; }
+    if (counted < 0 || taken < 0) {
+      toast.error("Cash amounts can't be negative");
+      return;
+    }
+    if (taken > counted) {
+      toast.error("The owner can't take more than was counted");
+      return;
+    }
     closeDay({
       sessionId: active.id,
       countedCash: counted,
@@ -225,23 +282,70 @@ function DayBookPage() {
   const notStarted = shopStatus.filter((s) => !s.todays);
 
   const exportSessions = () => {
-    const rows = isAdmin ? allClosed : history.filter((s) => s.status === "closed").map((s) => ({
-      session: s, cash: summarizeSession(s, data), shop,
-    }));
-    if (rows.length === 0) { toast.error("No closed days to export"); return; }
+    const rows = isAdmin
+      ? allClosed
+      : history
+          .filter((s) => s.status === "closed")
+          .map((s) => ({
+            session: s,
+            cash: summarizeSession(s, data),
+            shop,
+          }));
+    if (rows.length === 0) {
+      toast.error("No closed days to export");
+      return;
+    }
     downloadCsv(
       `day-book-${new Date().toISOString().slice(0, 10)}.csv`,
-      ["Trading day", "Shop", "Opened", "Closed", "Opening cash", "Cash sales", "Card sales", "Online sales",
-        "Credit sales", "Collected on credit", "Total sales", "Invoices", "Refunds", "Expenses",
-        "Bills paid in cash", "Paid to suppliers", "Bought on account",
-        "Expected cash", "Counted cash", "Variance", "Owner took", "Left in shop", ...(isAdmin ? ["Profit"] : [])],
+      [
+        "Trading day",
+        "Shop",
+        "Opened",
+        "Closed",
+        "Opening cash",
+        "Cash sales",
+        "Card sales",
+        "Online sales",
+        "Credit sales",
+        "Collected on credit",
+        "Total sales",
+        "Invoices",
+        "Refunds",
+        "Expenses",
+        "Bills paid in cash",
+        "Paid to suppliers",
+        "Bought on account",
+        "Expected cash",
+        "Counted cash",
+        "Variance",
+        "Owner took",
+        "Left in shop",
+        ...(isAdmin ? ["Profit"] : []),
+      ],
       rows.map(({ session: s, cash: c, shop: sh }) => [
-        s.businessDate, sh?.name ?? "", at(s.openedAt), at(s.closedAt),
-        c.openingCash, c.cashSales, c.cardSales, c.onlineSales, c.creditSales, c.creditCollected,
-        c.totalSales, c.invoices, c.refunds, c.drawerExpenses,
-        c.billCashPaid, c.supplierCashPaid, c.creditPurchases,
-        c.expectedCash, c.countedCash ?? "", c.variance ?? "",
-        c.cashTakenByOwner, c.cashLeftInShop, ...(isAdmin ? [c.profit] : []),
+        s.businessDate,
+        sh?.name ?? "",
+        at(s.openedAt),
+        at(s.closedAt),
+        c.openingCash,
+        c.cashSales,
+        c.cardSales,
+        c.onlineSales,
+        c.creditSales,
+        c.creditCollected,
+        c.totalSales,
+        c.invoices,
+        c.refunds,
+        c.drawerExpenses,
+        c.billCashPaid,
+        c.supplierCashPaid,
+        c.creditPurchases,
+        c.expectedCash,
+        c.countedCash ?? "",
+        c.variance ?? "",
+        c.cashTakenByOwner,
+        c.cashLeftInShop,
+        ...(isAdmin ? [c.profit] : []),
       ]),
     );
     toast.success("Day book exported");
@@ -254,15 +358,25 @@ function DayBookPage() {
         subtitle="Start the day when you open, end it when you lock up — even if that's after midnight. Sales count towards the day you opened."
         actions={
           <>
-            <Button variant="outline" onClick={exportSessions}><Download className="h-4 w-4 mr-1.5" />Export</Button>
+            <Button variant="outline" onClick={exportSessions}>
+              <Download className="h-4 w-4 mr-1.5" />
+              Export
+            </Button>
             {active ? (
-              <Button onClick={beginClose} disabled={cannotSave}><Moon className="h-4 w-4 mr-1.5" />End day</Button>
+              <Button onClick={beginClose} disabled={cannotSave}>
+                <Moon className="h-4 w-4 mr-1.5" />
+                End day
+              </Button>
             ) : (
               <Button
-                onClick={() => { setOpeningCash(carryForwardCash(daySessions, shopId)); setOpenDialog(true); }}
+                onClick={() => {
+                  setOpeningCash(carryForwardCash(daySessions, shopId));
+                  setOpenDialog(true);
+                }}
                 disabled={!shopId || cannotSave}
               >
-                <Sunrise className="h-4 w-4 mr-1.5" />Start day
+                <Sunrise className="h-4 w-4 mr-1.5" />
+                Start day
               </Button>
             )}
           </>
@@ -273,10 +387,12 @@ function DayBookPage() {
         <Card className="p-4 mb-4 border-warning/40 bg-warning/10 flex items-start gap-3">
           <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-warning-strong" />
           <div className="text-sm">
-            <div className="font-medium text-warning-strong">Day book is read-only until the database is updated</div>
+            <div className="font-medium text-warning-strong">
+              Day book is read-only until the database is updated
+            </div>
             <p className="text-muted-foreground mt-1">
-              Starting a day now would keep it in this browser only and lose it — along with the cash
-              count — the moment the page reloads. Run{" "}
+              Starting a day now would keep it in this browser only and lose it — along with the
+              cash count — the moment the page reloads. Run{" "}
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-xs break-all">
                 supabase/migrations/002_day_book_and_wholesale.sql
               </code>{" "}
@@ -291,14 +407,21 @@ function DayBookPage() {
           <div className="space-y-1.5">
             <Label className="text-xs">Shop</Label>
             <Select value={shopPick} onValueChange={setShopPick}>
-              <SelectTrigger className="w-full sm:w-56"><SelectValue placeholder="Pick a shop" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-56">
+                <SelectValue placeholder="Pick a shop" />
+              </SelectTrigger>
               <SelectContent>
-                {shops.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                {shops.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
           <p className="text-xs text-muted-foreground sm:ml-auto">
-            You can start or end a day on a shop's behalf — useful when a shopkeeper forgets to close.
+            You can start or end a day on a shop's behalf — useful when a shopkeeper forgets to
+            close.
           </p>
         </Card>
       )}
@@ -327,7 +450,10 @@ function DayBookPage() {
           </div>
           <ul className="divide-y">
             {shopStatus.map(({ shop: sh, open, todays, last, keepers }) => (
-              <li key={sh.id} className="px-4 sm:px-5 py-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <li
+                key={sh.id}
+                className="px-4 sm:px-5 py-3 flex flex-wrap items-center gap-x-3 gap-y-2"
+              >
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                   {open ? (
                     <CheckCircle2 className="h-4 w-4 shrink-0 text-success-strong" />
@@ -353,7 +479,9 @@ function DayBookPage() {
                 {/* Who to chase, and the number to chase them on. */}
                 {!todays && (
                   <div className="text-xs text-muted-foreground min-w-0">
-                    {keepers.length > 0 ? keepers.map((k) => k.name).join(", ") : "No shopkeeper assigned"}
+                    {keepers.length > 0
+                      ? keepers.map((k) => k.name).join(", ")
+                      : "No shopkeeper assigned"}
                     {sh.phone && (
                       <a
                         href={`tel:${sh.phone}`}
@@ -377,7 +505,8 @@ function DayBookPage() {
                       setOpenDialog(true);
                     }}
                   >
-                    <Sunrise className="h-3.5 w-3.5 mr-1.5" />Start for them
+                    <Sunrise className="h-3.5 w-3.5 mr-1.5" />
+                    Start for them
                   </Button>
                 )}
               </li>
@@ -396,9 +525,7 @@ function DayBookPage() {
                   <Sunrise className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="font-semibold">
-                    Day open · {shortDay(active.businessDate)}
-                  </div>
+                  <div className="font-semibold">Day open · {shortDay(active.businessDate)}</div>
                   <div className="text-xs text-muted-foreground">
                     {shop?.name} · opened {timeOnly(active.openedAt)} by {active.openedBy}
                   </div>
@@ -407,22 +534,49 @@ function DayBookPage() {
               <div className="flex items-center gap-3">
                 <div className="text-right">
                   <div className="text-xs text-muted-foreground">Sales so far</div>
-                  <div className="font-display text-2xl font-bold">{formatRs(live.totalSales, settings.currency)}</div>
+                  <div className="font-display text-2xl font-bold">
+                    {formatRs(live.totalSales, settings.currency)}
+                  </div>
                 </div>
                 {/* The opening float is typed from a drawer count at 8am; getting
                     it wrong throws the evening's variance out by the same amount,
                     so it stays correctable while the day is still running. */}
-                <Button variant="outline" size="sm" disabled={cannotSave} onClick={() => beginEdit(active)}>
-                  <Pencil className="h-3.5 w-3.5 mr-1.5" />Correct
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={cannotSave}
+                  onClick={() => beginEdit(active)}
+                >
+                  <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                  Correct
                 </Button>
               </div>
             </div>
           </Card>
 
           <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            <StatCard label="Cash sales" to="/app/sales" value={formatRs(live.cashSales, settings.currency)} sub={`${live.invoices} invoices total`} icon={<Banknote className="h-5 w-5" />} tone="success" />
-            <StatCard label="Card sales" to="/app/sales" value={formatRs(live.cardSales, settings.currency)} icon={<CreditCard className="h-5 w-5" />} tone="primary" />
-            <StatCard label="Online sales" to="/app/sales" value={formatRs(live.onlineSales, settings.currency)} icon={<Smartphone className="h-5 w-5" />} tone="accent" />
+            <StatCard
+              label="Cash sales"
+              to="/app/sales"
+              value={formatRs(live.cashSales, settings.currency)}
+              sub={`${live.invoices} invoices total`}
+              icon={<Banknote className="h-5 w-5" />}
+              tone="success"
+            />
+            <StatCard
+              label="Card sales"
+              to="/app/sales"
+              value={formatRs(live.cardSales, settings.currency)}
+              icon={<CreditCard className="h-5 w-5" />}
+              tone="primary"
+            />
+            <StatCard
+              label="Online sales"
+              to="/app/sales"
+              value={formatRs(live.onlineSales, settings.currency)}
+              icon={<Smartphone className="h-5 w-5" />}
+              tone="accent"
+            />
             <StatCard
               label="On credit"
               to="/app/ledger"
@@ -431,25 +585,65 @@ function DayBookPage() {
               icon={<HandCoins className="h-5 w-5" />}
               tone="warning"
             />
-            <StatCard label="Cash in drawer" value={formatRs(live.expectedCash, settings.currency)} sub="expected right now" icon={<Wallet className="h-5 w-5" />} tone="warning" />
+            <StatCard
+              label="Cash in drawer"
+              value={formatRs(live.expectedCash, settings.currency)}
+              sub="expected right now"
+              icon={<Wallet className="h-5 w-5" />}
+              tone="warning"
+            />
           </div>
 
           <Card className="mt-4 p-4 sm:p-5">
             <h3 className="font-semibold mb-3">How the drawer got here</h3>
             <dl className="space-y-2 text-sm max-w-md">
-              <Line label="Opening float (left last night)" value={live.openingCash} currency={settings.currency} />
-              <Line label="Cash taken from customers" value={live.cashSales} currency={settings.currency} sign="+" />
-              <Line label="Cash collected on old credit" value={live.creditCollected} currency={settings.currency} sign="+" />
-              <Line label="Refunds paid out" value={-live.refunds} currency={settings.currency} sign="−" />
-              <Line label="Expenses paid from the till" value={-live.drawerExpenses} currency={settings.currency} sign="−" />
+              <Line
+                label="Opening float (left last night)"
+                value={live.openingCash}
+                currency={settings.currency}
+              />
+              <Line
+                label="Cash taken from customers"
+                value={live.cashSales}
+                currency={settings.currency}
+                sign="+"
+              />
+              <Line
+                label="Cash collected on old credit"
+                value={live.creditCollected}
+                currency={settings.currency}
+                sign="+"
+              />
+              <Line
+                label="Refunds paid out"
+                value={-live.refunds}
+                currency={settings.currency}
+                sign="−"
+              />
+              <Line
+                label="Expenses paid from the till"
+                value={-live.drawerExpenses}
+                currency={settings.currency}
+                sign="−"
+              />
               {/* Cash also leaves the drawer going the other way. A shopkeeper
                   who pays a delivery man from the till has less to count that
                   night, and a count that ignores it always reads short. */}
               {live.billCashPaid > 0 && (
-                <Line label="Bills paid in cash on delivery" value={-live.billCashPaid} currency={settings.currency} sign="−" />
+                <Line
+                  label="Bills paid in cash on delivery"
+                  value={-live.billCashPaid}
+                  currency={settings.currency}
+                  sign="−"
+                />
               )}
               {live.supplierCashPaid > 0 && (
-                <Line label="Cash paid to suppliers" value={-live.supplierCashPaid} currency={settings.currency} sign="−" />
+                <Line
+                  label="Cash paid to suppliers"
+                  value={-live.supplierCashPaid}
+                  currency={settings.currency}
+                  sign="−"
+                />
               )}
               <div className="flex justify-between border-t pt-2 font-semibold">
                 <dt>Cash that should be in the drawer</dt>
@@ -457,15 +651,16 @@ function DayBookPage() {
               </div>
             </dl>
             <p className="mt-3 text-xs text-muted-foreground">
-              Card and online takings never touch the drawer, so they are excluded here — they are counted in
-              sales, not in cash. Credit sales are excluded for the same reason: the goods went out but no money
-              came in, so the till is not short by {formatRs(live.creditSales, settings.currency)} — it is owed.
+              Card and online takings never touch the drawer, so they are excluded here — they are
+              counted in sales, not in cash. Credit sales are excluded for the same reason: the
+              goods went out but no money came in, so the till is not short by{" "}
+              {formatRs(live.creditSales, settings.currency)} — it is owed.
               {live.creditPurchases > 0 && (
                 <>
                   {" "}
                   Stock bought on account today works the same way in reverse:{" "}
-                  {formatRs(live.creditPurchases, settings.currency)} arrived without leaving the drawer, so it
-                  is owed to the supplier rather than missing from the till.
+                  {formatRs(live.creditPurchases, settings.currency)} arrived without leaving the
+                  drawer, so it is owed to the supplier rather than missing from the till.
                 </>
               )}
             </p>
@@ -478,16 +673,20 @@ function DayBookPage() {
           </div>
           <h3 className="font-semibold">No day is open{shop ? ` at ${shop.name}` : ""}</h3>
           <p className="text-sm text-muted-foreground mt-1.5 max-w-md mx-auto">
-            Start the day to begin selling. Everything rung up afterwards is booked to today,
-            right up until you end the day — even past midnight.
+            Start the day to begin selling. Everything rung up afterwards is booked to today, right
+            up until you end the day — even past midnight.
           </p>
           {shopId && (
             <Button
               className="mt-5"
               disabled={cannotSave}
-              onClick={() => { setOpeningCash(carryForwardCash(daySessions, shopId)); setOpenDialog(true); }}
+              onClick={() => {
+                setOpeningCash(carryForwardCash(daySessions, shopId));
+                setOpenDialog(true);
+              }}
             >
-              <Sunrise className="h-4 w-4 mr-1.5" />Start day
+              <Sunrise className="h-4 w-4 mr-1.5" />
+              Start day
             </Button>
           )}
         </Card>
@@ -496,7 +695,9 @@ function DayBookPage() {
       {/* -------------------------------------------------- past days */}
       <Card className="mt-6 overflow-hidden">
         <div className="px-4 sm:px-5 py-3.5 border-b flex items-center justify-between">
-          <h3 className="font-semibold">{isAdmin ? "Closed days — all shops" : "Your closed days"}</h3>
+          <h3 className="font-semibold">
+            {isAdmin ? "Closed days — all shops" : "Your closed days"}
+          </h3>
           <span className="text-xs text-muted-foreground">
             {(isAdmin ? allClosed : history.filter((s) => s.status === "closed")).length} days
           </span>
@@ -525,8 +726,8 @@ function DayBookPage() {
           <DialogHeader>
             <DialogTitle>Start the day{shop ? ` at ${shop.name}` : ""}</DialogTitle>
             <DialogDescription>
-              Count what's already in the drawer before you open. It's pre-filled with what was
-              left behind when the last day was closed.
+              Count what's already in the drawer before you open. It's pre-filled with what was left
+              behind when the last day was closed.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
@@ -540,12 +741,18 @@ function DayBookPage() {
               onChange={(e) => setOpeningCash(Math.max(0, Number(e.target.value) || 0))}
             />
             <p className="text-xs text-muted-foreground">
-              Carried forward from the last close: {formatRs(carryForwardCash(daySessions, shopId), settings.currency)}
+              Carried forward from the last close:{" "}
+              {formatRs(carryForwardCash(daySessions, shopId), settings.currency)}
             </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenDialog(false)}>Cancel</Button>
-            <Button onClick={startDay}><Sunrise className="h-4 w-4 mr-1.5" />Start day</Button>
+            <Button variant="outline" onClick={() => setOpenDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={startDay}>
+              <Sunrise className="h-4 w-4 mr-1.5" />
+              Start day
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -565,15 +772,40 @@ function DayBookPage() {
             <>
               <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-sm">
                 <Line label="Opening float" value={live.openingCash} currency={settings.currency} />
-                <Line label="Cash sales" value={live.cashSales} currency={settings.currency} sign="+" />
-                <Line label="Collected on credit" value={live.creditCollected} currency={settings.currency} sign="+" />
+                <Line
+                  label="Cash sales"
+                  value={live.cashSales}
+                  currency={settings.currency}
+                  sign="+"
+                />
+                <Line
+                  label="Collected on credit"
+                  value={live.creditCollected}
+                  currency={settings.currency}
+                  sign="+"
+                />
                 <Line label="Refunds" value={-live.refunds} currency={settings.currency} sign="−" />
-                <Line label="Till expenses" value={-live.drawerExpenses} currency={settings.currency} sign="−" />
+                <Line
+                  label="Till expenses"
+                  value={-live.drawerExpenses}
+                  currency={settings.currency}
+                  sign="−"
+                />
                 {live.billCashPaid > 0 && (
-                  <Line label="Bills paid on delivery" value={-live.billCashPaid} currency={settings.currency} sign="−" />
+                  <Line
+                    label="Bills paid on delivery"
+                    value={-live.billCashPaid}
+                    currency={settings.currency}
+                    sign="−"
+                  />
                 )}
                 {live.supplierCashPaid > 0 && (
-                  <Line label="Paid to suppliers" value={-live.supplierCashPaid} currency={settings.currency} sign="−" />
+                  <Line
+                    label="Paid to suppliers"
+                    value={-live.supplierCashPaid}
+                    currency={settings.currency}
+                    sign="−"
+                  />
                 )}
                 <div className="flex justify-between border-t pt-2 font-semibold">
                   <span>Expected in drawer</span>
@@ -586,8 +818,8 @@ function DayBookPage() {
                 </div>
                 {live.creditSales > 0 && (
                   <div className="text-xs text-warning-strong border-t border-warning/30 pt-2">
-                    {formatRs(live.creditSales, settings.currency)} sold on credit today — not expected in the
-                    drawer, it's owed on account.
+                    {formatRs(live.creditSales, settings.currency)} sold on credit today — not
+                    expected in the drawer, it's owed on account.
                   </div>
                 )}
               </div>
@@ -602,9 +834,13 @@ function DayBookPage() {
                   onChange={(e) => setCounted(Math.max(0, Number(e.target.value) || 0))}
                 />
                 {variance !== 0 && (
-                  <div className={`flex items-start gap-1.5 text-xs rounded-md p-2 ${
-                    variance < 0 ? "bg-destructive/10 text-destructive" : "bg-warning/15 text-warning-strong"
-                  }`}>
+                  <div
+                    className={`flex items-start gap-1.5 text-xs rounded-md p-2 ${
+                      variance < 0
+                        ? "bg-destructive/10 text-destructive"
+                        : "bg-warning/15 text-warning-strong"
+                    }`}
+                  >
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                     <span>
                       {variance < 0 ? "Short by " : "Over by "}
@@ -639,7 +875,9 @@ function DayBookPage() {
               </div>
 
               {taken > counted && (
-                <p className="text-xs text-destructive">The owner can't take more than was counted.</p>
+                <p className="text-xs text-destructive">
+                  The owner can't take more than was counted.
+                </p>
               )}
 
               <div className="space-y-1.5">
@@ -654,9 +892,12 @@ function DayBookPage() {
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCloseDialog(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setCloseDialog(false)}>
+              Cancel
+            </Button>
             <Button onClick={endDay} disabled={taken > counted}>
-              <Moon className="h-4 w-4 mr-1.5" />Close the day
+              <Moon className="h-4 w-4 mr-1.5" />
+              Close the day
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -687,7 +928,12 @@ function DayBookPage() {
                   inputMode="decimal"
                   min={0}
                   value={editForm.openingCash}
-                  onChange={(e) => setEditForm({ ...editForm, openingCash: Math.max(0, Number(e.target.value) || 0) })}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      openingCash: Math.max(0, Number(e.target.value) || 0),
+                    })
+                  }
                 />
               </div>
 
@@ -701,7 +947,12 @@ function DayBookPage() {
                         inputMode="decimal"
                         min={0}
                         value={editForm.countedCash}
-                        onChange={(e) => setEditForm({ ...editForm, countedCash: Math.max(0, Number(e.target.value) || 0) })}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            countedCash: Math.max(0, Number(e.target.value) || 0),
+                          })
+                        }
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -711,16 +962,26 @@ function DayBookPage() {
                         inputMode="decimal"
                         min={0}
                         value={editForm.taken}
-                        onChange={(e) => setEditForm({ ...editForm, taken: Math.max(0, Number(e.target.value) || 0) })}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            taken: Math.max(0, Number(e.target.value) || 0),
+                          })
+                        }
                       />
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground -mt-1">
-                    {formatRs(Math.max(0, editForm.countedCash - editForm.taken), settings.currency)} stays
-                    behind as the next day's opening float.
+                    {formatRs(
+                      Math.max(0, editForm.countedCash - editForm.taken),
+                      settings.currency,
+                    )}{" "}
+                    stays behind as the next day's opening float.
                   </p>
                   {editForm.taken > editForm.countedCash && (
-                    <p className="text-xs text-destructive">The owner can't take more than was counted.</p>
+                    <p className="text-xs text-destructive">
+                      The owner can't take more than was counted.
+                    </p>
                   )}
                 </>
               )}
@@ -737,8 +998,13 @@ function DayBookPage() {
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
-            <Button onClick={saveEdit} disabled={editForm.taken > editForm.countedCash && editing?.status === "closed"}>
+            <Button variant="outline" onClick={() => setEditing(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={saveEdit}
+              disabled={editForm.taken > editForm.countedCash && editing?.status === "closed"}
+            >
               Save correction
             </Button>
           </DialogFooter>
@@ -749,7 +1015,17 @@ function DayBookPage() {
 }
 
 /** One labelled money row in the drawer breakdown. */
-function Line({ label, value, currency, sign }: { label: string; value: number; currency: string; sign?: "+" | "−" }) {
+function Line({
+  label,
+  value,
+  currency,
+  sign,
+}: {
+  label: string;
+  value: number;
+  currency: string;
+  sign?: "+" | "−";
+}) {
   return (
     <div className="flex justify-between gap-3">
       <dt className="text-muted-foreground">{label}</dt>
@@ -761,7 +1037,11 @@ function Line({ label, value, currency, sign }: { label: string; value: number; 
   );
 }
 
-type ClosedRow = { session: DaySession; cash: ReturnType<typeof summarizeSession>; shop?: { name: string } };
+type ClosedRow = {
+  session: DaySession;
+  cash: ReturnType<typeof summarizeSession>;
+  shop?: { name: string };
+};
 
 function ClosedDays({
   rows,
@@ -783,7 +1063,11 @@ function ClosedDays({
   onDelete: (s: DaySession) => void;
 }) {
   const varianceTone = (v: number | null) =>
-    v === null || v === 0 ? "text-muted-foreground" : v < 0 ? "text-destructive" : "text-warning-strong";
+    v === null || v === 0
+      ? "text-muted-foreground"
+      : v < 0
+        ? "text-destructive"
+        : "text-warning-strong";
 
   /**
    * The three ways a closed day gets fixed, shared by the card and table layouts
@@ -809,7 +1093,12 @@ function ClosedDays({
         disabled={disabled}
         onConfirm={() => onReopen(s)}
         trigger={
-          <Button size="sm" variant={compact ? "ghost" : "outline"} disabled={disabled} aria-label={compact ? "Re-open this day" : undefined}>
+          <Button
+            size="sm"
+            variant={compact ? "ghost" : "outline"}
+            disabled={disabled}
+            aria-label={compact ? "Re-open this day" : undefined}
+          >
             <RotateCcw className={compact ? "h-3.5 w-3.5" : "h-3.5 w-3.5 mr-1.5"} />
             {!compact && "Re-open"}
           </Button>
@@ -861,9 +1150,21 @@ function ClosedDays({
               { label: "Cash", value: formatRs(c.cashSales, currency) },
               { label: "Card", value: formatRs(c.cardSales, currency) },
               { label: "Online", value: formatRs(c.onlineSales, currency) },
-              { label: "Owner took", value: formatRs(c.cashTakenByOwner, currency), className: "font-medium" },
+              {
+                label: "Owner took",
+                value: formatRs(c.cashTakenByOwner, currency),
+                className: "font-medium",
+              },
               { label: "Left in shop", value: formatRs(c.cashLeftInShop, currency) },
-              ...(showProfit ? [{ label: "Profit", value: formatRs(c.profit, currency), className: "text-success-strong" }] : []),
+              ...(showProfit
+                ? [
+                    {
+                      label: "Profit",
+                      value: formatRs(c.profit, currency),
+                      className: "text-success-strong",
+                    },
+                  ]
+                : []),
             ]}
             actions={actions(s, false)}
           />
@@ -892,25 +1193,47 @@ function ClosedDays({
           <tbody>
             {rows.map(({ session: s, cash: c, shop }) => (
               <tr key={s.id} className="border-t hover:bg-muted/40">
-                <td className="px-4 py-3 font-medium whitespace-nowrap">{shortDay(s.businessDate)}</td>
-                {showShop && <td className="px-4 py-3 text-muted-foreground">{shop?.name ?? "Unknown shop"}</td>}
+                <td className="px-4 py-3 font-medium whitespace-nowrap">
+                  {shortDay(s.businessDate)}
+                </td>
+                {showShop && (
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {shop?.name ?? "Unknown shop"}
+                  </td>
+                )}
                 <td className="px-4 py-3 text-muted-foreground whitespace-nowrap text-xs">
                   {timeOnly(s.openedAt)} → {timeOnly(s.closedAt)}
                 </td>
                 <td className="px-4 py-3 text-right">{formatRs(c.cashSales, currency)}</td>
                 <td className="px-4 py-3 text-right">{formatRs(c.cardSales, currency)}</td>
                 <td className="px-4 py-3 text-right">{formatRs(c.onlineSales, currency)}</td>
-                <td className={`px-4 py-3 text-right ${c.creditSales > 0 ? "text-warning-strong" : "text-muted-foreground"}`}>
+                <td
+                  className={`px-4 py-3 text-right ${c.creditSales > 0 ? "text-warning-strong" : "text-muted-foreground"}`}
+                >
                   {c.creditSales > 0 ? formatRs(c.creditSales, currency) : "None"}
                 </td>
-                <td className="px-4 py-3 text-right font-medium">{formatRs(c.totalSales, currency)}</td>
-                {showProfit && <td className="px-4 py-3 text-right text-success-strong font-medium">{formatRs(c.profit, currency)}</td>}
-                <td className="px-4 py-3 text-right">{c.countedCash === null ? "Not counted" : formatRs(c.countedCash, currency)}</td>
-                <td className={`px-4 py-3 text-right ${varianceTone(c.variance)}`}>
-                  {c.variance === null || c.variance === 0 ? "Balanced" : `${c.variance > 0 ? "+" : "−"}${formatRs(Math.abs(c.variance), currency)}`}
+                <td className="px-4 py-3 text-right font-medium">
+                  {formatRs(c.totalSales, currency)}
                 </td>
-                <td className="px-4 py-3 text-right font-medium">{formatRs(c.cashTakenByOwner, currency)}</td>
-                <td className="px-4 py-3 text-right text-muted-foreground">{formatRs(c.cashLeftInShop, currency)}</td>
+                {showProfit && (
+                  <td className="px-4 py-3 text-right text-success-strong font-medium">
+                    {formatRs(c.profit, currency)}
+                  </td>
+                )}
+                <td className="px-4 py-3 text-right">
+                  {c.countedCash === null ? "Not counted" : formatRs(c.countedCash, currency)}
+                </td>
+                <td className={`px-4 py-3 text-right ${varianceTone(c.variance)}`}>
+                  {c.variance === null || c.variance === 0
+                    ? "Balanced"
+                    : `${c.variance > 0 ? "+" : "−"}${formatRs(Math.abs(c.variance), currency)}`}
+                </td>
+                <td className="px-4 py-3 text-right font-medium">
+                  {formatRs(c.cashTakenByOwner, currency)}
+                </td>
+                <td className="px-4 py-3 text-right text-muted-foreground">
+                  {formatRs(c.cashLeftInShop, currency)}
+                </td>
                 <td className="px-4 py-3 text-right whitespace-nowrap">{actions(s, true)}</td>
               </tr>
             ))}
@@ -918,7 +1241,10 @@ function ClosedDays({
               // The column count follows the same two optional columns the header
               // does, or the empty row overhangs the table and breaks its border.
               <tr>
-                <td colSpan={12 + (showShop ? 1 : 0) + (showProfit ? 1 : 0)} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                <td
+                  colSpan={12 + (showShop ? 1 : 0) + (showProfit ? 1 : 0)}
+                  className="px-4 py-12 text-center text-sm text-muted-foreground"
+                >
                   No days have been closed yet.
                 </td>
               </tr>

@@ -1,3 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any --
+ * Rows arrive from Postgres untyped, and every mapper below is the single place
+ * a column becomes a typed field. Casting each one individually would add a few
+ * hundred lines of `r.id as string` without catching anything the mappers do
+ * not already have to get right — the risk here is a wrong COLUMN NAME, which a
+ * type assertion cannot see either. Generated database types would fix this
+ * properly; that is a job for when the schema stops moving.
+ */
 /**
  * Supabase data access.
  *

@@ -1,8 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import {
-  useStore, formatRs, shortDay, isRestorable, ENTITY_LABELS,
-  type Activity, type ActivityEntity,
+  useStore,
+  formatRs,
+  shortDay,
+  isRestorable,
+  ENTITY_LABELS,
+  type Activity,
+  type ActivityEntity,
 } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { StatCard, StatusPill } from "@/components/Stat";
@@ -12,10 +17,29 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import {
-  Search, History, Undo2, Trash2, AlertTriangle, MessagesSquare, ShieldCheck, Download,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import {
+  Search,
+  History,
+  Undo2,
+  Trash2,
+  AlertTriangle,
+  MessagesSquare,
+  ShieldCheck,
+  Download,
 } from "lucide-react";
 import { downloadCsv } from "@/lib/export";
 import { toast } from "sonner";
@@ -54,7 +78,8 @@ function ActivityPage() {
    */
   const unavailable = Boolean(pendingMigration?.includes("activity_log"));
 
-  const shopName = (id?: string) => (id ? shops.find((s) => s.id === id)?.name ?? "a shop" : "Head office");
+  const shopName = (id?: string) =>
+    id ? (shops.find((s) => s.id === id)?.name ?? "a shop") : "Head office";
 
   const rows = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -85,13 +110,23 @@ function ActivityPage() {
   }, [activity]);
 
   const exportCsv = () => {
-    if (rows.length === 0) { toast.error("Nothing to export"); return; }
+    if (rows.length === 0) {
+      toast.error("Nothing to export");
+      return;
+    }
     downloadCsv(
       `activity-${new Date().toISOString().slice(0, 10)}.csv`,
       ["When", "Action", "Record", "Reference", "Amount", "Shop", "By", "Role", "Put back"],
       rows.map((a) => [
-        a.at, a.action, ENTITY_LABELS[a.entity], a.label, a.amount,
-        shopName(a.shopId), a.byName, a.byRole, a.restoredAt ?? "",
+        a.at,
+        a.action,
+        ENTITY_LABELS[a.entity],
+        a.label,
+        a.amount,
+        shopName(a.shopId),
+        a.byName,
+        a.byRole,
+        a.restoredAt ?? "",
       ]),
     );
     toast.success("Activity exported");
@@ -112,9 +147,7 @@ function ActivityPage() {
     return (
       <div>
         <PageHeader title="Activity" subtitle="What was deleted, and by whom." />
-        <Card className="p-10 text-center text-sm text-muted-foreground">
-          Admins only.
-        </Card>
+        <Card className="p-10 text-center text-sm text-muted-foreground">Admins only.</Card>
       </div>
     );
   }
@@ -126,7 +159,8 @@ function ActivityPage() {
         subtitle="Every deleted invoice, bill and payment — who removed it, and a way to put it back."
         actions={
           <Button variant="outline" onClick={exportCsv}>
-            <Download className="h-4 w-4 mr-1.5" />Export
+            <Download className="h-4 w-4 mr-1.5" />
+            Export
           </Button>
         }
       />
@@ -137,12 +171,13 @@ function ActivityPage() {
           <div className="text-sm">
             <div className="font-medium text-warning-strong">Nothing is being recorded yet</div>
             <p className="text-muted-foreground mt-1">
-              This page is empty because the history table does not exist — not because nothing has been
-              deleted. Run{" "}
+              This page is empty because the history table does not exist — not because nothing has
+              been deleted. Run{" "}
               <code className="px-1 py-0.5 rounded bg-muted font-mono text-xs break-all">
                 supabase/migrations/007_activity_log.sql
               </code>{" "}
-              in the Supabase SQL Editor, then reload. Deletions from before that point cannot be recovered.
+              in the Supabase SQL Editor, then reload. Deletions from before that point cannot be
+              recovered.
             </p>
           </div>
         </Card>
@@ -150,7 +185,11 @@ function ActivityPage() {
 
       <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4 mb-4">
         <StatCard
-          onClick={() => { setWho("all"); setEntity("all"); setQ(""); }}
+          onClick={() => {
+            setWho("all");
+            setEntity("all");
+            setQ("");
+          }}
           label={`Deleted in ${RECENT_DAYS} days`}
           value={String(stats.recent)}
           sub={stats.recent > 0 ? `worth ${money(stats.recentValue)}` : "nothing removed"}
@@ -158,7 +197,10 @@ function ActivityPage() {
           tone={stats.recent > 0 ? "warning" : "default"}
         />
         <StatCard
-          onClick={() => { setWho("shop"); setEntity("all"); }}
+          onClick={() => {
+            setWho("shop");
+            setEntity("all");
+          }}
           label="By shop staff"
           value={String(stats.byShops)}
           sub={stats.byShops > 0 ? "worth asking about" : "none"}
@@ -173,7 +215,11 @@ function ActivityPage() {
           tone={stats.awaiting > 0 ? "primary" : "default"}
         />
         <StatCard
-          onClick={() => { setWho("all"); setEntity("all"); setQ(""); }}
+          onClick={() => {
+            setWho("all");
+            setEntity("all");
+            setQ("");
+          }}
           label="Entries kept"
           value={String(activity.length)}
           sub="most recent 500"
@@ -197,11 +243,15 @@ function ActivityPage() {
         <div className="space-y-1.5">
           <Label className="text-xs">Record</Label>
           <Select value={entity} onValueChange={(v) => setEntity(v as typeof entity)}>
-            <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-48">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Everything</SelectItem>
               {(Object.keys(ENTITY_LABELS) as ActivityEntity[]).map((k) => (
-                <SelectItem key={k} value={k} className="capitalize">{ENTITY_LABELS[k]}</SelectItem>
+                <SelectItem key={k} value={k} className="capitalize">
+                  {ENTITY_LABELS[k]}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -209,7 +259,9 @@ function ActivityPage() {
         <div className="space-y-1.5">
           <Label className="text-xs">Done by</Label>
           <Select value={who} onValueChange={(v) => setWho(v as typeof who)}>
-            <SelectTrigger className="w-full sm:w-40"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-40">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Anyone</SelectItem>
               <SelectItem value="shop">Shop staff</SelectItem>
@@ -252,7 +304,8 @@ function ActivityPage() {
                     onConfirm={() => restore(a)}
                     trigger={
                       <Button size="sm" variant="outline">
-                        <Undo2 className="h-3.5 w-3.5 mr-1.5" />Restore
+                        <Undo2 className="h-3.5 w-3.5 mr-1.5" />
+                        Restore
                       </Button>
                     }
                   />
@@ -284,7 +337,12 @@ function ActivityPage() {
                 >
                   <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
                     <div>{shortDay(a.at.slice(0, 10))}</div>
-                    <div className="text-xs">{new Date(a.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</div>
+                    <div className="text-xs">
+                      {new Date(a.at).toLocaleTimeString(undefined, {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </div>
                   </td>
                   <td className="px-4 py-3 capitalize">{ENTITY_LABELS[a.entity]}</td>
                   <td className="px-4 py-3 font-mono text-xs">{a.label || "Not recorded"}</td>
@@ -292,14 +350,19 @@ function ActivityPage() {
                   <td className="px-4 py-3">
                     {a.byName || "Not recorded"}
                     {a.byRole === "shop" && (
-                      <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-muted rounded-full">shop</span>
+                      <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-muted rounded-full">
+                        shop
+                      </span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-right font-medium">{money(a.amount)}</td>
                   <td className="px-4 py-3">
                     <StatusPill status={a.restoredAt ? "Put back" : "Deleted"} />
                   </td>
-                  <td className="px-4 py-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                  <td
+                    className="px-4 py-3 text-right whitespace-nowrap"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     {isRestorable(a) ? (
                       <Confirm
                         title={`Put ${a.label} back?`}
@@ -321,9 +384,11 @@ function ActivityPage() {
                 </tr>
               ))}
               {rows.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                  {unavailable ? "Nothing recorded yet." : "Nothing has been deleted."}
-                </td></tr>
+                <tr>
+                  <td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                    {unavailable ? "Nothing recorded yet." : "Nothing has been deleted."}
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -347,7 +412,10 @@ function ActivityPage() {
 
               <div className="mt-6 space-y-5">
                 <div className="rounded-lg border p-3 space-y-2 text-sm">
-                  <Row label="Removed by" value={`${detail.byName} (${detail.byRole === "admin" ? "owner" : "shop staff"})`} />
+                  <Row
+                    label="Removed by"
+                    value={`${detail.byName} (${detail.byRole === "admin" ? "owner" : "shop staff"})`}
+                  />
                   <Row label="When" value={new Date(detail.at).toLocaleString()} />
                   <Row label="Shop" value={shopName(detail.shopId)} />
                   <Row label="Value" value={money(detail.amount)} />
@@ -368,7 +436,8 @@ function ActivityPage() {
                       onConfirm={() => restore(detail)}
                       trigger={
                         <Button size="sm">
-                          <Undo2 className="h-3.5 w-3.5 mr-1.5" />Put it back
+                          <Undo2 className="h-3.5 w-3.5 mr-1.5" />
+                          Put it back
                         </Button>
                       }
                     />
@@ -423,7 +492,8 @@ function restoreWarning(a: Activity, label: string) {
     transfer: "The movement comes back, and the stock moves between the two shops again.",
     "day-session": "The trading day comes back, along with its cash count.",
   };
-  const effect = effects[a.entity] ?? `The ${label} comes back and the balance it affected moves with it.`;
+  const effect =
+    effects[a.entity] ?? `The ${label} comes back and the balance it affected moves with it.`;
   return `${effect} Everything is restored under its original id, so nothing is renumbered.`;
 }
 

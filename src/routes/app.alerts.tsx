@@ -16,7 +16,8 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/app/alerts")({ component: AlertsPage });
 
 function AlertsPage() {
-  const { user, products, inventory, shops, settings, updateProductAlert, updateSettings } = useStore();
+  const { user, products, inventory, shops, settings, updateProductAlert, updateSettings } =
+    useStore();
   const isAdmin = user?.role === "admin";
   const navigate = useNavigate();
   const [q, setQ] = useState("");
@@ -38,17 +39,31 @@ function AlertsPage() {
         const breached = perShop.filter((x) => x.qty <= p.lowAlert);
         return { product: p, perShop, total, breachedCount: breached.length };
       })
-      .filter((r) => (term ? r.product.name.toLowerCase().includes(term) || r.product.barcode.includes(term) : true))
+      .filter((r) =>
+        term
+          ? r.product.name.toLowerCase().includes(term) || r.product.barcode.includes(term)
+          : true,
+      )
       .filter((r) => (onlyBreached ? r.breachedCount > 0 : true))
-      .sort((a, b) => b.breachedCount - a.breachedCount || a.product.name.localeCompare(b.product.name));
+      .sort(
+        (a, b) => b.breachedCount - a.breachedCount || a.product.name.localeCompare(b.product.name),
+      );
   }, [products, inventory, shops, q, onlyBreached]);
 
   /** Reorder for the shop that is furthest below the alert level. */
-  const restock = (productId: string, perShop: { shop: { id: string }; qty: number }[], lowAlert: number) => {
+  const restock = (
+    productId: string,
+    perShop: { shop: { id: string }; qty: number }[],
+    lowAlert: number,
+  ) => {
     const worst = [...perShop].sort((a, b) => a.qty - b.qty)[0];
     navigate({
       to: "/app/purchases",
-      search: { restock: productId, shop: worst?.shop.id, qty: Math.max(1, lowAlert * 2 - (worst?.qty ?? 0)) },
+      search: {
+        restock: productId,
+        shop: worst?.shop.id,
+        qty: Math.max(1, lowAlert * 2 - (worst?.qty ?? 0)),
+      },
     });
   };
 
@@ -58,7 +73,11 @@ function AlertsPage() {
    * silently dropped the edit.
    */
   const commit = (productId: string, raw: string) => {
-    setDrafts((d) => { const next = { ...d }; delete next[productId]; return next; });
+    setDrafts((d) => {
+      const next = { ...d };
+      delete next[productId];
+      return next;
+    });
     const value = Number(raw);
     if (raw.trim() === "" || Number.isNaN(value) || value < 0) {
       toast.error("Enter a number of 0 or more");
@@ -72,17 +91,33 @@ function AlertsPage() {
 
   const applyToAll = () => {
     const value = Number(bulk);
-    if (bulk.trim() === "" || Number.isNaN(value) || value < 0) { toast.error("Enter a number of 0 or more"); return; }
+    if (bulk.trim() === "" || Number.isNaN(value) || value < 0) {
+      toast.error("Enter a number of 0 or more");
+      return;
+    }
     rows.forEach((r) => updateProductAlert(r.product.id, Math.floor(value)));
-    toast.success(`Set ${rows.length} product${rows.length === 1 ? "" : "s"} to ${Math.floor(value)}`);
+    toast.success(
+      `Set ${rows.length} product${rows.length === 1 ? "" : "s"} to ${Math.floor(value)}`,
+    );
     setBulk("");
   };
 
   const exportCsv = () => {
-    if (rows.length === 0) { toast.error("Nothing to export"); return; }
+    if (rows.length === 0) {
+      toast.error("Nothing to export");
+      return;
+    }
     downloadCsv(
       `stock-alerts-${new Date().toISOString().slice(0, 10)}.csv`,
-      ["Product", "Barcode", "Category", "Low alert", "Total stock", ...shops.map((s) => s.name), "Shops below alert"],
+      [
+        "Product",
+        "Barcode",
+        "Category",
+        "Low alert",
+        "Total stock",
+        ...shops.map((s) => s.name),
+        "Shops below alert",
+      ],
       rows.map((r) => [
         r.product.name,
         r.product.barcode,
@@ -99,7 +134,10 @@ function AlertsPage() {
   if (!isAdmin) {
     return (
       <div>
-        <PageHeader title="Stock alerts" subtitle="Set the low-stock alert level for every product." />
+        <PageHeader
+          title="Stock alerts"
+          subtitle="Set the low-stock alert level for every product."
+        />
         <Card className="p-10 text-center text-sm text-muted-foreground">Admins only.</Card>
       </div>
     );
@@ -112,7 +150,12 @@ function AlertsPage() {
       <PageHeader
         title="Stock alerts"
         subtitle="Set the alert level for each product. A shop is flagged LOW once its stock reaches this number."
-        actions={<Button variant="outline" onClick={exportCsv}><Download className="h-4 w-4 mr-1.5" />Export CSV</Button>}
+        actions={
+          <Button variant="outline" onClick={exportCsv}>
+            <Download className="h-4 w-4 mr-1.5" />
+            Export CSV
+          </Button>
+        }
       />
 
       <Card className="p-3 sm:p-4 mb-4 grid gap-3 sm:flex sm:flex-wrap sm:items-end">
@@ -120,7 +163,12 @@ function AlertsPage() {
           <Label className="text-xs">Search</Label>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input placeholder="Product name or barcode…" className="pl-9 w-full sm:w-64" value={q} onChange={(e) => setQ(e.target.value)} />
+            <Input
+              placeholder="Product name or barcode…"
+              className="pl-9 w-full sm:w-64"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
           </div>
         </div>
         <button
@@ -139,7 +187,9 @@ function AlertsPage() {
             inputMode="numeric"
             min={0}
             value={settings.lowStockDefault}
-            onChange={(e) => updateSettings({ lowStockDefault: Math.max(0, Number(e.target.value) || 0) })}
+            onChange={(e) =>
+              updateSettings({ lowStockDefault: Math.max(0, Number(e.target.value) || 0) })
+            }
             className="w-full sm:w-32"
           />
         </div>
@@ -163,7 +213,11 @@ function AlertsPage() {
             destructive
             disabled={!bulk.trim() || rows.length === 0}
             onConfirm={applyToAll}
-            trigger={<Button variant="outline" disabled={!bulk.trim() || rows.length === 0}>Apply</Button>}
+            trigger={
+              <Button variant="outline" disabled={!bulk.trim() || rows.length === 0}>
+                Apply
+              </Button>
+            }
           />
         </div>
       </Card>
@@ -172,7 +226,9 @@ function AlertsPage() {
         <MobileCards
           items={rows}
           keyOf={(r) => r.product.id}
-          empty={onlyBreached ? "No product is below its alert level." : `No products match “${q}”.`}
+          empty={
+            onlyBreached ? "No product is below its alert level." : `No products match “${q}”.`
+          }
           render={(r) => (
             <ListCard
               title={r.product.name}
@@ -197,8 +253,10 @@ function AlertsPage() {
                   label: x.shop.name,
                   value: x.qty,
                   className:
-                    x.qty === 0 ? "text-destructive font-medium"
-                      : x.qty <= r.product.lowAlert ? "text-warning-strong font-medium"
+                    x.qty === 0
+                      ? "text-destructive font-medium"
+                      : x.qty <= r.product.lowAlert
+                        ? "text-warning-strong font-medium"
                         : undefined,
                 })),
               ]}
@@ -214,12 +272,19 @@ function AlertsPage() {
                       value={drafts[r.product.id] ?? String(r.product.lowAlert)}
                       onChange={(e) => setDrafts((d) => ({ ...d, [r.product.id]: e.target.value }))}
                       onBlur={(e) => commit(r.product.id, e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      }}
                       className="w-20 text-right"
                     />
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => restock(r.product.id, r.perShop, r.product.lowAlert)}>
-                    <PackagePlus className="h-3.5 w-3.5 mr-1.5" />Restock
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => restock(r.product.id, r.perShop, r.product.lowAlert)}
+                  >
+                    <PackagePlus className="h-3.5 w-3.5 mr-1.5" />
+                    Restock
                   </Button>
                 </>
               }
@@ -233,7 +298,11 @@ function AlertsPage() {
                 <th className="px-4 py-3 font-medium">Product</th>
                 <th className="px-4 py-3 font-medium">Barcode</th>
                 <th className="px-4 py-3 font-medium">Category</th>
-                {shops.map((s) => <th key={s.id} className="px-4 py-3 font-medium text-right">{s.name}</th>)}
+                {shops.map((s) => (
+                  <th key={s.id} className="px-4 py-3 font-medium text-right">
+                    {s.name}
+                  </th>
+                ))}
                 <th className="px-4 py-3 font-medium text-right">Total</th>
                 <th className="px-4 py-3 font-medium text-right w-36">Alert level</th>
                 <th className="px-4 py-3 font-medium">Status</th>
@@ -246,7 +315,9 @@ function AlertsPage() {
                 return (
                   <tr key={r.product.id} className="border-t hover:bg-muted/40">
                     <td className="px-4 py-3 font-medium">{r.product.name}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.product.barcode || "No barcode"}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                      {r.product.barcode || "No barcode"}
+                    </td>
                     <td className="px-4 py-3 text-muted-foreground">{r.product.category}</td>
                     {r.perShop.map((x) => (
                       <td
@@ -263,9 +334,13 @@ function AlertsPage() {
                         min={0}
                         aria-label={`Low-stock alert for ${r.product.name}`}
                         value={draft ?? String(r.product.lowAlert)}
-                        onChange={(e) => setDrafts((d) => ({ ...d, [r.product.id]: e.target.value }))}
+                        onChange={(e) =>
+                          setDrafts((d) => ({ ...d, [r.product.id]: e.target.value }))
+                        }
                         onBlur={(e) => commit(r.product.id, e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        }}
                         className="h-8 text-right"
                       />
                     </td>
@@ -280,8 +355,13 @@ function AlertsPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Button size="sm" variant="outline" onClick={() => restock(r.product.id, r.perShop, r.product.lowAlert)}>
-                        <PackagePlus className="h-3.5 w-3.5 mr-1.5" />Restock
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => restock(r.product.id, r.perShop, r.product.lowAlert)}
+                      >
+                        <PackagePlus className="h-3.5 w-3.5 mr-1.5" />
+                        Restock
                       </Button>
                     </td>
                   </tr>
@@ -289,8 +369,13 @@ function AlertsPage() {
               })}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={shops.length + 7} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                    {onlyBreached ? "No product is below its alert level." : `No products match “${q}”.`}
+                  <td
+                    colSpan={shops.length + 7}
+                    className="px-4 py-12 text-center text-sm text-muted-foreground"
+                  >
+                    {onlyBreached
+                      ? "No product is below its alert level."
+                      : `No products match “${q}”.`}
                   </td>
                 </tr>
               )}
