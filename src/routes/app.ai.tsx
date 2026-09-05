@@ -285,7 +285,7 @@ function AIPage() {
                     key={a.label}
                     onClick={() => ask(a.q)}
                     disabled={busy}
-                    className="text-xs px-3 py-1.5 rounded-full border hover:bg-muted hover:border-primary transition-colors disabled:opacity-50"
+                    className="text-xs px-3 h-9 sm:h-8 inline-flex items-center rounded-full border hover:bg-muted hover:border-primary transition-colors disabled:opacity-50"
                   >
                     {a.label}
                   </button>

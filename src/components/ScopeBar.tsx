@@ -34,7 +34,9 @@ export function ScopeBar({ showShop = true }: { showShop?: boolean }) {
             key={p.key}
             onClick={() => setPreset(p.key)}
             className={cn(
-              "shrink-0 text-xs px-3 py-1.5 rounded-full border transition-colors",
+              // h-9 on phones: these were 30px tall, under every tap-target
+              // guideline, on the control a shopkeeper reaches for most.
+              "shrink-0 text-xs px-3 h-9 sm:h-8 inline-flex items-center rounded-full border transition-colors",
               rangeKey === p.key
                 ? "bg-primary text-primary-foreground border-primary"
                 : "hover:bg-muted",

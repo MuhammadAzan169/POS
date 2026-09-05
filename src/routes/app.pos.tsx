@@ -1033,7 +1033,7 @@ function POS() {
                     key={c}
                     onClick={() => setCategory(c)}
                     className={cn(
-                      "shrink-0 text-xs px-3 py-1.5 rounded-full border transition-colors",
+                      "shrink-0 text-xs px-3 h-9 sm:h-8 inline-flex items-center rounded-full border transition-colors",
                       category === c
                         ? "bg-primary text-primary-foreground border-primary font-medium"
                         : "hover:bg-muted text-muted-foreground",

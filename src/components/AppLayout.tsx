@@ -250,7 +250,9 @@ function DayStatusPill() {
           : "No day is open — start the day before selling"
       }
       className={cn(
-        "flex items-center gap-1.5 text-xs font-medium px-2 sm:px-2.5 py-1.5 rounded-full border transition-colors shrink-0",
+        // A link into the day book, so it is sized to be tapped rather than
+        // squeezed to the height of its own text.
+        "flex items-center justify-center gap-1.5 text-xs font-medium px-2.5 h-9 sm:h-8 min-w-9 rounded-full border transition-colors shrink-0",
         session
           ? "bg-success/10 text-success-strong border-success/30 hover:bg-success/20"
           : "bg-warning/15 text-warning-strong border-warning/40 hover:bg-warning/25",

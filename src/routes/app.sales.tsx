@@ -532,7 +532,7 @@ function SalesPage() {
                   setFrom(range.from);
                   setTo(range.to);
                 }}
-                className={`shrink-0 text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                className={`shrink-0 text-xs px-3 h-9 sm:h-8 inline-flex items-center rounded-full border transition-colors ${
                   active ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"
                 }`}
               >
