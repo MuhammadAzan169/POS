@@ -78,85 +78,184 @@ export interface Snapshot {
 /* ------------------------------------------------------------------ mappers */
 
 const rowToShop = (r: any): Shop => ({
-  id: r.id, name: r.name, kind: r.kind === "wholesale" ? "wholesale" : "retail",
-  address: r.address ?? "", phone: r.phone ?? "", logo: r.logo ?? undefined,
-  bill: r.bill ?? undefined, active: r.active,
+  id: r.id,
+  name: r.name,
+  kind: r.kind === "wholesale" ? "wholesale" : "retail",
+  address: r.address ?? "",
+  phone: r.phone ?? "",
+  logo: r.logo ?? undefined,
+  bill: r.bill ?? undefined,
+  active: r.active,
 });
 const shopToRow = (s: Shop) => ({
-  id: s.id, name: s.name, kind: s.kind ?? "retail", address: s.address, phone: s.phone,
-  logo: s.logo ?? null, bill: s.bill ?? null, active: s.active,
+  id: s.id,
+  name: s.name,
+  kind: s.kind ?? "retail",
+  address: s.address,
+  phone: s.phone,
+  logo: s.logo ?? null,
+  bill: s.bill ?? null,
+  active: s.active,
 });
 
 const rowToUser = (r: any): User => ({
-  id: r.id, name: r.name, email: r.email, role: r.role, shopId: r.shop_id ?? undefined, active: r.active, lastLogin: r.last_login ?? undefined,
+  id: r.id,
+  name: r.name,
+  email: r.email ?? "",
+  role: r.role,
+  shopId: r.shop_id ?? undefined,
+  active: r.active,
+  lastLogin: r.last_login ?? undefined,
 });
 const userToRow = (u: User) => ({
-  id: u.id, name: u.name, email: u.email, role: u.role, shop_id: u.shopId ?? null, active: u.active, last_login: u.lastLogin ?? null,
+  id: u.id,
+  name: u.name,
+  email: u.email,
+  role: u.role,
+  shop_id: u.shopId ?? null,
+  active: u.active,
+  last_login: u.lastLogin ?? null,
 });
 
 const rowToProduct = (r: any): Product => ({
-  id: r.id, barcode: r.barcode ?? "", name: r.name, category: r.category ?? "", brand: r.brand ?? "",
-  size: r.size ?? undefined, color: r.color ?? undefined,
-  cost: Number(r.cost), price: Number(r.price),
-  wholesalePrice: r.wholesale_price === null || r.wholesale_price === undefined ? undefined : Number(r.wholesale_price),
-  profitTarget: r.profit_target === null || r.profit_target === undefined ? undefined : Number(r.profit_target),
+  id: r.id,
+  barcode: r.barcode ?? "",
+  name: r.name,
+  category: r.category ?? "",
+  brand: r.brand ?? "",
+  size: r.size ?? undefined,
+  color: r.color ?? undefined,
+  cost: Number(r.cost),
+  price: Number(r.price),
+  wholesalePrice:
+    r.wholesale_price === null || r.wholesale_price === undefined
+      ? undefined
+      : Number(r.wholesale_price),
+  profitTarget:
+    r.profit_target === null || r.profit_target === undefined ? undefined : Number(r.profit_target),
   wholesaleProfitTarget:
     r.wholesale_profit_target === null || r.wholesale_profit_target === undefined
       ? undefined
       : Number(r.wholesale_profit_target),
-  lowAlert: r.low_alert, active: r.active,
+  lowAlert: r.low_alert,
+  active: r.active,
 });
 const productToRow = (p: Product) => ({
-  id: p.id, barcode: p.barcode, name: p.name, category: p.category, brand: p.brand,
-  size: p.size ?? null, color: p.color ?? null, cost: p.cost, price: p.price,
+  id: p.id,
+  barcode: p.barcode,
+  name: p.name,
+  category: p.category,
+  brand: p.brand,
+  size: p.size ?? null,
+  color: p.color ?? null,
+  cost: p.cost,
+  price: p.price,
   wholesale_price: p.wholesalePrice ?? null,
   profit_target: p.profitTarget ?? null,
   wholesale_profit_target: p.wholesaleProfitTarget ?? null,
-  low_alert: p.lowAlert, active: p.active,
+  low_alert: p.lowAlert,
+  active: p.active,
 });
 
-const rowToInventory = (r: any): InventoryRow => ({ productId: r.product_id, shopId: r.shop_id, qty: r.qty });
-const inventoryToRow = (r: InventoryRow) => ({ product_id: r.productId, shop_id: r.shopId, qty: r.qty });
+const rowToInventory = (r: any): InventoryRow => ({
+  productId: r.product_id,
+  shopId: r.shop_id,
+  qty: r.qty,
+});
+const inventoryToRow = (r: InventoryRow) => ({
+  product_id: r.productId,
+  shop_id: r.shopId,
+  qty: r.qty,
+});
 
 const rowToSale = (r: any): Sale => ({
-  id: r.id, invoice: r.invoice, shopId: r.shop_id, date: r.date,
-  businessDate: r.business_date ?? undefined, sessionId: r.session_id ?? undefined,
+  id: r.id,
+  invoice: r.invoice,
+  shopId: r.shop_id,
+  date: r.date,
+  businessDate: r.business_date ?? undefined,
+  sessionId: r.session_id ?? undefined,
   // A null or blank name in the column is an anonymous sale, not a broken row.
   customer: (r.customer ?? "").trim() || WALK_IN,
-  customerId: r.customer_id ?? undefined, cashier: r.cashier,
-  lines: r.lines ?? [], subtotal: Number(r.subtotal), discount: Number(r.discount), total: Number(r.total),
-  profit: Number(r.profit), payment: r.payment, status: r.status, synced: r.synced,
+  customerId: r.customer_id ?? undefined,
+  cashier: r.cashier,
+  lines: r.lines ?? [],
+  subtotal: Number(r.subtotal),
+  discount: Number(r.discount),
+  total: Number(r.total),
+  profit: Number(r.profit),
+  payment: r.payment,
+  status: r.status,
+  synced: r.synced,
 });
 const saleToRow = (s: Sale) => ({
-  id: s.id, invoice: s.invoice, shop_id: s.shopId, date: s.date,
-  business_date: s.businessDate ?? null, session_id: s.sessionId ?? null,
-  customer: s.customer?.trim() || WALK_IN, customer_id: s.customerId ?? null, cashier: s.cashier,
-  lines: s.lines, subtotal: s.subtotal, discount: s.discount, total: s.total, profit: s.profit,
-  payment: s.payment, status: s.status, synced: s.synced,
+  id: s.id,
+  invoice: s.invoice,
+  shop_id: s.shopId,
+  date: s.date,
+  business_date: s.businessDate ?? null,
+  session_id: s.sessionId ?? null,
+  customer: s.customer?.trim() || WALK_IN,
+  customer_id: s.customerId ?? null,
+  cashier: s.cashier,
+  lines: s.lines,
+  subtotal: s.subtotal,
+  discount: s.discount,
+  total: s.total,
+  profit: s.profit,
+  payment: s.payment,
+  status: s.status,
+  synced: s.synced,
 });
 
 const rowToSupplier = (r: any): Supplier => ({
-  id: r.id, name: r.name, contact: r.contact ?? "", phone: r.phone ?? "", email: r.email ?? "",
-  address: r.address ?? "", notes: r.notes ?? "", active: r.active,
+  id: r.id,
+  name: r.name,
+  contact: r.contact ?? "",
+  phone: r.phone ?? "",
+  email: r.email ?? "",
+  address: r.address ?? "",
+  notes: r.notes ?? "",
+  active: r.active,
 });
 const supplierToRow = (s: Supplier) => ({
-  id: s.id, name: s.name, contact: s.contact, phone: s.phone, email: s.email, address: s.address, notes: s.notes, active: s.active,
+  id: s.id,
+  name: s.name,
+  contact: s.contact,
+  phone: s.phone,
+  email: s.email,
+  address: s.address,
+  notes: s.notes,
+  active: s.active,
 });
 
 const rowToPurchase = (r: any): Purchase => ({
-  id: r.id, billNo: r.bill_no, supplier: r.supplier, supplierId: r.supplier_id ?? undefined,
-  date: r.date, lines: r.lines ?? [], total: Number(r.total),
-  createdBy: r.created_by ?? undefined, createdByShopId: r.created_by_shop_id ?? undefined,
+  id: r.id,
+  billNo: r.bill_no,
+  supplier: r.supplier,
+  supplierId: r.supplier_id ?? undefined,
+  date: r.date,
+  lines: r.lines ?? [],
+  total: Number(r.total),
+  createdBy: r.created_by ?? undefined,
+  createdByShopId: r.created_by_shop_id ?? undefined,
   paid: r.paid ?? undefined,
   payment: r.payment ?? undefined,
-  amountPaid: r.amount_paid === null || r.amount_paid === undefined ? undefined : Number(r.amount_paid),
+  amountPaid:
+    r.amount_paid === null || r.amount_paid === undefined ? undefined : Number(r.amount_paid),
   dueDate: r.due_date ?? undefined,
   sessionId: r.session_id ?? undefined,
 });
 const purchaseToRow = (p: Purchase) => ({
-  id: p.id, bill_no: p.billNo, supplier: p.supplier, supplier_id: p.supplierId ?? null,
-  date: p.date, lines: p.lines, total: p.total,
-  created_by: p.createdBy ?? null, created_by_shop_id: p.createdByShopId ?? null,
+  id: p.id,
+  bill_no: p.billNo,
+  supplier: p.supplier,
+  supplier_id: p.supplierId ?? null,
+  date: p.date,
+  lines: p.lines,
+  total: p.total,
+  created_by: p.createdBy ?? null,
+  created_by_shop_id: p.createdByShopId ?? null,
   // The old boolean is kept in step with the new numbers so a database still
   // reading `paid` — or a report written against it — never disagrees.
   paid: purchaseSettlement(p).balance === 0,
@@ -167,128 +266,279 @@ const purchaseToRow = (p: Purchase) => ({
 });
 
 const rowToExpense = (r: any): Expense => ({
-  id: r.id, date: r.date, shopId: r.shop_id, category: r.category, description: r.description ?? "",
-  amount: Number(r.amount), addedBy: r.added_by ?? "", sessionId: r.session_id ?? undefined,
+  id: r.id,
+  date: r.date,
+  shopId: r.shop_id,
+  category: r.category,
+  description: r.description ?? "",
+  amount: Number(r.amount),
+  addedBy: r.added_by ?? "",
+  sessionId: r.session_id ?? undefined,
 });
 const expenseToRow = (e: Expense) => ({
-  id: e.id, date: e.date, shop_id: e.shopId, category: e.category, description: e.description,
-  amount: e.amount, added_by: e.addedBy, session_id: e.sessionId ?? null,
+  id: e.id,
+  date: e.date,
+  shop_id: e.shopId,
+  category: e.category,
+  description: e.description,
+  amount: e.amount,
+  added_by: e.addedBy,
+  session_id: e.sessionId ?? null,
 });
 
 const rowToDaySession = (r: any): DaySession => ({
-  id: r.id, shopId: r.shop_id, businessDate: r.business_date, openedAt: r.opened_at, openedBy: r.opened_by ?? "",
-  openingCash: Number(r.opening_cash), status: r.status,
-  closedAt: r.closed_at ?? undefined, closedBy: r.closed_by ?? undefined,
-  countedCash: r.counted_cash === null || r.counted_cash === undefined ? undefined : Number(r.counted_cash),
-  cashTakenByOwner: r.cash_taken_by_owner === null || r.cash_taken_by_owner === undefined ? undefined : Number(r.cash_taken_by_owner),
-  cashLeftInShop: r.cash_left_in_shop === null || r.cash_left_in_shop === undefined ? undefined : Number(r.cash_left_in_shop),
+  id: r.id,
+  shopId: r.shop_id,
+  businessDate: r.business_date,
+  openedAt: r.opened_at,
+  openedBy: r.opened_by ?? "",
+  openingCash: Number(r.opening_cash),
+  status: r.status,
+  closedAt: r.closed_at ?? undefined,
+  closedBy: r.closed_by ?? undefined,
+  countedCash:
+    r.counted_cash === null || r.counted_cash === undefined ? undefined : Number(r.counted_cash),
+  cashTakenByOwner:
+    r.cash_taken_by_owner === null || r.cash_taken_by_owner === undefined
+      ? undefined
+      : Number(r.cash_taken_by_owner),
+  cashLeftInShop:
+    r.cash_left_in_shop === null || r.cash_left_in_shop === undefined
+      ? undefined
+      : Number(r.cash_left_in_shop),
   notes: r.notes ?? undefined,
 });
 const daySessionToRow = (s: DaySession) => ({
-  id: s.id, shop_id: s.shopId, business_date: s.businessDate, opened_at: s.openedAt, opened_by: s.openedBy,
-  opening_cash: s.openingCash, status: s.status,
-  closed_at: s.closedAt ?? null, closed_by: s.closedBy ?? null,
-  counted_cash: s.countedCash ?? null, cash_taken_by_owner: s.cashTakenByOwner ?? null,
-  cash_left_in_shop: s.cashLeftInShop ?? null, notes: s.notes ?? null,
+  id: s.id,
+  shop_id: s.shopId,
+  business_date: s.businessDate,
+  opened_at: s.openedAt,
+  opened_by: s.openedBy,
+  opening_cash: s.openingCash,
+  status: s.status,
+  closed_at: s.closedAt ?? null,
+  closed_by: s.closedBy ?? null,
+  counted_cash: s.countedCash ?? null,
+  cash_taken_by_owner: s.cashTakenByOwner ?? null,
+  cash_left_in_shop: s.cashLeftInShop ?? null,
+  notes: s.notes ?? null,
 });
 
 const rowToCustomer = (r: any): Customer => ({
-  id: r.id, name: r.name, contact: r.contact ?? "", phone: r.phone ?? "", address: r.address ?? "",
-  notes: r.notes ?? "", kind: r.kind === "wholesale" ? "wholesale" : "retail",
-  creditLimit: Number(r.credit_limit ?? 0), linkedSupplierId: r.linked_supplier_id ?? undefined,
+  id: r.id,
+  name: r.name,
+  contact: r.contact ?? "",
+  phone: r.phone ?? "",
+  address: r.address ?? "",
+  notes: r.notes ?? "",
+  kind: r.kind === "wholesale" ? "wholesale" : "retail",
+  creditLimit: Number(r.credit_limit ?? 0),
+  linkedSupplierId: r.linked_supplier_id ?? undefined,
   active: r.active,
 });
 const customerToRow = (c: Customer) => ({
-  id: c.id, name: c.name, contact: c.contact, phone: c.phone, address: c.address, notes: c.notes,
-  kind: c.kind, credit_limit: c.creditLimit, linked_supplier_id: c.linkedSupplierId ?? null,
+  id: c.id,
+  name: c.name,
+  contact: c.contact,
+  phone: c.phone,
+  address: c.address,
+  notes: c.notes,
+  kind: c.kind,
+  credit_limit: c.creditLimit,
+  linked_supplier_id: c.linkedSupplierId ?? null,
   active: c.active,
 });
 
 const rowToCustomerPayment = (r: any): CustomerPayment => ({
-  id: r.id, customerId: r.customer_id, date: r.date, amount: Number(r.amount), method: r.method,
-  shopId: r.shop_id, sessionId: r.session_id ?? undefined, note: r.note ?? "", receivedBy: r.received_by ?? "",
+  id: r.id,
+  customerId: r.customer_id,
+  date: r.date,
+  amount: Number(r.amount),
+  method: r.method,
+  shopId: r.shop_id,
+  sessionId: r.session_id ?? undefined,
+  note: r.note ?? "",
+  receivedBy: r.received_by ?? "",
 });
 const customerPaymentToRow = (p: CustomerPayment) => ({
-  id: p.id, customer_id: p.customerId, date: p.date, amount: p.amount, method: p.method,
-  shop_id: p.shopId, session_id: p.sessionId ?? null, note: p.note, received_by: p.receivedBy,
+  id: p.id,
+  customer_id: p.customerId,
+  date: p.date,
+  amount: p.amount,
+  method: p.method,
+  shop_id: p.shopId,
+  session_id: p.sessionId ?? null,
+  note: p.note,
+  received_by: p.receivedBy,
 });
 
 const rowToSupplierPayment = (r: any): SupplierPayment => ({
-  id: r.id, supplierId: r.supplier_id, date: r.date, amount: Number(r.amount), method: r.method,
-  shopId: r.shop_id ?? "", sessionId: r.session_id ?? undefined, note: r.note ?? "", paidBy: r.paid_by ?? "",
+  id: r.id,
+  supplierId: r.supplier_id,
+  date: r.date,
+  amount: Number(r.amount),
+  method: r.method,
+  shopId: r.shop_id ?? "",
+  sessionId: r.session_id ?? undefined,
+  note: r.note ?? "",
+  paidBy: r.paid_by ?? "",
 });
 const supplierPaymentToRow = (p: SupplierPayment) => ({
-  id: p.id, supplier_id: p.supplierId, date: p.date, amount: p.amount, method: p.method,
+  id: p.id,
+  supplier_id: p.supplierId,
+  date: p.date,
+  amount: p.amount,
+  method: p.method,
   // Head office pays with no till behind it, and an empty string is not a shop
   // id — storing null keeps the foreign key honest.
-  shop_id: p.shopId || null, session_id: p.sessionId ?? null, note: p.note, paid_by: p.paidBy,
+  shop_id: p.shopId || null,
+  session_id: p.sessionId ?? null,
+  note: p.note,
+  paid_by: p.paidBy,
 });
 
 const rowToSetOff = (r: any): SetOff => ({
-  id: r.id, date: r.date, customerId: r.customer_id, supplierId: r.supplier_id,
-  amount: Number(r.amount), note: r.note ?? "", createdBy: r.created_by ?? "",
+  id: r.id,
+  date: r.date,
+  customerId: r.customer_id,
+  supplierId: r.supplier_id,
+  amount: Number(r.amount),
+  note: r.note ?? "",
+  createdBy: r.created_by ?? "",
 });
 const setOffToRow = (x: SetOff) => ({
-  id: x.id, date: x.date, customer_id: x.customerId, supplier_id: x.supplierId,
-  amount: x.amount, note: x.note, created_by: x.createdBy,
+  id: x.id,
+  date: x.date,
+  customer_id: x.customerId,
+  supplier_id: x.supplierId,
+  amount: x.amount,
+  note: x.note,
+  created_by: x.createdBy,
 });
 
 const rowToAdjustment = (r: any): Adjustment => ({
-  id: r.id, date: r.date,
-  customerId: r.customer_id ?? undefined, supplierId: r.supplier_id ?? undefined,
-  amount: Number(r.amount), reason: r.reason ?? "", createdBy: r.created_by ?? "",
+  id: r.id,
+  date: r.date,
+  customerId: r.customer_id ?? undefined,
+  supplierId: r.supplier_id ?? undefined,
+  amount: Number(r.amount),
+  reason: r.reason ?? "",
+  createdBy: r.created_by ?? "",
 });
 const adjustmentToRow = (a: Adjustment) => ({
-  id: a.id, date: a.date,
-  customer_id: a.customerId ?? null, supplier_id: a.supplierId ?? null,
-  amount: a.amount, reason: a.reason, created_by: a.createdBy,
+  id: a.id,
+  date: a.date,
+  customer_id: a.customerId ?? null,
+  supplier_id: a.supplierId ?? null,
+  amount: a.amount,
+  reason: a.reason,
+  created_by: a.createdBy,
 });
 
 const rowToActivity = (r: any): Activity => ({
-  id: r.id, at: r.at, action: r.action, entity: r.entity, entityId: r.entity_id,
-  label: r.label ?? "", amount: Number(r.amount ?? 0), shopId: r.shop_id ?? undefined,
-  byUserId: r.by_user_id ?? undefined, byName: r.by_name ?? "", byRole: r.by_role === "admin" ? "admin" : "shop",
+  id: r.id,
+  at: r.at,
+  action: r.action,
+  entity: r.entity,
+  entityId: r.entity_id,
+  label: r.label ?? "",
+  amount: Number(r.amount ?? 0),
+  shopId: r.shop_id ?? undefined,
+  byUserId: r.by_user_id ?? undefined,
+  byName: r.by_name ?? "",
+  byRole: r.by_role === "admin" ? "admin" : "shop",
   snapshot: r.snapshot ?? null,
-  restoredAt: r.restored_at ?? undefined, restoredBy: r.restored_by ?? undefined,
+  restoredAt: r.restored_at ?? undefined,
+  restoredBy: r.restored_by ?? undefined,
 });
 const activityToRow = (a: Activity) => ({
-  id: a.id, at: a.at, action: a.action, entity: a.entity, entity_id: a.entityId,
-  label: a.label, amount: a.amount, shop_id: a.shopId ?? null,
-  by_user_id: a.byUserId ?? null, by_name: a.byName, by_role: a.byRole,
+  id: a.id,
+  at: a.at,
+  action: a.action,
+  entity: a.entity,
+  entity_id: a.entityId,
+  label: a.label,
+  amount: a.amount,
+  shop_id: a.shopId ?? null,
+  by_user_id: a.byUserId ?? null,
+  by_name: a.byName,
+  by_role: a.byRole,
   // The whole deleted row travels as JSONB, which is what makes a restore put
   // back the original id and numbering rather than a fresh copy.
   snapshot: a.snapshot ?? null,
-  restored_at: a.restoredAt ?? null, restored_by: a.restoredBy ?? null,
+  restored_at: a.restoredAt ?? null,
+  restored_by: a.restoredBy ?? null,
 });
 
 const rowToMessage = (r: any): Message => ({
-  id: r.id, shopId: r.shop_id, fromRole: r.from_role === "admin" ? "admin" : "shop",
-  fromUserId: r.from_user_id ?? undefined, fromName: r.from_name ?? "", body: r.body ?? "",
-  createdAt: r.created_at, readByAdmin: Boolean(r.read_by_admin), readByShop: Boolean(r.read_by_shop),
+  id: r.id,
+  shopId: r.shop_id,
+  fromRole: r.from_role === "admin" ? "admin" : "shop",
+  fromUserId: r.from_user_id ?? undefined,
+  fromName: r.from_name ?? "",
+  body: r.body ?? "",
+  createdAt: r.created_at,
+  readByAdmin: Boolean(r.read_by_admin),
+  readByShop: Boolean(r.read_by_shop),
 });
 const messageToRow = (m: Message) => ({
-  id: m.id, shop_id: m.shopId, from_role: m.fromRole, from_user_id: m.fromUserId ?? null,
-  from_name: m.fromName, body: m.body, created_at: m.createdAt,
-  read_by_admin: m.readByAdmin, read_by_shop: m.readByShop,
+  id: m.id,
+  shop_id: m.shopId,
+  from_role: m.fromRole,
+  from_user_id: m.fromUserId ?? null,
+  from_name: m.fromName,
+  body: m.body,
+  created_at: m.createdAt,
+  read_by_admin: m.readByAdmin,
+  read_by_shop: m.readByShop,
 });
 
 const rowToTransfer = (r: any): Transfer => ({
-  id: r.id, transferNo: r.transfer_no, date: r.date, fromShopId: r.from_shop_id, toShopId: r.to_shop_id,
-  items: r.items ?? [], notes: r.notes ?? "", createdBy: r.created_by ?? "",
+  id: r.id,
+  transferNo: r.transfer_no,
+  date: r.date,
+  fromShopId: r.from_shop_id,
+  toShopId: r.to_shop_id,
+  items: r.items ?? [],
+  notes: r.notes ?? "",
+  createdBy: r.created_by ?? "",
 });
 const transferToRow = (t: Transfer) => ({
-  id: t.id, transfer_no: t.transferNo, date: t.date, from_shop_id: t.fromShopId, to_shop_id: t.toShopId,
-  items: t.items, notes: t.notes, created_by: t.createdBy,
+  id: t.id,
+  transfer_no: t.transferNo,
+  date: t.date,
+  from_shop_id: t.fromShopId,
+  to_shop_id: t.toShopId,
+  items: t.items,
+  notes: t.notes,
+  created_by: t.createdBy,
 });
 
 const rowToReturn = (r: any): ReturnRec => ({
-  id: r.id, kind: r.kind, returnNo: r.return_no, date: r.date, shopId: r.shop_id, invoice: r.invoice,
-  supplier: r.supplier ?? undefined, supplierId: r.supplier_id ?? undefined,
-  items: r.items ?? [], refund: Number(r.refund), reason: r.reason ?? "",
+  id: r.id,
+  kind: r.kind,
+  returnNo: r.return_no,
+  date: r.date,
+  shopId: r.shop_id,
+  invoice: r.invoice,
+  supplier: r.supplier ?? undefined,
+  supplierId: r.supplier_id ?? undefined,
+  items: r.items ?? [],
+  refund: Number(r.refund),
+  reason: r.reason ?? "",
 });
 const returnToRow = (r: ReturnRec) => ({
-  id: r.id, kind: r.kind, return_no: r.returnNo, date: r.date, shop_id: r.shopId, invoice: r.invoice,
-  supplier: r.supplier ?? null, supplier_id: r.supplierId ?? null, items: r.items, refund: r.refund, reason: r.reason,
+  id: r.id,
+  kind: r.kind,
+  return_no: r.returnNo,
+  date: r.date,
+  shop_id: r.shopId,
+  invoice: r.invoice,
+  supplier: r.supplier ?? null,
+  supplier_id: r.supplierId ?? null,
+  items: r.items,
+  refund: r.refund,
+  reason: r.reason,
 });
 
 /* -------------------------------------------------------------------- reads */
@@ -320,7 +570,10 @@ function isMissingColumn(error: { code?: string; message?: string } | null) {
  */
 async function selectOptional<T>(
   table: string,
-  build: () => PromiseLike<{ data: unknown[] | null; error: { code?: string; message?: string } | null }>,
+  build: () => PromiseLike<{
+    data: unknown[] | null;
+    error: { code?: string; message?: string } | null;
+  }>,
   map: (row: any) => T,
   missing: string[],
 ): Promise<T[]> {
@@ -368,7 +621,10 @@ type QueryError = { code?: string; message?: string } | null;
  * not have to care that more than one request happened.
  */
 export async function paginate(
-  fetchPage: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: QueryError }>,
+  fetchPage: (
+    from: number,
+    to: number,
+  ) => PromiseLike<{ data: unknown[] | null; error: QueryError }>,
 ): Promise<{ data: unknown[] | null; error: QueryError }> {
   const rows: unknown[] = [];
 
@@ -408,12 +664,26 @@ export async function loadSnapshot(): Promise<Snapshot> {
   const missing: string[] = [];
 
   const [
-    core, daySessions, transfers, customers, customerPayments,
-    supplierPayments, setOffs, adjustments, activity, messages,
+    core,
+    daySessions,
+    transfers,
+    customers,
+    customerPayments,
+    supplierPayments,
+    setOffs,
+    adjustments,
+    activity,
+    messages,
   ] = await Promise.all([
     Promise.all([
       selectAll("shops", (q) => q.order("name")),
-      selectAll("users", (q) => q.order("name")),
+      /*
+       * Accounts come from `staff`, which is keyed on the login that can
+       * actually sign in. The old `users` table was the demo's stand-in for
+       * that: rows in it looked like accounts on the Users page but could not
+       * be signed into, which is a confusing thing to hand somebody.
+       */
+      selectAll("staff", (q) => q.order("name")),
       selectAll("products", (q) => q.order("name")),
       selectAll("inventory"),
       selectAll("sales", (q) => q.order("date", { ascending: false })),
@@ -477,13 +747,25 @@ export async function loadSnapshot(): Promise<Snapshot> {
     // year back, so the whole history is not worth loading on every boot.
     selectOptional(
       "messages",
-      () => supabase!.from("messages").select("*").order("created_at", { ascending: false }).limit(500),
+      () =>
+        supabase!.from("messages").select("*").order("created_at", { ascending: false }).limit(500),
       rowToMessage,
       missing,
     ),
-    ]);
+  ]);
 
-  const [shops, users, products, inventory, sales, purchases, suppliers, expenses, returns, appState] = core;
+  const [
+    shops,
+    users,
+    products,
+    inventory,
+    sales,
+    purchases,
+    suppliers,
+    expenses,
+    returns,
+    appState,
+  ] = core;
 
   const failed = core.find((r) => r.error);
   if (failed?.error) throw new Error(failed.error.message);
@@ -504,9 +786,11 @@ export async function loadSnapshot(): Promise<Snapshot> {
   // reads as "not pinned" — correct, but worth naming so the owner knows why
   // the field they filled in did not stick.
   const productRows = (products.data ?? []) as any[];
-  if (productRows.length > 0 && !("profit_target" in productRows[0])) missing.push("products.profit_target");
+  if (productRows.length > 0 && !("profit_target" in productRows[0]))
+    missing.push("products.profit_target");
   const purchaseRows = (purchases.data ?? []) as any[];
-  if (purchaseRows.length > 0 && !("amount_paid" in purchaseRows[0])) missing.push("purchases.amount_paid");
+  if (purchaseRows.length > 0 && !("amount_paid" in purchaseRows[0]))
+    missing.push("purchases.amount_paid");
 
   return {
     shops: shopRows.map(rowToShop),
@@ -533,7 +817,10 @@ export async function loadSnapshot(): Promise<Snapshot> {
     // has no `invoice` key at all, and a shallow merge would leave it undefined
     // for every screen that reads it.
     settings: mergeSettings(appState.data?.settings as Partial<Settings> | undefined),
-    discounts: { ...DEFAULT_DISCOUNTS, ...((appState.data?.discounts as Partial<DiscountRules>) ?? {}) },
+    discounts: {
+      ...DEFAULT_DISCOUNTS,
+      ...((appState.data?.discounts as Partial<DiscountRules>) ?? {}),
+    },
     pendingMigration: missing.length > 0 ? missing : undefined,
   };
 }
@@ -547,7 +834,9 @@ export async function loadSnapshot(): Promise<Snapshot> {
  */
 type Result = { error?: string };
 
-async function run(fn: () => PromiseLike<{ error: { code?: string; message: string } | null }>): Promise<Result> {
+async function run(
+  fn: () => PromiseLike<{ error: { code?: string; message: string } | null }>,
+): Promise<Result> {
   if (!supabase) return {};
   try {
     const { error } = await fn();
@@ -565,6 +854,14 @@ async function run(fn: () => PromiseLike<{ error: { code?: string; message: stri
 
 export const db = {
   upsertShop: (s: Shop) => run(() => supabase!.from("shops").upsert(shopToRow(s))),
+  /** Only name, shop and active are writable here; the login itself is the server's. */
+  upsertStaff: (u: User) =>
+    run(() =>
+      supabase!
+        .from("staff")
+        .update({ name: u.name, shop_id: u.shopId ?? null, active: u.active })
+        .eq("id", u.id),
+    ),
   upsertUser: (u: User) => run(() => supabase!.from("users").upsert(userToRow(u))),
   upsertProduct: (p: Product) => run(() => supabase!.from("products").upsert(productToRow(p))),
   upsertSupplier: (s: Supplier) => run(() => supabase!.from("suppliers").upsert(supplierToRow(s))),
@@ -576,7 +873,8 @@ export const db = {
   deleteExpense: (id: string) => run(() => supabase!.from("expenses").delete().eq("id", id)),
   upsertReturn: (r: ReturnRec) => run(() => supabase!.from("returns").upsert(returnToRow(r))),
   deleteReturn: (id: string) => run(() => supabase!.from("returns").delete().eq("id", id)),
-  upsertDaySession: (s: DaySession) => run(() => supabase!.from("day_sessions").upsert(daySessionToRow(s))),
+  upsertDaySession: (s: DaySession) =>
+    run(() => supabase!.from("day_sessions").upsert(daySessionToRow(s))),
   deleteDaySession: (id: string) => run(() => supabase!.from("day_sessions").delete().eq("id", id)),
   upsertTransfer: (t: Transfer) => run(() => supabase!.from("transfers").upsert(transferToRow(t))),
   deleteTransfer: (id: string) => run(() => supabase!.from("transfers").delete().eq("id", id)),
@@ -598,7 +896,8 @@ export const db = {
    * The log is append-only by design, so there is no delete here — only an
    * upsert, which doubles as the write that marks an entry restored.
    */
-  upsertActivity: (a: Activity) => run(() => supabase!.from("activity_log").upsert(activityToRow(a))),
+  upsertActivity: (a: Activity) =>
+    run(() => supabase!.from("activity_log").upsert(activityToRow(a))),
 
   upsertAdjustment: (a: Adjustment) =>
     run(() => supabase!.from("balance_adjustments").upsert(adjustmentToRow(a))),
@@ -607,9 +906,14 @@ export const db = {
 
   /** Inventory is keyed by (product_id, shop_id), so upsert needs that conflict target. */
   upsertInventory: (rows: InventoryRow[]) =>
-    run(() => supabase!.from("inventory").upsert(rows.map(inventoryToRow), { onConflict: "product_id,shop_id" })),
+    run(() =>
+      supabase!
+        .from("inventory")
+        .upsert(rows.map(inventoryToRow), { onConflict: "product_id,shop_id" }),
+    ),
 
-  upsertProducts: (rows: Product[]) => run(() => supabase!.from("products").upsert(rows.map(productToRow))),
+  upsertProducts: (rows: Product[]) =>
+    run(() => supabase!.from("products").upsert(rows.map(productToRow))),
 
   upsertMessage: (m: Message) => run(() => supabase!.from("messages").upsert(messageToRow(m))),
   deleteMessage: (id: string) => run(() => supabase!.from("messages").delete().eq("id", id)),
@@ -661,20 +965,18 @@ export function subscribeToMessages(handlers: {
   if (!supabase) return () => {};
   const channel = supabase
     .channel("messages-live")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "messages" },
-      (payload) => {
-        if (payload.eventType === "DELETE") {
-          // `replica identity full` (set by the migration) means the deleted row
-          // arrives whole rather than as a bare primary key.
-          const id = (payload.old as { id?: string } | null)?.id;
-          if (id) handlers.onDelete(id);
-          return;
-        }
-        handlers.onUpsert(rowToMessage(payload.new));
-      },
-    )
+    .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, (payload) => {
+      if (payload.eventType === "DELETE") {
+        // `replica identity full` (set by the migration) means the deleted row
+        // arrives whole rather than as a bare primary key.
+        const id = (payload.old as { id?: string } | null)?.id;
+        if (id) handlers.onDelete(id);
+        return;
+      }
+      handlers.onUpsert(rowToMessage(payload.new));
+    })
     .subscribe();
-  return () => { void supabase!.removeChannel(channel); };
+  return () => {
+    void supabase!.removeChannel(channel);
+  };
 }

@@ -24,7 +24,8 @@ import {
 import { StatusPill } from "@/components/Stat";
 import { PasswordInput } from "@/components/PasswordInput";
 import { accessToken } from "@/lib/auth";
-import { resetStaffPassword } from "@/lib/staff-admin";
+import { staffEmail } from "@/lib/auth-identity";
+import { createStaffAccount, resetStaffPassword } from "@/lib/staff-admin";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { Plus, Pencil, KeyRound } from "lucide-react";
 import { Confirm } from "@/components/Confirm";
@@ -36,7 +37,18 @@ export const Route = createFileRoute("/app/users")({ component: UsersPage });
 function UsersPage() {
   const { user, users, shops, addUser, updateUser } = useStore();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", shopId: shops[0]?.id ?? "" });
+  /*
+   * A username and a password, because that is what a shop worker signs in
+   * with. The old form asked for an email and wrote a row into a `users` table
+   * — which looked like an account on this page and could not be signed into.
+   */
+  const [form, setForm] = useState({
+    name: "",
+    username: "",
+    password: "",
+    shopId: shops[0]?.id ?? "",
+  });
+  const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
   const [resetting, setResetting] = useState<User | null>(null);
   const [newPassword, setNewPassword] = useState("");
@@ -53,25 +65,44 @@ function UsersPage() {
     );
   }
 
-  const save = () => {
-    if (!form.name.trim() || !form.email.trim()) {
-      toast.error("Name and email required");
-      return;
+  const save = async () => {
+    if (!form.name.trim()) return toast.error("Name required");
+    if (form.username.trim().length < 3) return toast.error("Username needs at least 3 characters");
+    if (form.password.length < 8) return toast.error("Password needs at least 8 characters");
+    if (!form.shopId) return toast.error("Pick which shop this account is for");
+
+    setCreating(true);
+    const token = await accessToken();
+    const result = token
+      ? await createStaffAccount({
+          data: {
+            token,
+            username: form.username,
+            password: form.password,
+            name: form.name,
+            shopId: form.shopId,
+          },
+        })
+      : { ok: false, error: "Sign in again first", staffId: undefined };
+    setCreating(false);
+
+    if (!result.ok || !result.staffId) {
+      return toast.error(result.error ?? "Could not create the account");
     }
-    if (users.some((u) => u.email.toLowerCase() === form.email.toLowerCase())) {
-      toast.error("That email already exists");
-      return;
-    }
+
+    // Added to the list here so the page reflects it without a reload; the row
+    // itself was written by the server, which is the only thing that can.
     addUser({
-      name: form.name,
-      email: form.email,
+      id: result.staffId,
+      name: form.name.trim(),
+      email: staffEmail(form.username),
       role: "shop",
       shopId: form.shopId,
       active: true,
     });
-    toast.success("Shop login created");
+    toast.success(`${form.username.trim()} can now sign in`);
     setOpen(false);
-    setForm({ name: "", email: "", shopId: shops[0]?.id ?? "" });
+    setForm({ name: "", username: "", password: "", shopId: shops[0]?.id ?? "" });
   };
 
   const openEdit = (u: User) => {
@@ -251,13 +282,29 @@ function UsersPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Email</Label>
+                  <Label>Username</Label>
                   <Input
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    placeholder="shop4@apos.pk"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    value={form.username}
+                    onChange={(e) => setForm({ ...form, username: e.target.value })}
+                    placeholder="e.g. gulberg"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    What they type to sign in. No email needed.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Password</Label>
+                  <PasswordInput
+                    autoComplete="new-password"
+                    value={form.password}
+                    onChange={(password) => setForm({ ...form, password })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    At least 8 characters. Tell it to them yourself — nothing is emailed.
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label>Shop</Label>
@@ -282,7 +329,9 @@ function UsersPage() {
                 <Button variant="outline" onClick={() => setOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={save}>Create login</Button>
+                <Button onClick={save} disabled={creating}>
+                  {creating ? "Creating…" : "Create login"}
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

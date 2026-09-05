@@ -137,7 +137,7 @@ interface StoreState {
   updateProduct: (p: Product) => void;
   addShop: (s: Omit<Shop, "id">) => Shop;
   updateShop: (s: Shop) => void;
-  addUser: (u: Omit<User, "id">) => void;
+  addUser: (u: User) => void;
   updateUser: (u: User) => void;
   updateSettings: (s: Partial<Settings>) => void;
   updateReceiptDesign: (r: Partial<ReceiptDesign>) => void;
@@ -287,8 +287,6 @@ import { DEFAULT_SETTINGS } from "./defaults";
 
 const StoreContext = createContext<StoreState | null>(null);
 
-const LS_USER = "apos.user";
-
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
@@ -356,18 +354,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
      * trusting it would let a deactivated worker keep a stale role simply by
      * not signing out.
      */
+    /*
+     * Who is signed in, according to Supabase.
+     *
+     * There used to be a copy in localStorage as well, left from when the demo
+     * accounts had no real session. Trusting it meant a worker who had been
+     * switched off kept their role until they happened to sign out, and a
+     * browser could be handed a role simply by editing its own storage.
+     */
     const restoreSession = async () => {
-      if (isSupabaseConfigured) {
-        const account = await auth.currentUser();
-        if (!cancelled) setUser(account);
-        return;
-      }
-      try {
-        const raw = typeof window !== "undefined" ? window.localStorage.getItem(LS_USER) : null;
-        if (raw) setUser(JSON.parse(raw));
-      } catch {
-        /* corrupt entry — start signed out */
-      }
+      const account = await auth.currentUser();
+      if (!cancelled) setUser(account);
     };
 
     const boot = async () => {
@@ -588,11 +585,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       logout: () => {
         setUser(null);
-        try {
-          window.localStorage.removeItem(LS_USER);
-        } catch {
-          /* private mode */
-        }
         void auth.signOut();
       },
       addSale: (s) => {
@@ -1018,26 +1010,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setShops((prev) => prev.map((x) => (x.id === s.id ? s : x)));
         persist("the shop", () => db.upsertShop(s));
       },
+      /*
+       * Adding an account is not something the browser can do.
+       *
+       * A row in a table is not a login: creating one needs Supabase's admin
+       * API and the service key, which only the server holds. The Shops page
+       * and the Users page call `createStaffAccount` for that, and this is left
+       * only to put the new account into the list without a reload.
+       */
       addUser: (u) => {
-        const created: User = { ...u, id: `u-${Date.now()}` };
-        setUsers((prev) => [...prev, created]);
-        persist("the user", () => db.upsertUser(created));
+        setUsers((prev) => [...prev, u]);
       },
       updateUser: (u) => {
         setUsers((prev) => prev.map((x) => (x.id === u.id ? u : x)));
-        persist("the user", () => db.upsertUser(u));
-        // The signed-in user is held separately (and mirrored to localStorage),
-        // so editing your own account has to refresh that copy too — otherwise
-        // the header keeps showing the old name until the next sign-in.
-        setUser((cur) => {
-          if (cur?.id !== u.id) return cur;
-          try {
-            window.localStorage.setItem(LS_USER, JSON.stringify(u));
-          } catch {
-            /* private mode */
-          }
-          return u;
-        });
+        persist("the account", () => db.upsertStaff(u));
+        // The signed-in user is held separately, so editing your own account
+        // has to refresh that copy too — otherwise the header keeps showing the
+        // old name until the next sign-in.
+        setUser((cur) => (cur?.id === u.id ? u : cur));
       },
       updateSettings: (s) => {
         setSettings((prev) => {
