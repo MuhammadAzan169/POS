@@ -54,11 +54,20 @@ jobs:
             echo "SUPABASE_DB_URL is not set — see the setup notes at the top of this file."
             exit 1
           fi
+
+          # Pasting a connection string into a web form very easily carries a
+          # trailing newline, and the failure it causes names the wrong culprit:
+          # Postgres reports the DATABASE as missing, because the stray
+          # character landed on the end of its name — which reads as a missing
+          # database rather than a bad paste. Stripped here so the secret
+          # cannot be entered wrongly in a way that survives.
+          DB_URL=$(printf '%s' "$SUPABASE_DB_URL" | tr -d '[:space:]')
+
           NAME="apos-backup-$(date -u +%Y-%m-%d).sql"
           # Data and schema together, so the file alone can rebuild the project
           # into an empty database. --no-owner keeps it restorable into a
           # different Supabase project than the one it came from.
-          pg_dump "$SUPABASE_DB_URL" --no-owner --no-privileges --clean --if-exists -f "$NAME"
+          pg_dump "$DB_URL" --no-owner --no-privileges --clean --if-exists -f "$NAME"
           gzip "$NAME"
           ls -lh "$NAME.gz"
 
