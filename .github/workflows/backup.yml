@@ -37,30 +37,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install a matching Postgres client
-        # The runner ships with pg_dump 16, and Supabase is on 17. pg_dump
-        # refuses to dump a server newer than itself, so the newer client is
-        # pulled from the PostgreSQL project's own apt repository.
+        # The runner ships with pg_dump 16 and Supabase is on 17. pg_dump
+        # refuses to dump a server newer than itself, so the newer client
+        # comes from the PostgreSQL project's own apt repository.
         #
-        # WHEN SUPABASE UPGRADES its Postgres major version, bump PG_MAJOR
-        # below to match; the dump will fail loudly until you do, which is
-        # the right way round for a backup.
+        # WHEN SUPABASE UPGRADES its Postgres major version, bump PG_MAJOR to
+        # match. Until you do the dump fails loudly, which is the right way
+        # round for a backup.
         env:
           PG_MAJOR: "17"
         run: |
           set -euo pipefail
           sudo install -d /usr/share/postgresql-common/pgdg
-          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-            | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc > /dev/null
-          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
-https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
-            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc > /dev/null
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
           sudo apt-get update -qq
           sudo apt-get install -y -qq "postgresql-client-$PG_MAJOR"
 
-          # The explicit path matters: /usr/bin/pg_dump is a wrapper that can
-          # still resolve to the older client that came with the runner, which
-          # is exactly how this failed with "server version mismatch" while
-          # the newer client sat installed alongside it.
+          # The explicit path matters. /usr/bin/pg_dump is a wrapper that can
+          # still resolve to the older client the runner came with, which is
+          # exactly how this failed with "server version mismatch" while the
+          # newer client sat installed alongside it.
           echo "PG_DUMP=/usr/lib/postgresql/$PG_MAJOR/bin/pg_dump" >> "$GITHUB_ENV"
           "/usr/lib/postgresql/$PG_MAJOR/bin/pg_dump" --version
 
