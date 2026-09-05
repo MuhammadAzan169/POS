@@ -1,12 +1,10 @@
 /**
- * The demo dataset.
+ * Example data, for the test suite ONLY.
  *
- * It is the single source of truth for two things:
- *  1. what the app shows when Supabase isn't configured, and
- *  2. what `scripts/gen-seed-sql.mjs` writes into supabase/seed.sql.
- *
- * Keeping one copy means the rows in Postgres are exactly the rows you see in
- * the UI today — nothing is hand-retyped into SQL and left to drift.
+ * This used to live in `src/lib/seed-data.ts` and was loaded into the app as
+ * its starting state, which meant a shop with an empty database saw invented
+ * sales and pretend customers. Nothing here is imported by the application:
+ * it exists so the arithmetic can be tested against a known set of records.
  */
 import {
   DEFAULT_INVOICE,
@@ -28,8 +26,8 @@ import {
   type Supplier,
   type SupplierPayment,
   type User,
-} from "./store-types";
-import { localDay } from "./dates";
+} from "../src/lib/store-types";
+import { localDay } from "../src/lib/dates";
 
 /**
  * "Central Wholesale" is the trade counter: an ordinary selling outlet whose
@@ -37,10 +35,38 @@ import { localDay } from "./dates";
  * rather than the shelf price.
  */
 export const SHOPS: Shop[] = [
-  { id: "s0", name: "Central Wholesale", kind: "wholesale", address: "Shahalam Market, Lahore", phone: "0300-0000000", active: true },
-  { id: "s1", name: "Main Branch", kind: "retail", address: "Liberty Market, Lahore", phone: "0300-1111111", active: true },
-  { id: "s2", name: "Gulberg Outlet", kind: "retail", address: "MM Alam Rd, Lahore", phone: "0300-2222222", active: true },
-  { id: "s3", name: "DHA Outlet", kind: "retail", address: "Phase 5, DHA, Lahore", phone: "0300-3333333", active: true },
+  {
+    id: "s0",
+    name: "Central Wholesale",
+    kind: "wholesale",
+    address: "Shahalam Market, Lahore",
+    phone: "0300-0000000",
+    active: true,
+  },
+  {
+    id: "s1",
+    name: "Main Branch",
+    kind: "retail",
+    address: "Liberty Market, Lahore",
+    phone: "0300-1111111",
+    active: true,
+  },
+  {
+    id: "s2",
+    name: "Gulberg Outlet",
+    kind: "retail",
+    address: "MM Alam Rd, Lahore",
+    phone: "0300-2222222",
+    active: true,
+  },
+  {
+    id: "s3",
+    name: "DHA Outlet",
+    kind: "retail",
+    address: "Phase 5, DHA, Lahore",
+    phone: "0300-3333333",
+    active: true,
+  },
 ];
 
 /** Only the retail branches ring up walk-in sales in the demo history. */
@@ -52,42 +78,216 @@ const RETAIL_SHOPS = SHOPS.filter((s) => s.kind !== "wholesale");
  * a real address, because that is the account that signs in as a person.
  */
 export const USERS: User[] = [
-  { id: "u0", name: "Owner", email: "admin@apos.pk", role: "admin", active: true, lastLogin: "2026-06-28 09:14" },
-  { id: "u1", name: "Shop 1 Cashier", email: "shop1@staff.apos.pk", role: "shop", shopId: "s1", active: true, lastLogin: "2026-06-28 10:02" },
-  { id: "u2", name: "Shop 2 Cashier", email: "shop2@staff.apos.pk", role: "shop", shopId: "s2", active: true, lastLogin: "2026-06-27 18:45" },
-  { id: "u3", name: "Shop 3 Cashier", email: "shop3@staff.apos.pk", role: "shop", shopId: "s3", active: true, lastLogin: "2026-06-28 11:20" },
-  { id: "u4", name: "Wholesale Counter", email: "wholesale@staff.apos.pk", role: "shop", shopId: "s0", active: true, lastLogin: "2026-06-28 09:40" },
+  {
+    id: "u0",
+    name: "Owner",
+    email: "admin@apos.pk",
+    role: "admin",
+    active: true,
+    lastLogin: "2026-06-28 09:14",
+  },
+  {
+    id: "u1",
+    name: "Shop 1 Cashier",
+    email: "shop1@staff.apos.pk",
+    role: "shop",
+    shopId: "s1",
+    active: true,
+    lastLogin: "2026-06-28 10:02",
+  },
+  {
+    id: "u2",
+    name: "Shop 2 Cashier",
+    email: "shop2@staff.apos.pk",
+    role: "shop",
+    shopId: "s2",
+    active: true,
+    lastLogin: "2026-06-27 18:45",
+  },
+  {
+    id: "u3",
+    name: "Shop 3 Cashier",
+    email: "shop3@staff.apos.pk",
+    role: "shop",
+    shopId: "s3",
+    active: true,
+    lastLogin: "2026-06-28 11:20",
+  },
+  {
+    id: "u4",
+    name: "Wholesale Counter",
+    email: "wholesale@staff.apos.pk",
+    role: "shop",
+    shopId: "s0",
+    active: true,
+    lastLogin: "2026-06-28 09:40",
+  },
 ];
 
 /** Wholesale rates sit roughly midway between cost and the retail price. */
 export const PRODUCTS: Product[] = [
-  { id: "p1", barcode: "8901001", name: "Matte Lipstick — Ruby 02", category: "Cosmetics", brand: "Glow", color: "Ruby", cost: 280, price: 450, wholesalePrice: 360,
+  {
+    id: "p1",
+    barcode: "8901001",
+    name: "Matte Lipstick — Ruby 02",
+    category: "Cosmetics",
+    brand: "Glow",
+    color: "Ruby",
+    cost: 280,
+    price: 450,
+    wholesalePrice: 360,
     // Pinned: the owner wants Rs 170 a unit whatever the next delivery costs,
     // so the price follows the cost instead of the margin shrinking.
-    profitTarget: 170, wholesaleProfitTarget: 80, lowAlert: 6, active: true },
-  { id: "p2", barcode: "8901002", name: "Kajal Pencil — Black", category: "Cosmetics", brand: "Glow", cost: 80, price: 150, wholesalePrice: 115, lowAlert: 10, active: true },
-  { id: "p3", barcode: "8901003", name: "Foundation Stick — Beige", category: "Cosmetics", brand: "Luxe", color: "Beige", cost: 620, price: 1100, wholesalePrice: 860, lowAlert: 4, active: true },
-  { id: "p4", barcode: "8901004", name: "Compact Powder", category: "Cosmetics", brand: "Luxe", cost: 480, price: 850, wholesalePrice: 665, lowAlert: 5, active: true },
-  { id: "p5", barcode: "8901005", name: "Cotton Kurti — Medium", category: "Clothing", brand: "Aira", size: "M", color: "White", cost: 1100, price: 2200, wholesalePrice: 1650, lowAlert: 3, active: true },
-  { id: "p6", barcode: "8901006", name: "Embroidered Shawl", category: "Clothing", brand: "Aira", color: "Maroon", cost: 1800, price: 3500, wholesalePrice: 2650, lowAlert: 3, active: true },
-  { id: "p7", barcode: "8901007", name: "Hair Serum 100ml", category: "Hair Care", brand: "Glow", cost: 540, price: 950, wholesalePrice: 745, lowAlert: 5, active: true },
-  { id: "p8", barcode: "8901008", name: "Perfume — Rose 50ml", category: "Fragrance", brand: "Luxe", cost: 1500, price: 2800, wholesalePrice: 2150, lowAlert: 3, active: true },
-  { id: "p9", barcode: "8901009", name: "Face Wash 150ml", category: "Skin Care", brand: "Glow", cost: 220, price: 420, wholesalePrice: 320, lowAlert: 8, active: true },
-  { id: "p10", barcode: "8901010", name: "Nail Polish — Coral", category: "Cosmetics", brand: "Glow", color: "Coral", cost: 90, price: 200, wholesalePrice: 145, lowAlert: 10, active: true },
+    profitTarget: 170,
+    wholesaleProfitTarget: 80,
+    lowAlert: 6,
+    active: true,
+  },
+  {
+    id: "p2",
+    barcode: "8901002",
+    name: "Kajal Pencil — Black",
+    category: "Cosmetics",
+    brand: "Glow",
+    cost: 80,
+    price: 150,
+    wholesalePrice: 115,
+    lowAlert: 10,
+    active: true,
+  },
+  {
+    id: "p3",
+    barcode: "8901003",
+    name: "Foundation Stick — Beige",
+    category: "Cosmetics",
+    brand: "Luxe",
+    color: "Beige",
+    cost: 620,
+    price: 1100,
+    wholesalePrice: 860,
+    lowAlert: 4,
+    active: true,
+  },
+  {
+    id: "p4",
+    barcode: "8901004",
+    name: "Compact Powder",
+    category: "Cosmetics",
+    brand: "Luxe",
+    cost: 480,
+    price: 850,
+    wholesalePrice: 665,
+    lowAlert: 5,
+    active: true,
+  },
+  {
+    id: "p5",
+    barcode: "8901005",
+    name: "Cotton Kurti — Medium",
+    category: "Clothing",
+    brand: "Aira",
+    size: "M",
+    color: "White",
+    cost: 1100,
+    price: 2200,
+    wholesalePrice: 1650,
+    lowAlert: 3,
+    active: true,
+  },
+  {
+    id: "p6",
+    barcode: "8901006",
+    name: "Embroidered Shawl",
+    category: "Clothing",
+    brand: "Aira",
+    color: "Maroon",
+    cost: 1800,
+    price: 3500,
+    wholesalePrice: 2650,
+    lowAlert: 3,
+    active: true,
+  },
+  {
+    id: "p7",
+    barcode: "8901007",
+    name: "Hair Serum 100ml",
+    category: "Hair Care",
+    brand: "Glow",
+    cost: 540,
+    price: 950,
+    wholesalePrice: 745,
+    lowAlert: 5,
+    active: true,
+  },
+  {
+    id: "p8",
+    barcode: "8901008",
+    name: "Perfume — Rose 50ml",
+    category: "Fragrance",
+    brand: "Luxe",
+    cost: 1500,
+    price: 2800,
+    wholesalePrice: 2150,
+    lowAlert: 3,
+    active: true,
+  },
+  {
+    id: "p9",
+    barcode: "8901009",
+    name: "Face Wash 150ml",
+    category: "Skin Care",
+    brand: "Glow",
+    cost: 220,
+    price: 420,
+    wholesalePrice: 320,
+    lowAlert: 8,
+    active: true,
+  },
+  {
+    id: "p10",
+    barcode: "8901010",
+    name: "Nail Polish — Coral",
+    category: "Cosmetics",
+    brand: "Glow",
+    color: "Coral",
+    cost: 90,
+    price: 200,
+    wholesalePrice: 145,
+    lowAlert: 10,
+    active: true,
+  },
 ];
 
 export const SUPPLIERS: Supplier[] = [
   {
-    id: "sup1", name: "Glow Cosmetics Pvt", contact: "Bilal Ahmed", phone: "0321-4567890",
-    email: "orders@glowcosmetics.pk", address: "Hall Road, Lahore", notes: "Delivers Mon & Thu. 30-day credit.", active: true,
+    id: "sup1",
+    name: "Glow Cosmetics Pvt",
+    contact: "Bilal Ahmed",
+    phone: "0321-4567890",
+    email: "orders@glowcosmetics.pk",
+    address: "Hall Road, Lahore",
+    notes: "Delivers Mon & Thu. 30-day credit.",
+    active: true,
   },
   {
-    id: "sup2", name: "Luxe Distributors", contact: "Sana Malik", phone: "0300-9876543",
-    email: "sales@luxedist.pk", address: "Shahalam Market, Lahore", notes: "Minimum order Rs 50,000.", active: true,
+    id: "sup2",
+    name: "Luxe Distributors",
+    contact: "Sana Malik",
+    phone: "0300-9876543",
+    email: "sales@luxedist.pk",
+    address: "Shahalam Market, Lahore",
+    notes: "Minimum order Rs 50,000.",
+    active: true,
   },
   {
-    id: "sup3", name: "Aira Textiles", contact: "Imran Sheikh", phone: "0333-1122334",
-    email: "imran@airatextiles.pk", address: "Faisalabad", notes: "Seasonal stock, 2-week lead time.", active: true,
+    id: "sup3",
+    name: "Aira Textiles",
+    contact: "Imran Sheikh",
+    phone: "0333-1122334",
+    email: "imran@airatextiles.pk",
+    address: "Faisalabad",
+    notes: "Seasonal stock, 2-week lead time.",
+    active: true,
   },
 ];
 
@@ -101,13 +301,64 @@ export const CUSTOMERS: Customer[] = [
   // counter AND supplies cosmetics to it, which is why his customer record is
   // linked to supplier `sup1`. The Ledgers tab collapses the two into one line
   // and offers to set the debts off against each other.
-  { id: "c1", name: "Bilal Traders", contact: "Bilal Ahmed", phone: "0321-4567890", address: "Hall Road, Lahore", notes: "Buys every Monday. Also supplies us — see Glow Cosmetics.", kind: "wholesale", creditLimit: 150000, linkedSupplierId: "sup1", active: true },
-  { id: "c2", name: "Noor Kirana Store", contact: "Noor Ul Haq", phone: "0300-7654321", address: "Shadman, Lahore", notes: "Small orders, pays within a week.", kind: "wholesale", creditLimit: 60000, active: true },
+  {
+    id: "c1",
+    name: "Bilal Traders",
+    contact: "Bilal Ahmed",
+    phone: "0321-4567890",
+    address: "Hall Road, Lahore",
+    notes: "Buys every Monday. Also supplies us — see Glow Cosmetics.",
+    kind: "wholesale",
+    creditLimit: 150000,
+    linkedSupplierId: "sup1",
+    active: true,
+  },
+  {
+    id: "c2",
+    name: "Noor Kirana Store",
+    contact: "Noor Ul Haq",
+    phone: "0300-7654321",
+    address: "Shadman, Lahore",
+    notes: "Small orders, pays within a week.",
+    kind: "wholesale",
+    creditLimit: 60000,
+    active: true,
+  },
   // Pays for the whole month up front on the 1st and draws stock against it —
   // the advance case, which shows as money held rather than money owed.
-  { id: "c3", name: "Hassan General Store", contact: "Hassan Raza", phone: "0333-2233445", address: "Johar Town, Lahore", notes: "Pays at the start of the month, then draws stock against it.", kind: "wholesale", creditLimit: 80000, active: true },
-  { id: "c4", name: "Mehran Cosmetics", contact: "Sadia Mehran", phone: "0345-9988776", address: "Anarkali, Lahore", notes: "Cash only — no credit line.", kind: "wholesale", creditLimit: 0, active: true },
-  { id: "c5", name: "Ayesha K.", contact: "Ayesha Khan", phone: "0301-1122334", address: "Gulberg, Lahore", notes: "Regular retail customer.", kind: "retail", creditLimit: 0, active: true },
+  {
+    id: "c3",
+    name: "Hassan General Store",
+    contact: "Hassan Raza",
+    phone: "0333-2233445",
+    address: "Johar Town, Lahore",
+    notes: "Pays at the start of the month, then draws stock against it.",
+    kind: "wholesale",
+    creditLimit: 80000,
+    active: true,
+  },
+  {
+    id: "c4",
+    name: "Mehran Cosmetics",
+    contact: "Sadia Mehran",
+    phone: "0345-9988776",
+    address: "Anarkali, Lahore",
+    notes: "Cash only — no credit line.",
+    kind: "wholesale",
+    creditLimit: 0,
+    active: true,
+  },
+  {
+    id: "c5",
+    name: "Ayesha K.",
+    contact: "Ayesha Khan",
+    phone: "0301-1122334",
+    address: "Gulberg, Lahore",
+    notes: "Regular retail customer.",
+    kind: "retail",
+    creditLimit: 0,
+    active: true,
+  },
 ];
 
 /** The wholesale counter, where trade buyers are served. */
@@ -237,7 +488,10 @@ export function genInventory(): InventoryRow[] {
       rows.push({
         productId: p.id,
         shopId: s.id,
-        qty: Math.max(0, base + ((i * 3 + j * 7) % 18) - (s.kind === "wholesale" ? 0 : i % 5 === 0 ? 10 : 0)),
+        qty: Math.max(
+          0,
+          base + ((i * 3 + j * 7) % 18) - (s.kind === "wholesale" ? 0 : i % 5 === 0 ? 10 : 0),
+        ),
       });
     });
   });
@@ -249,7 +503,15 @@ const HISTORY_DAYS = 14;
 
 export function genSales(): Sale[] {
   const out: Sale[] = [];
-  const customers = ["Walk-in", "Ayesha K.", "Fatima R.", "Hassan A.", "Walk-in", "Maria S.", "Walk-in"];
+  const customers = [
+    "Walk-in",
+    "Ayesha K.",
+    "Fatima R.",
+    "Hassan A.",
+    "Walk-in",
+    "Maria S.",
+    "Walk-in",
+  ];
   const payments: Sale["payment"][] = ["Cash", "Cash", "Card", "Cash", "Online", "Card", "Cash"];
   let counter = 100;
   for (let d = 0; d < HISTORY_DAYS; d++) {
@@ -259,7 +521,14 @@ export function genSales(): Sale[] {
         const p1 = PRODUCTS[(d + k + si) % PRODUCTS.length];
         const p2 = PRODUCTS[(d + k * 2 + si * 3) % PRODUCTS.length];
         const lines: SaleLine[] = [
-          { productId: p1.id, name: p1.name, qty: 1 + (k % 3), price: p1.price, cost: p1.cost, discount: 0 },
+          {
+            productId: p1.id,
+            name: p1.name,
+            qty: 1 + (k % 3),
+            price: p1.price,
+            cost: p1.cost,
+            discount: 0,
+          },
           { productId: p2.id, name: p2.name, qty: 1, price: p2.price, cost: p2.cost, discount: 0 },
         ];
         const subtotal = lines.reduce((a, l) => a + l.qty * l.price, 0);
@@ -333,7 +602,9 @@ export function genDaySessions(): DaySession[] {
       // money in, so they must not appear here or the till would read short by
       // exactly the amount that was lent out.
       const dayCash = sales
-        .filter((s) => s.shopId === shop.id && s.businessDate === businessDate && s.payment === "Cash")
+        .filter(
+          (s) => s.shopId === shop.id && s.businessDate === businessDate && s.payment === "Cash",
+        )
         .reduce((a, s) => a + s.total, 0);
 
       // Cash collected against credit given on an earlier day is real money in.
@@ -412,8 +683,18 @@ export function genPurchases(): Purchase[] {
     const target = i % 3 === 2 ? RETAIL_SHOPS[i % RETAIL_SHOPS.length] : SHOPS[0];
     const byShop = i >= 4;
     const lines = [
-      { productId: PRODUCTS[i % PRODUCTS.length].id, shopId: target.id, qty: 20, rate: PRODUCTS[i % PRODUCTS.length].cost },
-      { productId: PRODUCTS[(i + 2) % PRODUCTS.length].id, shopId: target.id, qty: 15, rate: PRODUCTS[(i + 2) % PRODUCTS.length].cost },
+      {
+        productId: PRODUCTS[i % PRODUCTS.length].id,
+        shopId: target.id,
+        qty: 20,
+        rate: PRODUCTS[i % PRODUCTS.length].cost,
+      },
+      {
+        productId: PRODUCTS[(i + 2) % PRODUCTS.length].id,
+        shopId: target.id,
+        qty: 15,
+        rate: PRODUCTS[(i + 2) % PRODUCTS.length].cost,
+      },
     ];
     const total = lines.reduce((a, l) => a + l.qty * l.rate, 0);
     return {
@@ -447,7 +728,11 @@ function settlementFor(i: number, total: number, date: Date) {
       return { payment: "Cash" as const, amountPaid: total };
     case 1:
       // Part payment: something now, the rest at the end of the month.
-      return { payment: "Credit" as const, amountPaid: Math.round(total * 0.4), dueDate: localDay(due) };
+      return {
+        payment: "Credit" as const,
+        amountPaid: Math.round(total * 0.4),
+        dueDate: localDay(due),
+      };
     case 2:
       return { payment: "Credit" as const, amountPaid: 0, dueDate: localDay(due) };
     default:
@@ -600,23 +885,41 @@ export function genMessages(): Message[] {
     {
       shopId: "s1",
       lines: [
-        { role: "admin", body: "Morning — new stock of the Glow lipsticks lands with you today. Put them on the front shelf." },
+        {
+          role: "admin",
+          body: "Morning — new stock of the Glow lipsticks lands with you today. Put them on the front shelf.",
+        },
         { role: "shop", body: "Got it. The Ruby 02 shade is nearly finished, only 3 left." },
-        { role: "shop", body: "Also a customer asked if we can do a bulk rate on 20 units. What should I quote?" },
+        {
+          role: "shop",
+          body: "Also a customer asked if we can do a bulk rate on 20 units. What should I quote?",
+        },
       ],
     },
     {
       shopId: "s2",
       lines: [
-        { role: "shop", body: "Till was 500 short last night — I think I gave wrong change on the last sale. Noted it in the day book." },
-        { role: "admin", body: "Thanks for flagging it. Recount at open tomorrow and let me know." },
+        {
+          role: "shop",
+          body: "Till was 500 short last night — I think I gave wrong change on the last sale. Noted it in the day book.",
+        },
+        {
+          role: "admin",
+          body: "Thanks for flagging it. Recount at open tomorrow and let me know.",
+        },
       ],
     },
     {
       shopId: "s0",
       lines: [
-        { role: "admin", body: "Bilal Traders have hit their credit limit. No more on account until they settle." },
-        { role: "shop", body: "Understood. They're coming in tomorrow, I'll ask for payment then." },
+        {
+          role: "admin",
+          body: "Bilal Traders have hit their credit limit. No more on account until they settle.",
+        },
+        {
+          role: "shop",
+          body: "Understood. They're coming in tomorrow, I'll ask for payment then.",
+        },
       ],
     },
   ];
@@ -628,7 +931,8 @@ export function genMessages(): Message[] {
     // trailing run — the part still waiting on a reply — stays unread.
     const trailingRole = lines[lines.length - 1].role;
     let firstUnanswered = lines.length - 1;
-    while (firstUnanswered > 0 && lines[firstUnanswered - 1].role === trailingRole) firstUnanswered--;
+    while (firstUnanswered > 0 && lines[firstUnanswered - 1].role === trailingRole)
+      firstUnanswered--;
 
     lines.forEach((line, i) => {
       n++;
@@ -642,7 +946,7 @@ export function genMessages(): Message[] {
         shopId,
         fromRole: line.role,
         fromUserId: fromShop ? USERS.find((u) => u.shopId === shopId)?.id : "u0",
-        fromName: fromShop ? USERS.find((u) => u.shopId === shopId)?.name ?? "Shop" : "Owner",
+        fromName: fromShop ? (USERS.find((u) => u.shopId === shopId)?.name ?? "Shop") : "Owner",
         body: line.body,
         createdAt: at.toISOString(),
         // The sender has seen their own message; the other side has seen it
@@ -655,22 +959,5 @@ export function genMessages(): Message[] {
   return out.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
-export const DEFAULT_SETTINGS: Settings = {
-  businessName: "A-POS Retail",
-  currency: "Rs",
-  address: "Lahore, Pakistan",
-  phone: "0300-1234567",
-  taxNumber: "",
-  invoicePrefix: "INV",
-  receiptHeader: "Thank you for shopping with us",
-  receiptFooter: "Thank You! Visit again",
-  lowStockDefault: 5,
-  receipt: DEFAULT_RECEIPT,
-  invoiceNote: "",
-  invoiceTerms: "Goods once sold are not returnable. Please check items on delivery.",
-  invoiceTitle: "INVOICE / BILL",
-  invoiceSignatory: "Authorised signature",
-  invoiceCopyLabel: "ORIGINAL",
-  invoiceLogo: "",
-  invoice: DEFAULT_INVOICE,
-};
+/** Re-exported so a test can reach the real defaults through one import. */
+export { DEFAULT_SETTINGS } from "../src/lib/defaults";

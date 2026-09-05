@@ -264,14 +264,14 @@ function DayStatusPill() {
   );
 }
 
-/** Tells you at a glance whether data is coming from Supabase or the demo set. */
+/** Tells you at a glance whether the app is talking to its database. */
 function DataSourceBadge() {
   const { usingSupabase, dbError } = useStore();
   if (usingSupabase && !dbError) return null;
 
   const title = dbError
     ? `Supabase problem: ${dbError}`
-    : "Running on built-in demo data. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env to use Supabase.";
+    : "Not connected to a database. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.";
 
   return (
     <span
@@ -286,7 +286,7 @@ function DataSourceBadge() {
       )}
     >
       <Database className="h-3.5 w-3.5" />
-      <span className="hidden sm:inline">{dbError ? "Database error" : "Demo data"}</span>
+      <span className="hidden sm:inline">{dbError ? "Database error" : "Not connected"}</span>
     </span>
   );
 }

@@ -1,8 +1,8 @@
 /**
  * Shared domain types.
  *
- * Split out of store.tsx so seed-data.ts (and the SQL generator that reads it)
- * can import them without a circular dependency back into the provider.
+ * Split out of store.tsx so the defaults and the test fixtures can import them
+ * without a circular dependency back into the provider.
  * store.tsx re-exports everything here, so `from "@/lib/store"` keeps working.
  */
 

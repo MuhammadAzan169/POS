@@ -34,7 +34,7 @@ import {
   type User,
 } from "./store-types";
 import { purchaseSettlement, WALK_IN } from "./store-types";
-import { DEFAULT_SETTINGS } from "./seed-data";
+import { DEFAULT_SETTINGS } from "./defaults";
 
 function mergeSettings(stored: Partial<Settings> | undefined): Settings {
   return {

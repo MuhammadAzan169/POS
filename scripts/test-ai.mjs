@@ -26,7 +26,7 @@ register("./ts-loader.mjs", pathToFileURL("./scripts/"));
 
 const I = await import("../src/lib/insights.ts");
 const T = await import("../src/lib/store-types.ts");
-const seed = await import("../src/lib/seed-data.ts");
+const seed = await import("./fixtures.ts");
 
 const LIVE = process.argv.includes("--live");
 

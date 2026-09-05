@@ -46,7 +46,7 @@ export const Route = createFileRoute("/admin")({
 });
 
 function AdminSignIn() {
-  const { user, ready, signIn, createOwner, logout, usingSupabase } = useStore();
+  const { user, ready, signIn, createOwner, logout } = useStore();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
@@ -84,11 +84,9 @@ function AdminSignIn() {
   }, [ready, user, navigate]);
 
   const checkForOwner = useCallback(() => {
-    // Demo mode has its seeded owner, so it never offers to create one.
-    if (!usingSupabase) return setFirstRun(false);
     setFirstRun(null);
     void hasOwner().then((exists) => setFirstRun(exists === "unknown" ? "unknown" : !exists));
-  }, [usingSupabase]);
+  }, []);
 
   useEffect(checkForOwner, [checkForOwner]);
 

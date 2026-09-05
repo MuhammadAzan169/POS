@@ -14,7 +14,7 @@ import { pathToFileURL } from "node:url";
 
 register("./ts-loader.mjs", pathToFileURL("./scripts/"));
 
-const seed = await import("../src/lib/seed-data.ts");
+const seed = await import("./fixtures.ts");
 const dayBook = await import("../src/lib/day-book.ts");
 const ledgerLib = await import("../src/lib/ledger.ts");
 

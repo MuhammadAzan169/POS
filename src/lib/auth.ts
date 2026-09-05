@@ -127,8 +127,8 @@ export async function claimAsOwner(name: string, phone: string): Promise<AuthRes
  * callers and returns a single boolean, no names or addresses.
  */
 export async function hasOwner(): Promise<boolean | "unknown"> {
-  // No database behind the app: demo mode has its seeded owner.
-  if (!supabase) return true;
+  // Without a database there is nothing to ask, and nothing to sign into.
+  if (!supabase) return "unknown";
   const { data, error } = await supabase.rpc("has_owner");
   return error ? "unknown" : Boolean(data);
 }

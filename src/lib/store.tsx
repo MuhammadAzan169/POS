@@ -62,7 +62,7 @@ interface StoreState {
   user: User | null;
   /** False until the saved session and the Supabase snapshot have loaded. */
   ready: boolean;
-  /** True when reading/writing Supabase; false when running on built-in demo data. */
+  /** True once the database has answered. False means it never did. */
   usingSupabase: boolean;
   /** Set when Supabase was configured but could not be reached. */
   dbError: string | null;
@@ -103,8 +103,7 @@ interface StoreState {
   settings: Settings;
   discounts: DiscountRules;
   /**
-   * Signs in for real when Supabase is configured, and against the demo users
-   * otherwise — so the app still runs with no database behind it.
+   * Signs in against the database. There is no other path.
    *
    * `kind` decides how the identifier is read: an owner types an email, a shop
    * worker types a username that becomes one.
@@ -284,25 +283,7 @@ function profitOf(sale: Sale) {
   const lines = sale.lines.reduce((a, l) => a + l.qty * (l.price - l.cost) - l.discount, 0);
   return lines - discountSplitOf(sale).bill;
 }
-// The demo dataset now lives in seed-data.ts so the SQL seed generator can
-// emit exactly the same rows the UI shows.
-import {
-  CUSTOMERS,
-  DEFAULT_SETTINGS,
-  PRODUCTS,
-  SHOPS,
-  SUPPLIERS,
-  USERS,
-  genCustomerPayments,
-  genDaySessions,
-  genExpenses,
-  genInventory,
-  genMessages,
-  genPurchases,
-  genSales,
-  genSetOffs,
-  genSupplierPayments,
-} from "./seed-data";
+import { DEFAULT_SETTINGS } from "./defaults";
 
 const StoreContext = createContext<StoreState | null>(null);
 
@@ -325,33 +306,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
    */
   /*
    * Whether an owner account has been claimed. Only meaningful with a database
-   * behind the app; demo mode has its seeded owner and never asks.
+   * behind the app.
    */
   const [needsOwner, setNeedsOwner] = useState(false);
 
   const [online, setOnline] = useState(true);
-  const [shops, setShops] = useState<Shop[]>(SHOPS);
-  const [users, setUsers] = useState<User[]>(USERS);
-  const [products, setProducts] = useState<Product[]>(PRODUCTS);
-  const [inventory, setInventory] = useState<InventoryRow[]>(() => genInventory());
-  const [sales, setSales] = useState<Sale[]>(() => genSales());
-  const [purchases, setPurchases] = useState<Purchase[]>(() => genPurchases());
-  const [suppliers, setSuppliers] = useState<Supplier[]>(SUPPLIERS);
-  const [expenses, setExpenses] = useState<Expense[]>(() => genExpenses());
+  const [shops, setShops] = useState<Shop[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [inventory, setInventory] = useState<InventoryRow[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [returns, setReturns] = useState<ReturnRec[]>([]);
-  const [daySessions, setDaySessions] = useState<DaySession[]>(() => genDaySessions());
+  const [daySessions, setDaySessions] = useState<DaySession[]>([]);
   const [transfers, setTransfers] = useState<Transfer[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>(CUSTOMERS);
-  const [customerPayments, setCustomerPayments] = useState<CustomerPayment[]>(() =>
-    genCustomerPayments(),
-  );
-  const [supplierPayments, setSupplierPayments] = useState<SupplierPayment[]>(() =>
-    genSupplierPayments(),
-  );
-  const [setOffs, setSetOffs] = useState<SetOff[]>(() => genSetOffs());
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerPayments, setCustomerPayments] = useState<CustomerPayment[]>([]);
+  const [supplierPayments, setSupplierPayments] = useState<SupplierPayment[]>([]);
+  const [setOffs, setSetOffs] = useState<SetOff[]>([]);
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
-  const [messages, setMessages] = useState<Message[]>(() => genMessages());
+  const [messages, setMessages] = useState<Message[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [discounts, setDiscounts] = useState<DiscountRules>(DEFAULT_DISCOUNTS);
 
@@ -375,8 +352,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
      *
      * With a database behind the app, Supabase owns the session and keeps it in
      * its own storage — so the profile is re-read from it on every boot. The
-     * localStorage copy is the demo mode's memory only; using it when Supabase
-     * is configured would let a deactivated worker keep a stale role simply by
+     * The localStorage copy is a leftover from before real sign-in existed;
+     * trusting it would let a deactivated worker keep a stale role simply by
      * not signing out.
      */
     const restoreSession = async () => {
@@ -396,20 +373,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const boot = async () => {
       await restoreSession();
 
-      // No Supabase configured: keep the built-in demo data so a fresh clone runs.
+      /*
+       * No database, nothing to show.
+       *
+       * There is no built-in data to fall back to any more. An install without
+       * VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY has no records, and
+       * inventing some is how a deployment that was never connected managed to
+       * look like it was working.
+       */
       if (!isSupabaseConfigured) {
-        if (!cancelled) setReady(true);
+        if (!cancelled) {
+          setDbError("No database configured — set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+          setReady(true);
+        }
         return;
       }
 
       try {
         const snap = await loadSnapshot();
         if (cancelled) return;
-        // An empty database means schema.sql ran but seed.sql did not; keeping the
-        // demo data is friendlier than showing a blank app.
-        if (snap.products.length === 0 && snap.shops.length === 0) {
-          setDbError("Connected, but the database is empty — run supabase/seed.sql.");
-        } else {
+        /*
+         * An empty database is a NEW one, not a broken one.
+         *
+         * This used to keep the demo data when nothing came back, and — worse —
+         * never marked the app as connected. So a freshly reset system fell
+         * back to demo mode, where an owner account always exists, and the
+         * owner's sign-in page refused to let the real one be created.
+         */
+        {
           setShops(snap.shops);
           setUsers(snap.users);
           setProducts(snap.products);
@@ -437,7 +428,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setPendingMigration(snap.pendingMigration ?? null);
         }
       } catch (e) {
-        // Fall back to demo data rather than leaving the till unusable.
+        // Reported rather than papered over: an unreachable database is a
+        // problem to fix, not a reason to show numbers that came from nowhere.
         if (!cancelled) setDbError(e instanceof Error ? e.message : String(e));
       } finally {
         if (!cancelled) setReady(true);
@@ -481,7 +473,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   /**
    * Local state has already been updated by the time this runs, so a failed
-   * write is reported rather than blocking the UI. No-op on demo data.
+   * write is reported rather than blocking the UI.
    */
   const persist = (label: string, op: () => Promise<{ error?: string }>) => {
     if (!isSupabaseConfigured) return;
@@ -560,30 +552,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       needsOwner,
       signIn: async (identifier, password, kind) => {
         /*
-         * With no database behind it the app runs on demo data, where an
-         * account is whatever is in the seeded list and the password is not
-         * checked. That path exists so the system can be shown without any
-         * setup at all; it is never reached once Supabase is configured.
+         * One way in, and it checks the password.
+         *
+         * There used to be a branch here that signed anyone in whose email
+         * appeared in the demo list, without checking the password at all. It
+         * existed for the demo, but it was reachable whenever the app decided it
+         * was not connected — which turned a database outage into an open door.
          */
-        if (!usingSupabase) {
-          const email = kind === "staff" ? staffEmail(identifier) : identifier.trim().toLowerCase();
-          const u = users.find((x) => x.email.toLowerCase() === email);
-          if (!u) return { user: null, error: "No such account" };
-          setUser(u);
-          try {
-            window.localStorage.setItem(LS_USER, JSON.stringify(u));
-          } catch {
-            /* private mode */
-          }
-          return { user: u };
-        }
-
         const result = await auth.signIn(identifier, password, kind);
         if (result.user) setUser(result.user);
         return result;
       },
       createOwner: async (details) => {
-        if (!usingSupabase) return { user: null, error: "Connect a database first" };
         const result = await auth.createOwner(details);
         if (!result.user) return result;
 
