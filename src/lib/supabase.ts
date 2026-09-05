@@ -9,8 +9,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  * Security. Never put a service_role key or an AI provider key here; those go in
  * unprefixed env vars read only by server functions.
  *
- * When the variables are missing the app falls back to the built-in demo data,
- * so a fresh clone still runs without any setup.
+ * Without them the app has nothing to show: there is no built-in data to fall
+ * back to, and it says so rather than inventing records.
  */
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -20,10 +20,20 @@ export const isSupabaseConfigured = Boolean(url && anonKey);
 export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(url!, anonKey!, {
       auth: {
-        // No Supabase Auth yet — the app still uses its own demo login, so there
-        // is no session to persist or refresh.
-        persistSession: false,
-        autoRefreshToken: false,
+        /*
+         * The session is kept, and kept alive.
+         *
+         * These were both off, from when the app had its own pretend login and
+         * there was no real session worth storing. Left off with real sign-in
+         * in place, every page refresh threw the session away and dropped the
+         * person back at the login screen — and a shift at the till outlasting
+         * one access token would have done the same thing mid-sale.
+         */
+        persistSession: true,
+        autoRefreshToken: true,
+        // Finishes reading the stored session before the app asks who is signed
+        // in, so a refresh does not race the answer.
+        detectSessionInUrl: true,
       },
     })
   : null;

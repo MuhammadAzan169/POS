@@ -50,18 +50,25 @@ const toUser = (row: StaffRow, email: string): User => ({
  */
 export async function currentUser(): Promise<User | null> {
   if (!supabase) return null;
-  const { data: session } = await supabase.auth.getUser();
-  const account = session.user;
+  /*
+   * `getSession` rather than `getUser`: it resolves the session the client
+   * restored from storage, which on a page refresh is the thing being waited
+   * for. `getUser` goes to the network to re-validate, so on a cold load it can
+   * answer "nobody" before the stored session has finished loading — which
+   * reads, from the outside, as being signed out by refreshing the page.
+   */
+  const { data } = await supabase.auth.getSession();
+  const account = data.session?.user;
   if (!account) return null;
 
-  const { data, error } = await supabase
+  const { data: profile, error } = await supabase
     .from("staff")
     .select("id, name, role, shop_id, active")
     .eq("id", account.id)
     .maybeSingle();
 
-  if (error || !data || !data.active) return null;
-  return toUser(data as StaffRow, account.email ?? "");
+  if (error || !profile || !profile.active) return null;
+  return toUser(profile as StaffRow, account.email ?? "");
 }
 
 /** The owner signs in with an email address; a worker with a username. */
