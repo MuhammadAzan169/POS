@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 // Domain types live in store-types.ts; re-exported so existing imports
 // from "@/lib/store" continue to work unchanged.
@@ -342,102 +350,82 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  /**
+   * Loads everything the app holds, with the signed-in person's permissions.
+   *
+   * Separate from boot, and called again after signing in, because the
+   * database now refuses to answer anyone anonymous. Loading once on page
+   * load meant the read happened BEFORE anybody had signed in: it came back
+   * refused, the error stuck to the header, and signing in a moment later
+   * never went back for the data. The app sat there signed in and empty,
+   * reporting a database error against a database that was working.
+   */
+  const refreshData = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setDbError("No database configured — set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+      return;
+    }
+    try {
+      const snap = await loadSnapshot();
+      setShops(snap.shops);
+      setUsers(snap.users);
+      setProducts(snap.products);
+      setInventory(snap.inventory);
+      setSales(snap.sales);
+      setPurchases(snap.purchases);
+      setSuppliers(snap.suppliers);
+      setExpenses(snap.expenses);
+      setReturns(snap.returns);
+      setDaySessions(snap.daySessions);
+      setTransfers(snap.transfers);
+      setCustomers(snap.customers);
+      setCustomerPayments(snap.customerPayments);
+      setSupplierPayments(snap.supplierPayments);
+      setSetOffs(snap.setOffs);
+      setAdjustments(snap.adjustments);
+      setActivity(snap.activity);
+      setMessages(snap.messages);
+      setSettings(snap.settings);
+      setDiscounts(snap.discounts);
+      setUsingSupabase(true);
+      // Cleared on success: an error from before signing in should not
+      // outlive the sign-in that fixed it.
+      setDbError(null);
+      // A database still on an older schema is running fine on real data —
+      // it just cannot record everything yet. That is an upgrade notice,
+      // not an error, so it never blocks the app.
+      setPendingMigration(snap.pendingMigration ?? null);
+    } catch (e) {
+      // Reported rather than papered over: an unreachable database is a
+      // problem to fix, not a reason to show numbers that came from nowhere.
+      setDbError(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
-    /*
-     * Who is signed in, from whichever source is in charge.
-     *
-     * With a database behind the app, Supabase owns the session and keeps it in
-     * its own storage — so the profile is re-read from it on every boot. The
-     * The localStorage copy is a leftover from before real sign-in existed;
-     * trusting it would let a deactivated worker keep a stale role simply by
-     * not signing out.
-     */
-    /*
-     * Who is signed in, according to Supabase.
-     *
-     * There used to be a copy in localStorage as well, left from when the demo
-     * accounts had no real session. Trusting it meant a worker who had been
-     * switched off kept their role until they happened to sign out, and a
-     * browser could be handed a role simply by editing its own storage.
-     */
-    const restoreSession = async () => {
-      const account = await auth.currentUser();
-      if (!cancelled) setUser(account);
-    };
-
     const boot = async () => {
-      await restoreSession();
-
       /*
-       * No database, nothing to show.
-       *
-       * There is no built-in data to fall back to any more. An install without
-       * VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY has no records, and
-       * inventing some is how a deployment that was never connected managed to
-       * look like it was working.
+       * Supabase owns the session. The profile is re-read from it on every
+       * load, so a worker who has been switched off cannot keep a stale role
+       * simply by never signing out.
        */
-      if (!isSupabaseConfigured) {
-        if (!cancelled) {
-          setDbError("No database configured — set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
-          setReady(true);
-        }
-        return;
-      }
+      const account = await auth.currentUser();
+      if (cancelled) return;
+      setUser(account);
 
-      try {
-        const snap = await loadSnapshot();
-        if (cancelled) return;
-        /*
-         * An empty database is a NEW one, not a broken one.
-         *
-         * This used to keep the demo data when nothing came back, and — worse —
-         * never marked the app as connected. So a freshly reset system fell
-         * back to demo mode, where an owner account always exists, and the
-         * owner's sign-in page refused to let the real one be created.
-         */
-        {
-          setShops(snap.shops);
-          setUsers(snap.users);
-          setProducts(snap.products);
-          setInventory(snap.inventory);
-          setSales(snap.sales);
-          setPurchases(snap.purchases);
-          setSuppliers(snap.suppliers);
-          setExpenses(snap.expenses);
-          setReturns(snap.returns);
-          setDaySessions(snap.daySessions);
-          setTransfers(snap.transfers);
-          setCustomers(snap.customers);
-          setCustomerPayments(snap.customerPayments);
-          setSupplierPayments(snap.supplierPayments);
-          setSetOffs(snap.setOffs);
-          setAdjustments(snap.adjustments);
-          setActivity(snap.activity);
-          setMessages(snap.messages);
-          setSettings(snap.settings);
-          setDiscounts(snap.discounts);
-          setUsingSupabase(true);
-          // A database still on the original schema is running fine on real
-          // data — it just can't record day sessions or transfers yet. That is
-          // an upgrade notice, not an error, so it never blocks the app.
-          setPendingMigration(snap.pendingMigration ?? null);
-        }
-      } catch (e) {
-        // Reported rather than papered over: an unreachable database is a
-        // problem to fix, not a reason to show numbers that came from nowhere.
-        if (!cancelled) setDbError(e instanceof Error ? e.message : String(e));
-      } finally {
-        if (!cancelled) setReady(true);
-      }
+      // Nothing is readable until somebody has signed in, so an anonymous
+      // visitor is left on the sign-in page rather than shown an error.
+      if (account) await refreshData();
+      if (!cancelled) setReady(true);
     };
 
     void boot();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshData]);
 
   /**
    * Live messages.
@@ -557,7 +545,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
          * was not connected — which turned a database outage into an open door.
          */
         const result = await auth.signIn(identifier, password, kind);
-        if (result.user) setUser(result.user);
+        if (result.user) {
+          setUser(result.user);
+          // The shop's records are only readable once there is a session, so
+          // they are fetched now rather than at page load.
+          await refreshData();
+        }
         return result;
       },
       createOwner: async (details) => {
@@ -566,6 +559,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
         setUser(result.user);
         setNeedsOwner(false);
+        await refreshData();
 
         /*
          * The business name is asked for during setup so the very first bill
