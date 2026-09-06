@@ -58,6 +58,17 @@ function ShopsPage() {
     useStore();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Shop | null>(null);
+  /*
+   * A shop that was saved while its login was not.
+   *
+   * This state exists because of a real failure in front of a client: the shop
+   * was created, the login silently was not (the server was missing its key),
+   * and the only warning was a toast that had vanished by the time anyone
+   * looked. The dialog now stays open, says so in place, and retries the login
+   * alone — the shop is already saved and must not be created twice.
+   */
+  const [loginPending, setLoginPending] = useState<{ shopId: string; error: string } | null>(null);
+
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
 
@@ -88,6 +99,21 @@ function ShopsPage() {
     setOpen(true);
   };
 
+  const createLoginFor = async (shopId: string, shopName: string) => {
+    const token = await accessToken();
+    if (!token) return { ok: false, error: "Sign in again before creating a login" };
+    return createStaffAccount({
+      data: {
+        token,
+        username: form.username,
+        password: form.password,
+        name: `${shopName.trim()} counter`,
+        shopId,
+        email: form.email,
+      },
+    });
+  };
+
   const save = async () => {
     if (!form.name.trim()) {
       toast.error("Shop name required");
@@ -95,53 +121,61 @@ function ShopsPage() {
     }
 
     /*
-     * A new shop needs a way in. The credentials are asked for here rather than
-     * left to a separate Users screen, because a shop created without a login
-     * is a shop the staff cannot open, and nothing on this page would say so.
+     * A new shop needs a way in, and these are REQUIRED rather than optional.
+     *
+     * They were optional, and a shop was created without them in front of a
+     * client: the form said "Shop added", nothing was wrong on screen, and the
+     * problem surfaced days later as a cashier being told their password was
+     * wrong for an account that had never existed. A shop nobody can open is
+     * not a shop, so the form no longer accepts one.
      */
-    if (!editing && (form.username.trim() || form.password)) {
+    if (!editing) {
       if (form.username.trim().length < 3) {
-        toast.error("The username needs at least 3 characters");
+        toast.error("Give this shop a username of at least 3 characters");
         return;
       }
       if (form.password.length < 8) {
-        toast.error("The password needs at least 8 characters");
+        toast.error("Give this shop a password of at least 8 characters");
         return;
       }
     }
 
     setSaving(true);
+
+    // Retrying after a login failure: the shop exists, only the account is
+    // missing, so nothing else is touched.
+    if (loginPending) {
+      const retry = await createLoginFor(loginPending.shopId, form.name);
+      setSaving(false);
+      if (!retry.ok) {
+        setLoginPending({ shopId: loginPending.shopId, error: retry.error ?? "Unknown error" });
+        return;
+      }
+      toast.success(`${form.username.trim()} can now sign in`);
+      setLoginPending(null);
+      setOpen(false);
+      return;
+    }
+
     if (editing) {
       updateShop({ ...editing, ...form, logo: form.logo || undefined });
       toast.success("Shop updated");
     } else {
       const shop = addShop({ ...form, logo: form.logo || undefined, active: true });
 
-      if (form.username.trim() && form.password) {
-        const token = await accessToken();
-        if (!token) {
-          toast.error("Sign in again before creating a login");
-        } else {
-          const result = await createStaffAccount({
-            data: {
-              token,
-              username: form.username,
-              password: form.password,
-              name: `${form.name.trim()} counter`,
-              shopId: shop?.id ?? "",
-              email: form.email,
-            },
-          });
-          if (result.ok) {
-            toast.success(`${form.name} added, and ${form.username.trim()} can sign in`);
-          } else {
-            // The shop is already saved, so this says what is missing rather
-            // than pretending the whole thing failed.
-            toast.error(`Shop saved, but the login was not created: ${result.error}`);
-          }
+      {
+        const result = await createLoginFor(shop?.id ?? "", form.name);
+        if (!result.ok) {
+          /*
+           * The shop is saved; the login is not. Holding the dialog open is the
+           * point — a toast here disappears, and the next person to find out is
+           * the cashier standing at the till being told their password is wrong.
+           */
+          setSaving(false);
+          setLoginPending({ shopId: shop?.id ?? "", error: result.error ?? "Unknown error" });
+          return;
         }
-      } else {
-        toast.success(`${form.name} added`);
+        toast.success(`${form.name} added, and ${form.username.trim()} can sign in`);
       }
     }
     setSaving(false);
@@ -200,6 +234,14 @@ function ShopsPage() {
                     {wholesale ? "Wholesale" : "Retail"}
                   </span>
                   <StatusPill status={s.active ? "Active" : "Disabled"} />
+                  {/* Shops created before the login became compulsory, or whose
+                      login failed to be created, are called out here — the
+                      alternative is finding out at the counter. */}
+                  {!users.some((u) => u.shopId === s.id && u.active) && (
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border bg-destructive/10 text-destructive border-destructive/30">
+                      No login
+                    </span>
+                  )}
                 </div>
               </div>
               <h3 className="font-semibold mt-4">{s.name}</h3>
@@ -339,8 +381,8 @@ function ShopsPage() {
                 <div className="space-y-1.5">
                   <Label>Counter login</Label>
                   <p className="text-xs text-muted-foreground">
-                    What the staff at this shop type to sign in. Optional — you can add it later on
-                    the Users page.
+                    What the staff at this shop type to sign in. Required — a shop without a login
+                    is a shop nobody can open.
                   </p>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -387,12 +429,31 @@ function ShopsPage() {
               </div>
             )}
           </div>
+          {loginPending && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+              <p className="font-semibold text-destructive">
+                The shop was saved, but its login was not created.
+              </p>
+              <p className="text-muted-foreground mt-1">{loginPending.error}</p>
+              <p className="text-muted-foreground mt-2">
+                Staff cannot sign in until this succeeds. Fix the cause, then press
+                <strong> Create login</strong> — the shop will not be added again.
+              </p>
+            </div>
+          )}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button onClick={save} disabled={saving}>
-              {saving ? "Saving…" : editing ? "Save changes" : "Add shop"}
+              {saving
+                ? "Saving…"
+                : loginPending
+                  ? "Create login"
+                  : editing
+                    ? "Save changes"
+                    : "Add shop"}
             </Button>
           </DialogFooter>
         </DialogContent>
