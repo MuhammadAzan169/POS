@@ -1,7 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useStore, todayISO, daysAgoISO, stockAsOf } from "@/lib/store";
+import { useStore, shopKind, todayISO, daysAgoISO, stockAsOf } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
+import { OpeningStock } from "@/components/OpeningStock";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusPill } from "@/components/Stat";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { Card } from "@/components/ui/card";
@@ -38,6 +40,20 @@ function InventoryPage() {
   const [q, setQ] = useState("");
   const today = todayISO();
   const [asOf, setAsOf] = useState(today);
+
+  /*
+   * Who may record an opening count, and for which shops.
+   *
+   * The owner, for any active shop. A shop worker only at a wholesale counter,
+   * and only their own — a retail till is stocked by the owner through
+   * purchases and transfers, so letting a retail cashier type a stock figure
+   * would be a way to paper over a discrepancy instead of reporting it.
+   */
+  const openingShops = useMemo(() => {
+    const active = shops.filter((x) => x.active);
+    if (isAdmin) return active;
+    return active.filter((x) => x.id === user?.shopId && shopKind(x) === "wholesale");
+  }, [shops, isAdmin, user?.shopId]);
 
   const isHistorical = asOf !== today;
 
@@ -123,19 +139,12 @@ function InventoryPage() {
     toast.success(`Exported ${rows.length} rows`);
   };
 
-  return (
-    <div>
-      <PageHeader
-        title="Inventory"
-        subtitle={isAdmin ? "Stock per shop across the business." : "Your shop's current stock."}
-        actions={
-          <Button variant="outline" onClick={exportCsv}>
-            <Download className="h-4 w-4 mr-1.5" />
-            Export CSV
-          </Button>
-        }
-      />
-
+  /*
+   * The stock list, lifted into a variable so it can be shown either on its
+   * own or inside a tab, without the page being restructured around it.
+   */
+  const stockView = (
+    <>
       <Card className="p-3 sm:p-4 mb-4 space-y-4">
         <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-end">
           <div className="space-y-1.5">
@@ -347,6 +356,40 @@ function InventoryPage() {
           </table>
         </TableWrap>
       </Card>
+    </>
+  );
+
+  return (
+    <div>
+      <PageHeader
+        title="Inventory"
+        subtitle={isAdmin ? "Stock per shop across the business." : "Your shop's current stock."}
+        actions={
+          <Button variant="outline" onClick={exportCsv}>
+            <Download className="h-4 w-4 mr-1.5" />
+            Export CSV
+          </Button>
+        }
+      />
+
+      {/*
+        Tabbed only when there is a second thing to show. A retail cashier sees
+        the stock list exactly as before, with no empty tab rail above it.
+      */}
+      {openingShops.length > 0 ? (
+        <Tabs defaultValue="stock">
+          <TabsList className="mb-4">
+            <TabsTrigger value="stock">Stock on hand</TabsTrigger>
+            <TabsTrigger value="opening">Opening stock</TabsTrigger>
+          </TabsList>
+          <TabsContent value="stock">{stockView}</TabsContent>
+          <TabsContent value="opening">
+            <OpeningStock shops={openingShops} />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        stockView
+      )}
     </div>
   );
 }

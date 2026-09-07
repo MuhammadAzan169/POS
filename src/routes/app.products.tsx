@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { useStore, formatRs } from "@/lib/store";
+import { useStore, formatRs, shopKind } from "@/lib/store";
 import { PageHeader } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,14 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { MobileCards, ListCard, TableWrap } from "@/components/DataList";
 import { Plus, Search, Pencil } from "lucide-react";
 import { toast } from "sonner";
@@ -34,9 +42,24 @@ export const Route = createFileRoute("/app/products")({
 });
 
 function ProductsPage() {
-  const { user, products, inventory, addProduct } = useStore();
+  const { user, products, inventory, shops, addProduct, setOpeningStock } = useStore();
   const { q: searchParam } = Route.useSearch();
   const isAdmin = user?.role === "admin";
+  /*
+   * Which shops may be given an opening count here.
+   *
+   * The owner sets it for any active shop. A shop worker only ever sees their
+   * own, and only at a wholesale counter — a retail till is stocked by
+   * transfers and purchases from the owner, so letting a retail cashier type a
+   * stock figure would be a way to paper over a discrepancy rather than report
+   * it.
+   */
+  const openingShops = useMemo(() => {
+    const active = shops.filter((x) => x.active);
+    if (isAdmin) return active;
+    return active.filter((x) => x.id === user?.shopId && shopKind(x) === "wholesale");
+  }, [shops, isAdmin, user?.shopId]);
+
   const [q, setQ] = useState(searchParam ?? "");
   const [editing, setEditing] = useState<Product | null>(null);
 
@@ -55,7 +78,27 @@ function ProductsPage() {
     price: 0,
     wholesalePrice: 0,
     lowAlert: 5,
+    /*
+     * What is already on the shelf, entered while the product is being added.
+     *
+     * A shop that starts using the system mid-trading does not have an empty
+     * shop — asking them to add a product and then go somewhere else to say
+     * they have forty of it is two jobs for one fact.
+     */
+    openingQty: 0,
+    openingShopId: "",
   });
+
+  /*
+   * One shop is the common case, and picking it by hand every time is a step
+   * that exists only to be forgotten. Runs when the list arrives, not on mount,
+   * because shops load after the first render.
+   */
+  useEffect(() => {
+    if (openingShops.length === 1) {
+      setForm((f) => (f.openingShopId ? f : { ...f, openingShopId: openingShops[0].id }));
+    }
+  }, [openingShops]);
 
   const rows = useMemo(() => {
     return products
@@ -85,8 +128,14 @@ function ProductsPage() {
       toast.error(`Barcode ${form.barcode.trim()} is already used`);
       return;
     }
-    addProduct({
-      ...form,
+    if (form.openingQty > 0 && !form.openingShopId) {
+      toast.error("Choose which shop the opening stock is in");
+      return;
+    }
+
+    const { openingQty, openingShopId, ...fields } = form;
+    const created = addProduct({
+      ...fields,
       name: form.name.trim(),
       barcode: form.barcode.trim(),
       // 0 means "not set" here — the wholesale counter then falls back to the
@@ -96,7 +145,13 @@ function ProductsPage() {
       size: "",
       color: "",
     });
-    toast.success("Product added");
+    if (openingQty > 0 && openingShopId) {
+      setOpeningStock(openingShopId, [{ productId: created.id, qty: openingQty }]);
+      const where = shops.find((x) => x.id === openingShopId)?.name ?? "the shop";
+      toast.success(`Product added, with ${openingQty} in stock at ${where}`);
+    } else {
+      toast.success("Product added");
+    }
     setOpen(false);
     setForm({
       barcode: "",
@@ -107,6 +162,11 @@ function ProductsPage() {
       price: 0,
       wholesalePrice: 0,
       lowAlert: 5,
+      openingQty: 0,
+      // The shop is kept: someone entering a shelf's worth of products is
+      // entering them all for the same shop, and re-picking it every time is
+      // the sort of thing that gets stock filed against the wrong branch.
+      openingShopId,
     });
   };
 
@@ -195,6 +255,56 @@ function ProductsPage() {
                     />
                     <p className="text-xs text-muted-foreground">Used only at wholesale shops.</p>
                   </div>
+
+                  {/*
+                    Opening stock, entered where the product is created.
+                    Optional: a product being added because a delivery is coming
+                    has none yet, and is left at zero.
+                  */}
+                  {openingShops.length > 0 && (
+                    <>
+                      <div className="sm:col-span-2 pt-1">
+                        <Separator />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Opening stock</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={form.openingQty || ""}
+                          placeholder="0"
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              openingQty: Math.max(0, Number(e.target.value) || 0),
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>In which shop</Label>
+                        <Select
+                          value={form.openingShopId}
+                          onValueChange={(openingShopId) => setForm({ ...form, openingShopId })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Pick a shop" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {openingShops.map((x) => (
+                              <SelectItem key={x.id} value={x.id}>
+                                {x.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <p className="text-xs text-muted-foreground sm:col-span-2">
+                        How many you already have on the shelf. Leave at 0 if none — this records a
+                        count, not a purchase, so nothing is added to your costs.
+                      </p>
+                    </>
+                  )}
                   {form.cost > 0 && form.price > 0 && (
                     <div
                       className={`sm:col-span-2 text-sm rounded-md p-2 ${form.price >= form.cost ? "text-success-strong bg-success/10" : "text-destructive bg-destructive/10"}`}

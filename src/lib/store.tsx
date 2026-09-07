@@ -139,7 +139,18 @@ interface StoreState {
   /** Undoes a return: stock goes back as it was, and the invoice re-opens. */
   deleteReturn: (id: string) => void;
   updateProductAlert: (productId: string, lowAlert: number) => void;
-  addProduct: (p: Omit<Product, "id">) => void;
+  /** Returns the product so a caller can give it an opening stock straight away. */
+  addProduct: (p: Omit<Product, "id">) => Product;
+  /**
+   * Records what is ALREADY on the shelf when a shop starts using the system.
+   *
+   * Sets the count outright rather than adding to it, because that is what the
+   * person doing it is holding: a number they have just counted, not a delivery.
+   * It deliberately writes no purchase — there is no bill, no supplier and no
+   * cost to book, and inventing one would put money into the accounts that the
+   * business never spent.
+   */
+  setOpeningStock: (shopId: string, entries: { productId: string; qty: number }[]) => void;
   updateProduct: (p: Product) => void;
   addShop: (s: Omit<Shop, "id">) => Shop;
   updateShop: (s: Shop) => void;
@@ -980,6 +991,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const product: Product = { ...p, id: `p-${Date.now()}` };
         setProducts((prev) => [...prev, product]);
         persist("the product", () => db.upsertProduct(product));
+        return product;
+      },
+      setOpeningStock: (shopId, entries) => {
+        if (!shopId || entries.length === 0) return;
+
+        setInventory((prev) => {
+          const next = [...prev];
+          const written: InventoryRow[] = [];
+
+          for (const { productId, qty } of entries) {
+            // A count cannot be negative, and a fractional one is a typo.
+            const counted = Math.max(0, Math.round(qty));
+            const i = next.findIndex((r) => r.productId === productId && r.shopId === shopId);
+            const row: InventoryRow = { productId, shopId, qty: counted };
+            if (i >= 0) next[i] = row;
+            else next.push(row);
+            written.push(row);
+          }
+
+          persist("the opening stock", () => db.upsertInventory(written));
+          return next;
+        });
       },
       updateProduct: (p) => {
         setProducts((prev) => prev.map((x) => (x.id === p.id ? p : x)));

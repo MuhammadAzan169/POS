@@ -2907,6 +2907,86 @@ it("every demo credit sale produces a bill that reconciles", () => {
   ok(checked > 0, `bills were checked (${checked})`);
 });
 
+/* ========================================================= OPENING STOCK */
+
+describe("Recording stock a shop already had");
+
+/*
+ * The rule the opening count follows: it SETS the quantity rather than adding
+ * to it. A shop starting mid-trading is reporting a shelf they have just
+ * counted, not a delivery — so booking it as a movement would put a cost into
+ * the accounts that the business never spent.
+ */
+function applyOpening(inventory, shopId, entries) {
+  const next = [...inventory];
+  for (const { productId, qty } of entries) {
+    const counted = Math.max(0, Math.round(qty));
+    const i = next.findIndex((r) => r.productId === productId && r.shopId === shopId);
+    const row = { productId, shopId, qty: counted };
+    if (i >= 0) next[i] = row;
+    else next.push(row);
+  }
+  return next;
+}
+
+it("adds a row for a product the shop has never held", () => {
+  const after = applyOpening([], "s1", [{ productId: "p1", qty: 40 }]);
+  eq(after.length, 1, "one row");
+  eq(after[0], { productId: "p1", shopId: "s1", qty: 40 }, "with the counted quantity");
+});
+
+it("replaces a count rather than adding to it", () => {
+  const before = [{ productId: "p1", shopId: "s1", qty: 12 }];
+  const after = applyOpening(before, "s1", [{ productId: "p1", qty: 40 }]);
+  eq(after[0].qty, 40, "the shelf says 40, not 52");
+});
+
+it("a counted zero is recorded, because it is a real answer", () => {
+  const before = [{ productId: "p1", shopId: "s1", qty: 12 }];
+  const after = applyOpening(before, "s1", [{ productId: "p1", qty: 0 }]);
+  eq(after[0].qty, 0, "the shelf is empty");
+});
+
+it("never leaves a negative or fractional count", () => {
+  const after = applyOpening([], "s1", [
+    { productId: "p1", qty: -5 },
+    { productId: "p2", qty: 3.6 },
+  ]);
+  eq(after[0].qty, 0, "a negative count is nothing, not debt");
+  eq(after[1].qty, 4, "a fraction is rounded — you cannot hold 3.6 of a thing");
+});
+
+it("touches only the shop it was entered for", () => {
+  const before = [
+    { productId: "p1", shopId: "s1", qty: 5 },
+    { productId: "p1", shopId: "s2", qty: 99 },
+  ];
+  const after = applyOpening(before, "s1", [{ productId: "p1", qty: 40 }]);
+  eq(after.find((r) => r.shopId === "s1").qty, 40, "the shop counted");
+  eq(after.find((r) => r.shopId === "s2").qty, 99, "the other shop is untouched");
+});
+
+it("only the owner and a wholesale counter may record one", () => {
+  // The same rule both screens apply: a retail cashier is stocked by the owner
+  // through purchases and transfers, so a typed figure there would hide a
+  // discrepancy rather than report it.
+  const shops = [
+    { id: "s1", name: "Retail", kind: "retail", active: true },
+    { id: "s2", name: "Wholesale", kind: "wholesale", active: true },
+    { id: "s3", name: "Closed", kind: "wholesale", active: false },
+  ];
+  const allowed = (user) => {
+    const active = shops.filter((x) => x.active);
+    if (user.role === "admin") return active;
+    return active.filter((x) => x.id === user.shopId && T.shopKind(x) === "wholesale");
+  };
+
+  eq(allowed({ role: "admin" }).map((s) => s.id), ["s1", "s2"], "the owner: every active shop");
+  eq(allowed({ role: "shop", shopId: "s2" }).map((s) => s.id), ["s2"], "a wholesale counter: its own");
+  eq(allowed({ role: "shop", shopId: "s1" }).map((s) => s.id), [], "a retail cashier: none");
+  eq(allowed({ role: "shop", shopId: "s3" }).map((s) => s.id), [], "a closed shop: none");
+});
+
 /* ================================================================ LOADING */
 
 describe("Reading a table that has outgrown one request");
