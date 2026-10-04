@@ -520,8 +520,10 @@ function SalesPage() {
             Showing {rows.length.toLocaleString()} of {sales.length.toLocaleString()} invoices
           </div>
         </div>
-        {/* The date presets scroll rather than wrap into three stacked lines. */}
-        <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-3 px-3 sm:mx-0 sm:px-0 sm:flex-wrap sm:overflow-visible">
+        {/* Laid out as a grid on phones for the same reason as the scope bar:
+            a sideways scroller hides options, and the one hidden past the right
+            edge is as likely as not to be the one already selected. */}
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
           {DATE_PRESETS.map((p) => {
             const range = p.range();
             const active = from === range.from && to === range.to;
@@ -532,7 +534,7 @@ function SalesPage() {
                   setFrom(range.from);
                   setTo(range.to);
                 }}
-                className={`shrink-0 text-xs px-3 h-9 sm:h-8 inline-flex items-center rounded-full border transition-colors ${
+                className={`text-xs px-2 sm:px-3 h-10 sm:h-8 inline-flex items-center justify-center text-center rounded-full border transition-colors ${
                   active ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"
                 }`}
               >
@@ -1231,7 +1233,7 @@ function Metric({
 }) {
   const inner = (
     <>
-      <dt className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+      <dt className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
         {label}
       </dt>
       <dd

@@ -349,13 +349,19 @@ function ProductsPage() {
               subtitle={<span className="font-mono">{p.barcode || "No barcode"}</span>}
               right={formatRs(p.price)}
               rightSub={isAdmin ? `cost ${formatRs(p.cost)}` : undefined}
+              /*
+               * A field it cannot fill is left out rather than spelled out.
+               * "Wholesale — Retail price only" on all 105 rows is a sentence
+               * the shopkeeper reads once and then has to look past forever;
+               * absence already says it, and the row stays short.
+               */
               fields={[
-                { label: "Category", value: p.category || "Uncategorised" },
-                { label: "Brand", value: p.brand || "No brand" },
                 { label: "Stock", value: p.totalStock },
+                { label: "Category", value: p.category || null },
+                { label: "Brand", value: p.brand || null },
                 {
                   label: "Wholesale",
-                  value: p.wholesalePrice ? formatRs(p.wholesalePrice) : "Retail price only",
+                  value: p.wholesalePrice ? formatRs(p.wholesalePrice) : null,
                 },
                 ...(isAdmin
                   ? [

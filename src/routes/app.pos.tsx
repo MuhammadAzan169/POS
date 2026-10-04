@@ -817,7 +817,7 @@ function POS() {
 
       <div className="px-4 pb-4 space-y-3">
         <div className="space-y-1.5">
-          <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+          <label className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
             Payment method
           </label>
           <PaymentPicker
@@ -830,7 +830,7 @@ function POS() {
 
         {payment === "Cash" && (
           <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+            <label className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
               Cash received
             </label>
             <Input
@@ -926,17 +926,27 @@ function POS() {
     <div className="flex flex-col lg:flex-1 lg:min-h-0 pb-28 lg:pb-0">
       <PageHeader
         title={isWholesale ? "New wholesale sale" : "New sale"}
-        subtitle="Scan a barcode or search to add items. F9 to complete."
+        /* "F9 to complete" is advice for a keyboard the phone does not have, and
+           the screen below already says "Scan barcode or search by name". */
+        subtitle={
+          <span className="hidden lg:inline">
+            Scan a barcode or search to add items. F9 to complete.
+          </span>
+        }
         actions={
           <>
             {/*
               The cart used to be discoverable only by noticing the panel on the right — items were
               added and then hunted for. This is the one control that is always in the same place,
               carries the running count and total, and opens the sale at any width.
+
+              Below lg the sticky bar at the bottom of the screen carries the same
+              count, total and button, so showing it here too spent a whole row of
+              a phone screen repeating what was already in reach of the thumb.
             */}
             <Button
               variant={cart.length === 0 ? "outline" : "default"}
-              className="h-10 gap-2 px-3"
+              className="hidden lg:flex h-10 gap-2 px-3"
               disabled={cart.length === 0}
               onClick={() => setCheckoutOpen(true)}
             >
@@ -981,8 +991,21 @@ function POS() {
         </Card>
       )}
 
+      {/*
+       * A standing fact about this counter, not news — so on a phone it is one
+       * quiet line instead of a three-line card. It was costing 130px of an
+       * 844px screen on every visit to say something that never changes.
+       */}
       {isWholesale && (
-        <Card className="p-3 mb-4 flex items-center gap-2.5 border-accent/40 bg-accent/5 text-sm shrink-0">
+        <div className="mb-3 flex items-center gap-2 text-xs text-accent-strong shrink-0 lg:hidden">
+          <Warehouse className="h-3.5 w-3.5 shrink-0" />
+          <span>
+            Trade counter — <strong>wholesale rates</strong>, not shelf prices.
+          </span>
+        </div>
+      )}
+      {isWholesale && (
+        <Card className="hidden lg:flex p-3 mb-4 items-center gap-2.5 border-accent/40 bg-accent/5 text-sm shrink-0">
           <Warehouse className="h-4 w-4 shrink-0 text-accent-strong" />
           <span>
             Trade counter — items are priced at their <strong>wholesale rate</strong>, not the shelf
@@ -1003,7 +1026,7 @@ function POS() {
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 onKeyDown={onSearchKeyDown}
-                placeholder="Scan barcode or search by name…"
+                placeholder="Scan or search by name…"
                 // enterKeyHint labels the on-screen keyboard's action key "Go",
                 // which is what pressing it actually does here.
                 enterKeyHint="go"
@@ -1033,7 +1056,7 @@ function POS() {
                     key={c}
                     onClick={() => setCategory(c)}
                     className={cn(
-                      "shrink-0 text-xs px-3 h-9 sm:h-8 inline-flex items-center rounded-full border transition-colors",
+                      "shrink-0 text-xs px-3.5 h-10 sm:h-8 inline-flex items-center rounded-full border transition-colors",
                       category === c
                         ? "bg-primary text-primary-foreground border-primary font-medium"
                         : "hover:bg-muted text-muted-foreground",
@@ -1090,12 +1113,12 @@ function POS() {
                       aria-label={`Add ${p.name} to cart`}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium truncate">
+                        <span className="hidden sm:inline text-xs uppercase tracking-wider text-muted-foreground font-medium truncate">
                           {p.category || "General"}
                         </span>
                         <span
                           className={cn(
-                            "shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full border tabular-nums whitespace-nowrap",
+                            "shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded-full border tabular-nums whitespace-nowrap",
                             out
                               ? "bg-destructive/10 text-destructive border-destructive/30"
                               : low
@@ -1116,7 +1139,7 @@ function POS() {
                         </span>
                       </div>
 
-                      <div className="font-medium text-sm leading-snug line-clamp-2 mt-1.5 min-h-[2.5rem]">
+                      <div className="font-semibold text-sm leading-snug line-clamp-2 mt-1.5 min-h-[2.5rem]">
                         {p.name}
                       </div>
 
@@ -1146,7 +1169,7 @@ function POS() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-9 w-9 shrink-0 hover:bg-primary/15"
+                            className="h-10 w-10 shrink-0 hover:bg-primary/15"
                             aria-label={inCart === 1 ? `Remove ${p.name}` : `One less ${p.name}`}
                             onClick={() => stepLine(lineIndex, -1)}
                           >
@@ -1158,7 +1181,7 @@ function POS() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-9 w-9 shrink-0 hover:bg-primary/15"
+                            className="h-10 w-10 shrink-0 hover:bg-primary/15"
                             aria-label={`One more ${p.name}`}
                             disabled={out}
                             onClick={() => stepLine(lineIndex, 1)}
@@ -1216,7 +1239,7 @@ function POS() {
       >
         <div className="flex items-center gap-3 p-3">
           <div className="min-w-0">
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground tabular-nums">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground tabular-nums">
               {cartUnits} item{cartUnits === 1 ? "" : "s"}
             </div>
             <div className="font-display text-xl font-bold leading-tight tabular-nums">

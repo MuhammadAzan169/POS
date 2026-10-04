@@ -40,7 +40,10 @@ export function StatCard({
   const body = (
     <div className="flex items-start justify-between gap-2 sm:gap-3">
       <div className="min-w-0">
-        <div className="text-[11px] sm:text-xs uppercase tracking-wider text-muted-foreground font-medium">
+        {/* Normal tracking on phones: two tiles to a row leaves these labels
+            about 110px, and the wide spacing was enough to wrap "Total sales"
+            onto a second line beside a one-line "Items sold". */}
+        <div className="text-xs uppercase tracking-normal sm:tracking-wider text-muted-foreground font-medium">
           {label}
         </div>
         <div className="font-display text-xl sm:text-2xl md:text-3xl font-bold mt-1.5 sm:mt-2 break-words">

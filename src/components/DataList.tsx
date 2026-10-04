@@ -101,20 +101,20 @@ export function ListCard({
           : undefined
       }
       className={cn(
-        "p-4 space-y-3",
+        "p-3.5 space-y-2",
         onClick && "cursor-pointer active:bg-muted/50 transition-colors",
       )}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="font-medium text-sm break-words">{title}</div>
+          <div className="font-semibold text-[15px] leading-snug break-words">{title}</div>
           {subtitle && (
             <div className="text-xs text-muted-foreground mt-0.5 break-words">{subtitle}</div>
           )}
         </div>
         {(right || rightSub) && (
           <div className="text-right shrink-0">
-            {right && <div className="font-semibold text-sm">{right}</div>}
+            {right && <div className="font-semibold text-[15px] tabular-nums">{right}</div>}
             {rightSub && <div className="text-xs text-muted-foreground mt-0.5">{rightSub}</div>}
           </div>
         )}
@@ -122,21 +122,33 @@ export function ListCard({
 
       {badges && <div className="flex flex-wrap items-center gap-1.5">{badges}</div>}
 
+      {/*
+       * Fields run INLINE — "Stock 13", "Brand MY" — wrapping as they fill the
+       * line, rather than each one taking a labelled block of its own.
+       *
+       * The block layout cost about 50px a field, so a four-field row stood
+       * 330px tall and a phone showed three of them. A shopkeeper looking
+       * through 105 products was scrolling 35 screens. Inline pairs put the
+       * same four fields on one or two lines and fit seven rows on a screen,
+       * which is the difference between scanning a list and fighting it.
+       */}
       {shown.length > 0 && (
-        <dl className="grid grid-cols-2 xs:grid-cols-3 gap-x-3 gap-y-2 text-sm">
+        <dl className="flex flex-wrap gap-x-3 gap-y-1.5 text-sm">
           {shown.map((f) => (
-            <div key={f.label} className="min-w-0">
-              <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                {f.label}
-              </dt>
-              <dd className={cn("mt-0.5 break-words", f.className)}>{f.value}</dd>
+            <div key={f.label} className="flex items-baseline gap-1.5 min-w-0">
+              <dt className="text-xs text-muted-foreground shrink-0">{f.label}</dt>
+              <dd className={cn("font-medium break-words", f.className)}>{f.value}</dd>
             </div>
           ))}
         </dl>
       )}
 
       {actions && (
-        <div className="flex flex-wrap gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
+        /* Thumbs, not cursors: every action in a card row is at least 40px tall. */
+        <div
+          className="flex flex-wrap gap-2 pt-1 [&_button]:min-h-10 [&_a]:min-h-10"
+          onClick={(e) => e.stopPropagation()}
+        >
           {actions}
         </div>
       )}

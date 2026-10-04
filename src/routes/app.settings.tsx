@@ -569,7 +569,7 @@ function SettingsPage() {
                     >
                       {x.name}
                       {(x.bill || x.logo) && (
-                        <span className="ml-1.5 text-[10px] uppercase tracking-wide opacity-70">
+                        <span className="ml-1.5 text-[11px] uppercase tracking-wide opacity-70">
                           customised
                         </span>
                       )}

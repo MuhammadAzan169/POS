@@ -339,7 +339,7 @@ function Dashboard() {
               </div>
               {session && cash && (
                 <div className="text-right shrink-0">
-                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground">
                     Today
                   </div>
                   <div className="font-semibold">{formatRs(cash.totalSales, currency)}</div>
@@ -353,7 +353,7 @@ function Dashboard() {
                 </span>
                 <Link
                   to="/app/daybook"
-                  className="text-primary hover:underline inline-flex items-center gap-0.5"
+                  className="text-primary hover:underline inline-flex items-center gap-0.5 min-h-10 sm:min-h-0 -my-2 sm:my-0"
                 >
                   Day book <ArrowRight className="h-3 w-3" />
                 </Link>
@@ -363,7 +363,7 @@ function Dashboard() {
               <div className="mt-3 pt-3 border-t text-xs">
                 <Link
                   to="/app/daybook"
-                  className="text-primary hover:underline inline-flex items-center gap-0.5"
+                  className="text-primary hover:underline inline-flex items-center gap-0.5 min-h-10 sm:min-h-0 -my-2 sm:my-0"
                 >
                   Start the day <ArrowRight className="h-3 w-3" />
                 </Link>
@@ -627,7 +627,10 @@ function Dashboard() {
             <h3 className="font-semibold flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-warning-strong" /> Low stock
             </h3>
-            <Link to="/app/inventory" className="text-xs text-primary hover:underline">
+            <Link
+              to="/app/inventory"
+              className="text-xs text-primary hover:underline inline-flex items-center min-h-10 sm:min-h-0 px-2 -mr-2 -my-2 sm:m-0 sm:p-0"
+            >
               View all
             </Link>
           </div>
@@ -698,7 +701,10 @@ function Dashboard() {
       <Card className="mt-4 sm:mt-6 p-4 sm:p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold">Recent activity</h3>
-          <Link to="/app/sales" className="text-xs text-primary hover:underline">
+          <Link
+            to="/app/sales"
+            className="text-xs text-primary hover:underline inline-flex items-center min-h-10 sm:min-h-0 px-2 -mr-2 -my-2 sm:m-0 sm:p-0"
+          >
             All sales →
           </Link>
         </div>

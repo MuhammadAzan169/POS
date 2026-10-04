@@ -249,13 +249,13 @@ function ShopsPage() {
               <div className="text-sm text-muted-foreground">{s.phone}</div>
               <dl className="mt-4 pt-4 border-t grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <dt className="text-xs uppercase tracking-wider text-muted-foreground">
                     Takings
                   </dt>
                   <dd className="font-medium mt-0.5">{formatRs(takings, settings.currency)}</dd>
                 </div>
                 <div>
-                  <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <dt className="text-xs uppercase tracking-wider text-muted-foreground">
                     Stock at cost
                   </dt>
                   <dd className="font-medium mt-0.5">{formatRs(stockValue, settings.currency)}</dd>

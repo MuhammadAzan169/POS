@@ -146,7 +146,7 @@ export function NotificationBell({ className }: { className?: string }) {
         aria-expanded={open}
         title="Notifications"
         className={cn(
-          "relative h-9 w-9 rounded-md flex items-center justify-center text-muted-foreground",
+          "relative h-11 w-11 md:h-9 md:w-9 rounded-md flex items-center justify-center text-muted-foreground",
           "hover:bg-muted hover:text-foreground transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           open && "bg-muted text-foreground",
@@ -208,7 +208,7 @@ export function NotificationBell({ className }: { className?: string }) {
             ) : (
               grouped.map(({ group, rows }) => (
                 <div key={group}>
-                  <div className="px-3 py-1.5 bg-muted/50 text-[10px] uppercase tracking-wider font-medium text-muted-foreground sticky top-0">
+                  <div className="px-3 py-1.5 bg-muted/50 text-[11px] uppercase tracking-wider font-medium text-muted-foreground sticky top-0">
                     {group}
                   </div>
                   {rows.map((n) => {

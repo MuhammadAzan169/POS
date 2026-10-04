@@ -894,7 +894,7 @@ function MoneyTile({
     <Card className="p-4 sm:p-5">
       <div className="flex items-start justify-between gap-2 sm:gap-3">
         <div className="min-w-0">
-          <div className="text-[11px] sm:text-xs uppercase tracking-wider text-muted-foreground font-medium">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
             {label}
           </div>
           <div className="font-display text-xl sm:text-2xl font-bold mt-1.5 break-words">

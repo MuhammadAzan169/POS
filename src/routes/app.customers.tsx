@@ -755,7 +755,7 @@ function CustomersPage() {
               <div className="mt-6 space-y-5">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-lg border p-3">
-                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground">
                       {selectedBalance.advance > 0 ? "Advance held" : "Outstanding"}
                     </div>
                     <div
@@ -771,7 +771,7 @@ function CustomersPage() {
                     </div>
                   </div>
                   <div className="rounded-lg border p-3">
-                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground">
                       Lifetime value
                     </div>
                     <div className="font-semibold text-lg mt-1">

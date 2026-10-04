@@ -27,18 +27,26 @@ export function ScopeBar({ showShop = true }: { showShop?: boolean }) {
 
   return (
     <Card data-print="hide" className="p-3 sm:p-4 mb-4 space-y-3">
-      {/* Presets scroll on a phone rather than wrapping into three ragged lines. */}
-      <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-3 px-3 sm:mx-0 sm:px-0 sm:flex-wrap sm:overflow-visible">
+      {/*
+       * Six presets, laid out two rows of three on a phone.
+       *
+       * They used to scroll sideways, which hid whichever ones ran past the
+       * edge — and since "Last 30 days" is the default, the chip showing the
+       * CURRENT selection was the one clipped in half. A fixed set this small
+       * should simply all be visible; a grid also makes every chip the same
+       * comfortable width instead of sizing each to its own label.
+       */}
+      <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
         {RANGE_PRESETS.map((p) => (
           <button
             key={p.key}
             onClick={() => setPreset(p.key)}
             className={cn(
-              // h-9 on phones: these were 30px tall, under every tap-target
+              // h-10 on phones: these were 30px tall, under every tap-target
               // guideline, on the control a shopkeeper reaches for most.
-              "shrink-0 text-xs px-3 h-9 sm:h-8 inline-flex items-center rounded-full border transition-colors",
+              "text-xs px-2 sm:px-3 h-10 sm:h-8 inline-flex items-center justify-center text-center rounded-full border transition-colors",
               rangeKey === p.key
-                ? "bg-primary text-primary-foreground border-primary"
+                ? "bg-primary text-primary-foreground border-primary font-medium"
                 : "hover:bg-muted",
             )}
           >

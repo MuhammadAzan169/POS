@@ -192,14 +192,14 @@ function InventoryPage() {
           )}
         </div>
 
-        <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-3 px-3 sm:mx-0 sm:px-0 sm:flex-wrap sm:overflow-visible">
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
           {PRESETS.map((p) => {
             const value = daysAgoISO(p.days);
             return (
               <button
                 key={p.label}
                 onClick={() => setAsOf(value)}
-                className={`shrink-0 text-xs px-3 h-9 sm:h-8 inline-flex items-center rounded-full border transition-colors ${
+                className={`text-xs px-2 sm:px-3 h-10 sm:h-8 inline-flex items-center justify-center text-center rounded-full border transition-colors ${
                   asOf === value
                     ? "bg-primary text-primary-foreground border-primary"
                     : "hover:bg-muted"

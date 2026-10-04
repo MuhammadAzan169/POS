@@ -26,7 +26,9 @@ const buttonVariants = cva(
        */
       size: {
         default: "h-10 px-4 py-2 sm:h-9",
-        sm: "h-9 rounded-md px-3 text-xs sm:h-8",
+        // h-10 on phones so a "sm" button is still a 40px target; sm:h-8 keeps
+        // the compact look on a desktop where the pointer is exact.
+        sm: "h-10 rounded-md px-3 text-xs sm:h-8",
         lg: "h-11 rounded-md px-8 sm:h-10",
         icon: "h-10 w-10 sm:h-9 sm:w-9",
       },

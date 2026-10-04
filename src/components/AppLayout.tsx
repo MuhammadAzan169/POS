@@ -182,7 +182,7 @@ function GlobalSearch({ autoFocus, onDone }: { autoFocus?: boolean; onDone?: () 
           )}
           {results.products.length > 0 && (
             <div className="py-1">
-              <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+              <div className="px-3 py-1 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
                 Products
               </div>
               {results.products.map((p) => (
@@ -201,7 +201,7 @@ function GlobalSearch({ autoFocus, onDone }: { autoFocus?: boolean; onDone?: () 
           )}
           {results.sales.length > 0 && (
             <div className="py-1 border-t">
-              <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+              <div className="px-3 py-1 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
                 Invoices
               </div>
               {results.sales.map((s) => (
@@ -252,7 +252,7 @@ function DayStatusPill() {
       className={cn(
         // A link into the day book, so it is sized to be tapped rather than
         // squeezed to the height of its own text.
-        "flex items-center justify-center gap-1.5 text-xs font-medium px-2.5 h-9 sm:h-8 min-w-9 rounded-full border transition-colors shrink-0",
+        "flex items-center justify-center gap-1.5 text-xs font-medium px-3 h-10 sm:h-8 min-w-10 rounded-full border transition-colors shrink-0",
         session
           ? "bg-success/10 text-success-strong border-success/30 hover:bg-success/20"
           : "bg-warning/15 text-warning-strong border-warning/40 hover:bg-warning/25",
@@ -542,7 +542,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto overscroll-contain">
             <NavLinks nav={nav} isActive={isActive} onNavigate={() => setDrawer(false)} />
           </nav>
-          <div className="p-3 border-t border-sidebar-border">{signOut}</div>
+          {/* The header drops the theme toggle on phones, so it lands here. */}
+          <div className="p-3 border-t border-sidebar-border space-y-2">
+            <div className="md:hidden flex items-center justify-between px-3 py-1">
+              <span className="text-sm text-sidebar-foreground/80">Appearance</span>
+              <ThemeToggle />
+            </div>
+            {signOut}
+          </div>
         </SheetContent>
       </Sheet>
 
@@ -553,7 +560,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <button
               onClick={() => setDrawer(true)}
               aria-label="Open menu"
-              className="lg:hidden h-10 w-10 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              className="lg:hidden h-11 w-11 -ml-1 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
             >
               <Menu className="h-5 w-5" />
             </button>
@@ -571,7 +578,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               onClick={() => setMobileSearch((v) => !v)}
               aria-label={mobileSearch ? "Close search" : "Search"}
               aria-expanded={mobileSearch}
-              className="md:hidden ml-auto h-10 w-10 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              className="md:hidden ml-auto h-11 w-11 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
             >
               {mobileSearch ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
             </button>
@@ -594,10 +601,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
               role="status"
               aria-live="polite"
               className={cn(
-                "flex items-center gap-1.5 text-xs font-medium px-2 sm:px-2.5 py-1.5 rounded-full border shrink-0",
+                "items-center gap-1.5 text-xs font-medium px-2 sm:px-2.5 py-1.5 rounded-full border shrink-0",
+                /*
+                 * On a phone this reports only the exception. Connected is the
+                 * normal state and saying so permanently spends a slot on a
+                 * 390px header to tell the shopkeeper nothing; dropping offline
+                 * is what they must see at once, so that keeps its place.
+                 */
                 online
-                  ? "bg-success/10 text-success-strong border-success/30"
-                  : "bg-warning/15 text-warning-strong border-warning/40",
+                  ? "hidden md:flex bg-success/10 text-success-strong border-success/30"
+                  : "flex bg-warning/15 text-warning-strong border-warning/40",
               )}
               title={
                 online ? "Connected" : "No internet connection — changes are kept on this device"
@@ -623,7 +636,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
             <NotificationBell />
 
-            <ThemeToggle />
+            {/* Light/dark is set once and left alone, so on a phone it lives in
+                the drawer instead of holding a permanent slot in the header. */}
+            <div className="hidden md:block">
+              <ThemeToggle />
+            </div>
 
             {/* The drawer carries the name, shop and sign-out on small screens. */}
             <div className="hidden lg:flex items-center gap-2 pl-3 border-l shrink-0">
@@ -720,7 +737,9 @@ export function PageHeader({
   actions,
 }: {
   title: string;
-  subtitle?: string;
+  /* A node, not a string, so a page can hide parts of its subtitle by width —
+     POS drops its "F9 to complete" hint on phones, which have no F9. */
+  subtitle?: ReactNode;
   actions?: ReactNode;
 }) {
   return (
