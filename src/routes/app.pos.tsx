@@ -21,6 +21,7 @@ import { PageHeader } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -60,6 +61,15 @@ interface CartLine {
   product: Product;
   qty: number;
   discount: number;
+  /**
+   * A rate typed at the counter for THIS sale only, overriding the catalogue.
+   *
+   * Undefined means "whatever the product says", which is the normal case and
+   * keeps following the shop's retail/wholesale rate if it changes. A number
+   * here is a deliberate one-off: haggling a trade buyer up or down, or
+   * clearing an odd lot. The product itself is never touched.
+   */
+  price?: number;
 }
 
 function POS() {
@@ -106,6 +116,16 @@ function POS() {
 
   /** A wholesale counter sells at trade rates; a retail shop at the shelf price. */
   const unitPrice = (p: Product) => priceFor(p, kind);
+
+  /**
+   * What this LINE actually charges: the rate typed at the counter if there is
+   * one, otherwise the catalogue's.
+   *
+   * Every total, discount and profit figure reads through this rather than
+   * `unitPrice` directly, so an override cannot be shown on screen while the
+   * takings are worked out from a price the customer was never charged.
+   */
+  const linePrice = (l: CartLine) => l.price ?? unitPrice(l.product);
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("all");
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -261,6 +281,31 @@ function POS() {
 
   const removeLine = (i: number) => setCart((prev) => prev.filter((_, j) => j !== i));
 
+  /**
+   * Set, or clear, the counter rate on one line.
+   *
+   * `undefined` puts the line back on the catalogue price rather than freezing
+   * today's figure into it, so clearing an override is a real undo. Negative
+   * input is refused — a line that pays the customer is never what was meant.
+   */
+  const setLinePrice = (i: number, value: number | undefined) =>
+    setCart((prev) =>
+      prev.map((x, j) =>
+        j === i
+          ? {
+              ...x,
+              price: value === undefined ? undefined : Math.max(0, Math.round(value)),
+              // A discount agreed against the old rate can exceed the new line
+              // total, which would read as money owed back to the customer.
+              discount: Math.min(
+                x.discount,
+                x.qty * (value === undefined ? unitPrice(x.product) : Math.max(0, value)),
+              ),
+            }
+          : x,
+      ),
+    );
+
   // Barcode scanners type the code then send Enter — without this, scanning did nothing.
   const onSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== "Enter") return;
@@ -276,10 +321,10 @@ function POS() {
   };
 
   const cartUnits = cart.reduce((a, l) => a + l.qty, 0);
-  const subtotal = cart.reduce((a, l) => a + l.qty * unitPrice(l.product), 0);
+  const subtotal = cart.reduce((a, l) => a + l.qty * linePrice(l), 0);
   // Discounts come from the Discounts tab: a product's own rate, else the overall rate.
   const autoDiscount = cart.reduce(
-    (a, l) => a + discountAmountFor(l.product.id, unitPrice(l.product), l.qty, discounts),
+    (a, l) => a + discountAmountFor(l.product.id, linePrice(l), l.qty, discounts),
     0,
   );
   /**
@@ -387,9 +432,9 @@ function POS() {
       productId: l.product.id,
       name: l.product.name,
       qty: l.qty,
-      price: unitPrice(l.product),
+      price: linePrice(l),
       cost: l.product.cost,
-      discount: discountAmountFor(l.product.id, unitPrice(l.product), l.qty, discounts),
+      discount: discountAmountFor(l.product.id, linePrice(l), l.qty, discounts),
     }));
     const profit = lines.reduce((a, l) => a + l.qty * (l.price - l.cost), 0) - discount;
     const sale = addSale({
@@ -428,7 +473,7 @@ function POS() {
       lines: cart.map((l) => ({
         name: l.product.name,
         qty: l.qty,
-        price: unitPrice(l.product),
+        price: linePrice(l),
         barcode: l.product.barcode,
       })),
     });
@@ -556,7 +601,16 @@ function POS() {
               <div className="min-w-0">
                 <div className="text-sm font-medium leading-snug break-words">{l.product.name}</div>
                 <div className="text-xs text-muted-foreground tabular-nums mt-0.5">
-                  {formatRs(unitPrice(l.product), settings.currency)} each
+                  {/* The catalogue rate stays on screen, struck through, whenever
+                      a counter rate replaces it: the person approving the sale
+                      can see what it should have been without reopening
+                      anything. */}
+                  {l.price !== undefined && l.price !== unitPrice(l.product) && (
+                    <span className="line-through mr-1.5">
+                      {formatRs(unitPrice(l.product), settings.currency)}
+                    </span>
+                  )}
+                  {formatRs(linePrice(l), settings.currency)} each
                   {l.discount > 0 && (
                     <span className="ml-1.5 text-success-strong">
                       − {formatRs(l.discount, settings.currency)}
@@ -581,8 +635,55 @@ function POS() {
                 name={l.product.name}
               />
               <div className="font-semibold tabular-nums text-right">
-                {formatRs(l.qty * unitPrice(l.product) - l.discount, settings.currency)}
+                {formatRs(l.qty * linePrice(l) - l.discount, settings.currency)}
               </div>
+            </div>
+
+            {/*
+              The rate for this line, typed at the counter.
+
+              It sits with the quantity because they are the same kind of
+              decision — what is going on this bill — and because haggling is
+              agreed per item, not per slip the way the counter discount is.
+            */}
+            <div className="flex items-center gap-2 mt-2">
+              <Label
+                htmlFor={`rate-${l.product.id}`}
+                className="text-xs text-muted-foreground shrink-0"
+              >
+                Rate
+              </Label>
+              <Input
+                id={`rate-${l.product.id}`}
+                type="number"
+                inputMode="decimal"
+                min={0}
+                value={l.price ?? unitPrice(l.product)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setLinePrice(i, v === "" ? undefined : Number(v));
+                }}
+                className={cn(
+                  "h-9 w-24 tabular-nums",
+                  linePrice(l) < l.product.cost && "border-destructive text-destructive",
+                )}
+              />
+              {l.price !== undefined && l.price !== unitPrice(l.product) && (
+                <button
+                  type="button"
+                  onClick={() => setLinePrice(i, undefined)}
+                  className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 shrink-0"
+                >
+                  Reset
+                </button>
+              )}
+              {/* Below cost is not blocked — clearing old stock at a loss is a
+                  real decision — but it is never allowed to happen quietly. */}
+              {linePrice(l) < l.product.cost && (
+                <span className="text-xs text-destructive shrink-0">
+                  Below cost {formatRs(l.product.cost, settings.currency)}
+                </span>
+              )}
             </div>
           </li>
         ))}
